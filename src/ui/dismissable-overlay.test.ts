@@ -51,7 +51,7 @@ describe('createDismissableOverlay', () => {
         overlay.click();
 
         expect(container.querySelector('.test-overlay')).toBeNull();
-        expect(onDismiss).toHaveBeenCalledOnce();
+        expect(onDismiss).toHaveBeenCalledExactlyOnceWith('click');
     });
 
     it('does not dismiss when a child of the overlay is clicked', () => {
@@ -80,7 +80,7 @@ describe('createDismissableOverlay', () => {
         document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
 
         expect(container.querySelector('.test-overlay')).toBeNull();
-        expect(onDismiss).toHaveBeenCalledOnce();
+        expect(onDismiss).toHaveBeenCalledExactlyOnceWith('escape');
     });
 
     it('does not dismiss on Escape when dismissOnEscape is false', () => {
@@ -111,7 +111,7 @@ describe('createDismissableOverlay', () => {
         child.click();
 
         expect(container.querySelector('.test-overlay')).toBeNull();
-        expect(onDismiss).toHaveBeenCalledOnce();
+        expect(onDismiss).toHaveBeenCalledExactlyOnceWith('click');
     });
 
     it('dismissOn: any-click respects stopPropagation on inner buttons', () => {

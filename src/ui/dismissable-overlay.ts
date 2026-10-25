@@ -9,11 +9,13 @@
 
 export type ModalDismissTrigger = 'backdrop' | 'any-click' | 'none';
 
+export type OverlayDismissCause = 'escape' | 'click';
+
 export interface DismissableOverlayOptions {
     container: HTMLElement;
     className: string;
     /** Not fired when the caller invokes `dismiss()` directly. */
-    onDismiss?: () => void;
+    onDismiss?: (cause: OverlayDismissCause) => void;
     /** Default true. */
     dismissOnEscape?: boolean;
     /** Default 'backdrop'. */
@@ -51,26 +53,26 @@ export function createDismissableOverlay(
         }
     }
 
-    function userDismiss(): void {
+    function userDismiss(cause: OverlayDismissCause): void {
         if (disposed) return;
         dismiss();
-        onDismiss?.();
+        onDismiss?.(cause);
     }
 
     function handleKeyDown(e: KeyboardEvent): void {
         if (e.key === 'Escape') {
-            userDismiss();
+            userDismiss('escape');
         }
     }
 
     if (dismissOn === 'backdrop') {
         overlay.addEventListener('click', (e) => {
             if (e.target === overlay) {
-                userDismiss();
+                userDismiss('click');
             }
         });
     } else if (dismissOn === 'any-click') {
-        overlay.addEventListener('click', userDismiss);
+        overlay.addEventListener('click', () => userDismiss('click'));
     }
 
     if (dismissOnEscape) {
