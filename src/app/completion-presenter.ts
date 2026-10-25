@@ -1,7 +1,7 @@
 /**
  * Presenter for the "Puzzle Complete!" overlay, owning the re-entrancy guard
  * around `showCompletionOverlay`. The `hide` handle clears two ways — the
- * caller's `remove()` or the player dismissing (tap-anywhere) — and both must
+ * caller's `remove()` or the player dismissing — and both must
  * leave the presenter able to show again.
  */
 

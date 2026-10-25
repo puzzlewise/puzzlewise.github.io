@@ -104,6 +104,15 @@ describe('showCompletionOverlay', () => {
         expect(onDismiss).toHaveBeenCalledTimes(1);
     });
 
+    it('Escape dismisses it and fires onDismiss', () => {
+        const onDismiss = vi.fn();
+        showCompletionOverlay({ container, state: makeState(), onDismiss });
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+        expect(container.querySelector('.completion-overlay')).toBeNull();
+        expect(container.classList.contains('completion-glow')).toBe(false);
+        expect(onDismiss).toHaveBeenCalledTimes(1);
+    });
+
     it('share-button click tracks puzzle-shared with completion-overlay source', () => {
         const trackSpy = vi.fn();
         window.umami = { track: trackSpy };
