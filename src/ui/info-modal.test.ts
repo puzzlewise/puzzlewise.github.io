@@ -463,6 +463,17 @@ describe('createInfoModal — Piece outline setting', () => {
         ).toBe('var(--color-blue-default)');
     });
 
+    it('closes only the outline-colour picker on Escape, not the modal', async () => {
+        localStorage.setItem('puzzle-piece-outline', 'outline');
+        createInfoModal({ container });
+        container.querySelector<HTMLButtonElement>('button.outline-color-button')!.click();
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+
+        expect(container.querySelector('.outline-color-panel')).toBeNull();
+        expect(container.querySelector('.info-modal-overlay')).not.toBeNull();
+    });
+
     it('toggles the marquee-contain preference from the settings checkbox', () => {
         createInfoModal({ container });
 
