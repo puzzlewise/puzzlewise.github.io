@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, onTestFinished } from 'vitest';
 import {
     attachDismissablePopover,
     createDismissableOverlay,
@@ -256,6 +256,87 @@ describe('createDismissableOverlay', () => {
             dismiss();
 
             expect(document.activeElement).toBe(elsewhere);
+        });
+
+        it('makes the rest of its container inert, and nothing outside the container', () => {
+            const outsideContainer = document.createElement('button');
+            document.body.appendChild(outsideContainer);
+            onTestFinished(() => outsideContainer.remove());
+            createDismissableOverlay({ container, className: 'test-overlay' });
+
+            expect(opener.hasAttribute('inert')).toBe(true);
+            expect(container.hasAttribute('inert')).toBe(false);
+            expect(outsideContainer.hasAttribute('inert')).toBe(false);
+        });
+
+        it('lifts the inert it set on dismiss, before giving focus back', () => {
+            const { dismiss } = createDismissableOverlay({ container, className: 'test-overlay' });
+            let inertWhenFocused: boolean | undefined;
+            vi.spyOn(opener, 'focus').mockImplementation(() => {
+                inertWhenFocused = opener.hasAttribute('inert');
+            });
+            dismiss();
+
+            expect(opener.hasAttribute('inert')).toBe(false);
+            expect(inertWhenFocused).toBe(false);
+        });
+
+        it('leaves inert it did not set in place on dismiss', () => {
+            const alreadyInert = document.createElement('div');
+            alreadyInert.setAttribute('inert', '');
+            container.appendChild(alreadyInert);
+            const { dismiss } = createDismissableOverlay({ container, className: 'test-overlay' });
+            dismiss();
+
+            expect(alreadyInert.hasAttribute('inert')).toBe(true);
+        });
+
+        it('keeps the background inert while a stacked overlay closes', () => {
+            const first = createDismissableOverlay({ container, className: 'first' });
+            const second = createDismissableOverlay({ container, className: 'second' });
+
+            expect(first.overlay.hasAttribute('inert')).toBe(true);
+            second.dismiss();
+
+            expect(first.overlay.hasAttribute('inert')).toBe(false);
+            expect(opener.hasAttribute('inert')).toBe(true);
+            first.dismiss();
+
+            expect(opener.hasAttribute('inert')).toBe(false);
+        });
+
+        it('closes only the top overlay on Escape and gives focus back to the one below', () => {
+            const firstDismissed = vi.fn();
+            const first = createDismissableOverlay({
+                container,
+                className: 'first',
+                onDismiss: firstDismissed,
+            });
+            createDismissableOverlay({ container, className: 'second' });
+            document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+
+            expect(container.querySelector('.second')).toBeNull();
+            expect(first.overlay.isConnected).toBe(true);
+            expect(firstDismissed).not.toHaveBeenCalled();
+            expect(document.activeElement).toBe(first.overlay);
+            first.dismiss();
+        });
+
+        it('ignores Escape while inside an inert ancestor', () => {
+            // The loading overlay makes `#app` inert and handles Escape itself.
+            const onDismiss = vi.fn();
+            const { overlay, dismiss } = createDismissableOverlay({
+                container,
+                className: 'test-overlay',
+                onDismiss,
+            });
+            container.setAttribute('inert', '');
+            document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+
+            expect(overlay.isConnected).toBe(true);
+            expect(onDismiss).not.toHaveBeenCalled();
+            container.removeAttribute('inert');
+            dismiss();
         });
     });
 });

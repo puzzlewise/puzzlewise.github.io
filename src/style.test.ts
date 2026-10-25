@@ -174,13 +174,21 @@ describe('blank-piece CSS', () => {
     });
 });
 
-describe('move banner', () => {
-    function pxValue(selector: string, property: string): number {
-        const match = new RegExp(`\\s${property}:\\s*(\\d+)(?:px)?\\s*;`).exec(declarationsFor(styleCss, selector));
-        expect(match, `${selector} ${property}`).not.toBeNull();
-        return Number(match![1]);
-    }
+function pxValue(selector: string, property: string): number {
+    const match = new RegExp(`\\s${property}:\\s*(\\d+)(?:px)?\\s*;`).exec(declarationsFor(styleCss, selector));
+    expect(match, `${selector} ${property}`).not.toBeNull();
+    return Number(match![1]);
+}
 
+describe('overlay stacking', () => {
+    it('draws Puzzle Complete no lower than the dialogs it can open on top of', () => {
+        const completion = pxValue('.completion-overlay', 'z-index');
+        expect(completion).toBeGreaterThanOrEqual(pxValue('.info-modal-overlay', 'z-index'));
+        expect(completion).toBeGreaterThanOrEqual(pxValue('.size-picker-overlay', 'z-index'));
+    });
+});
+
+describe('move banner', () => {
     it('sizes to its text rather than the half-width a centered fixed box shrinks to', () => {
         expect(declarationsFor(styleCss, '.move-banner')).toMatch(/width:\s*max-content/);
     });
