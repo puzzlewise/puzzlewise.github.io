@@ -41,6 +41,10 @@ export function createDismissableOverlay(
     overlay.tabIndex = -1;
 
     const focusBeforeOverlay = document.activeElement;
+    // Not beyond the container: toasts and "Update ready" are drawn above
+    // overlays, and inert would let clicks on them fall through to the backdrop.
+    const madeInert = [...container.children].filter((el) => !el.hasAttribute('inert'));
+    for (const el of madeInert) el.setAttribute('inert', '');
     let disposed = false;
 
     function dismiss(): void {
@@ -52,6 +56,7 @@ export function createDismissableOverlay(
         if (dismissOnEscape) {
             document.removeEventListener('keydown', handleKeyDown);
         }
+        for (const el of madeInert) el.removeAttribute('inert');
         if (ownsFocus && focusBeforeOverlay instanceof HTMLElement) {
             focusBeforeOverlay.focus({ preventScroll: true });
         }
@@ -64,7 +69,7 @@ export function createDismissableOverlay(
     }
 
     function handleKeyDown(e: KeyboardEvent): void {
-        if (e.key === 'Escape') {
+        if (e.key === 'Escape' && !overlay.closest('[inert]')) {
             userDismiss('escape');
         }
     }
