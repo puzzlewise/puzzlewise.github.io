@@ -196,6 +196,68 @@ describe('createDismissableOverlay', () => {
 
         expect(onDismiss).toHaveBeenCalledOnce();
     });
+
+    describe('focus', () => {
+        let opener: HTMLButtonElement;
+
+        beforeEach(() => {
+            opener = document.createElement('button');
+            container.appendChild(opener);
+            opener.focus();
+        });
+
+        it('takes focus from the control that opened it', () => {
+            // #664: left on the opener, Space/Enter re-clicked it and stacked a
+            // second copy of the dialog.
+            const { overlay } = createDismissableOverlay({ container, className: 'test-overlay' });
+
+            expect(document.activeElement).toBe(overlay);
+        });
+
+        it('gives focus back to the opener on Escape', () => {
+            createDismissableOverlay({ container, className: 'test-overlay' });
+            document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+
+            expect(document.activeElement).toBe(opener);
+        });
+
+        it('gives focus back to the opener when dismissed from a control inside it', () => {
+            const { overlay, dismiss } = createDismissableOverlay({
+                container,
+                className: 'test-overlay',
+            });
+            const inner = document.createElement('button');
+            overlay.appendChild(inner);
+            inner.focus();
+            dismiss();
+
+            expect(document.activeElement).toBe(opener);
+        });
+
+        it('gives focus back to the opener when focus inside it was lost', () => {
+            const { overlay, dismiss } = createDismissableOverlay({
+                container,
+                className: 'test-overlay',
+            });
+            const inner = document.createElement('button');
+            overlay.appendChild(inner);
+            inner.focus();
+            inner.remove();
+            dismiss();
+
+            expect(document.activeElement).toBe(opener);
+        });
+
+        it('leaves focus alone when something outside it has taken focus', () => {
+            const { dismiss } = createDismissableOverlay({ container, className: 'test-overlay' });
+            const elsewhere = document.createElement('button');
+            container.appendChild(elsewhere);
+            elsewhere.focus();
+            dismiss();
+
+            expect(document.activeElement).toBe(elsewhere);
+        });
+    });
 });
 
 describe('attachDismissablePopover', () => {

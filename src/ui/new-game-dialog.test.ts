@@ -31,6 +31,12 @@ describe('createNewGameDialog', () => {
         expect(container.querySelector('.size-picker-overlay')).not.toBeNull();
     });
 
+    it('focuses the scrolling content so Space and the arrow keys scroll it', () => {
+        createNewGameDialog({ container, selectedSizeId: '48', onSelect: vi.fn() });
+
+        expect(document.activeElement).toBe(container.querySelector('.dialog-content'));
+    });
+
     it('renders one select option per puzzle size', () => {
         createNewGameDialog({ container, selectedSizeId: '48', onSelect: vi.fn() });
 

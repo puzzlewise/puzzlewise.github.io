@@ -712,6 +712,7 @@ export function createNewGameDialog(options: NewGameDialogOptions): () => void {
     // start group holds only the image picker (picking one launches the game).
     const content = document.createElement('div');
     content.className = 'dialog-content';
+    content.tabIndex = -1;
 
     const settingsGroup = document.createElement('div');
     settingsGroup.className = 'dialog-group dialog-group--settings';
@@ -732,6 +733,7 @@ export function createNewGameDialog(options: NewGameDialogOptions): () => void {
     dialog.appendChild(content);
 
     overlay.appendChild(dialog);
+    content.focus({ preventScroll: true });
 
     return dismiss;
 }

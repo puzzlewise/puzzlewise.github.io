@@ -799,6 +799,7 @@ export function createInfoModal(options: InfoModalOptions): void {
 
     const content = document.createElement('div');
     content.className = 'info-modal-content';
+    content.tabIndex = -1;
 
     if (options.state) {
         attachShareSection(content, options.state, shareBaseUrl());
@@ -820,6 +821,7 @@ export function createInfoModal(options: InfoModalOptions): void {
     modal.appendChild(header);
     modal.appendChild(content);
     overlay.appendChild(modal);
+    content.focus({ preventScroll: true });
 
     // Backdrop / Escape are handled by the overlay helper (both fire onDismiss);
     // only the close button needs wiring here.

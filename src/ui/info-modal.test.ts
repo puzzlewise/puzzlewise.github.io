@@ -248,6 +248,12 @@ describe('createInfoModal', () => {
         const match = [...headings].find((h) => h.textContent === 'Cut Styles');
         expect(match).toBeUndefined();
     });
+
+    it('focuses the scrolling content so Space and the arrow keys scroll it', () => {
+        createInfoModal({ container });
+
+        expect(document.activeElement).toBe(container.querySelector('.info-modal-content'));
+    });
 });
 
 describe('createInfoModal — How to Play section', () => {

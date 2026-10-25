@@ -1,7 +1,4 @@
 /**
- * Shared dismiss mechanics (Escape / backdrop click / outside pointerdown +
- * document-listener cleanup) for modals and popovers.
- *
  * `onDismiss` fires only for helper-owned dismissal paths, not when the caller
  * invokes `dismiss()` directly — so a "closed without choosing" callback can be
  * wired through while button handlers dismiss without firing it.
@@ -41,15 +38,22 @@ export function createDismissableOverlay(
 
     const overlay = document.createElement('div');
     overlay.className = className;
+    overlay.tabIndex = -1;
 
+    const focusBeforeOverlay = document.activeElement;
     let disposed = false;
 
     function dismiss(): void {
         if (disposed) return;
         disposed = true;
+        const active = document.activeElement;
+        const ownsFocus = active === null || active === document.body || overlay.contains(active);
         overlay.remove();
         if (dismissOnEscape) {
             document.removeEventListener('keydown', handleKeyDown);
+        }
+        if (ownsFocus && focusBeforeOverlay instanceof HTMLElement) {
+            focusBeforeOverlay.focus({ preventScroll: true });
         }
     }
 
@@ -80,6 +84,7 @@ export function createDismissableOverlay(
     }
 
     container.appendChild(overlay);
+    overlay.focus();
 
     return { overlay, dismiss };
 }
