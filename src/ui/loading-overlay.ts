@@ -21,10 +21,6 @@ let cancelHandler: (() => void) | null = null;
  * {@link hideLoadingOverlay}. */
 let focusBeforeOverlay: HTMLElement | null = null;
 
-/**
- * `document.body` is where focus already sits on the dominant path (the
- * new-game dialog dismisses first) and is not a place to restore focus.
- */
 function restorableFocusTarget(active: Element | null): HTMLElement | null {
     return active instanceof HTMLElement && active !== document.body ? active : null;
 }
