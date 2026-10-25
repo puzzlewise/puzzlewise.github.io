@@ -4,7 +4,7 @@
  */
 
 import type { GameState } from '../model/types.js';
-import { createDismissableOverlay } from './dismissable-overlay.js';
+import { createDismissableOverlay, type OverlayDismissCause } from './dismissable-overlay.js';
 import {
     getSortedPresets,
     loadTolerancePreference,
@@ -39,6 +39,8 @@ import {
     writeDistinctId,
 } from '../analytics/distinct-id.js';
 import { shareBaseUrl } from '../move/move-config.js';
+import { track } from '../analytics/index.js';
+import type { InfoModalClosedData, SettingChangedData } from '../analytics/index.js';
 
 export interface InfoModalOptions {
     container: HTMLElement;
@@ -60,6 +62,12 @@ type InlineNode = string | Node | [tag: string, text: string, attrs?: Record<str
 function inlineToolIcon(svg: SVGSVGElement): SVGSVGElement {
     svg.classList.add('info-inline-icon');
     return svg;
+}
+
+function trackSettingChange(data: SettingChangedData): void {
+    if (data.from !== data.to) {
+        track('setting-changed', data);
+    }
 }
 
 function appendInlineLi(parent: HTMLElement, parts: InlineNode[]): HTMLLIElement {
@@ -214,6 +222,7 @@ function buildToleranceSetting(
         button.appendChild(descSpan);
 
         button.addEventListener('click', () => {
+            trackSettingChange({ setting: 'snap-distance', from: loadTolerancePreference(), to: preset.id });
             saveTolerancePreference(preset.id);
             tolContainer
                 .querySelectorAll('.preset-option')
@@ -270,6 +279,7 @@ function buildPieceOutlineSetting(): HTMLElement {
         button.appendChild(descSpan);
 
         button.addEventListener('click', () => {
+            trackSettingChange({ setting: 'piece-outline', from: loadPieceOutlinePreference(), to: preset.id });
             savePieceOutlinePreference(preset.id);
             applyPieceOutline(preset.id);
             container
@@ -301,6 +311,11 @@ function buildPieceOutlineSetting(): HTMLElement {
         container: colorRow,
         selectedId: loadPieceOutlineColorPreference(),
         onSelect: (colorId) => {
+            trackSettingChange({
+                setting: 'outline-color',
+                from: loadPieceOutlineColorPreference(),
+                to: colorId,
+            });
             savePieceOutlineColorPreference(colorId);
             applyPieceOutlineColor(colorId);
         },
@@ -328,6 +343,7 @@ function buildOffsetDragSetting(): HTMLElement {
     checkbox.dataset.testid = 'offset-drag-toggle';
     checkbox.checked = loadOffsetDragPreference();
     checkbox.addEventListener('change', () => {
+        trackSettingChange({ setting: 'offset-drag', from: loadOffsetDragPreference(), to: checkbox.checked });
         saveOffsetDragPreference(checkbox.checked);
     });
 
@@ -361,6 +377,11 @@ function buildMarqueeContainSetting(): HTMLElement {
     checkbox.dataset.testid = 'marquee-contain-toggle';
     checkbox.checked = loadMarqueeContainPreference();
     checkbox.addEventListener('change', () => {
+        trackSettingChange({
+            setting: 'enclose-to-select',
+            from: loadMarqueeContainPreference(),
+            to: checkbox.checked,
+        });
         saveMarqueeContainPreference(checkbox.checked);
     });
 
@@ -453,8 +474,7 @@ function buildAboutSection(): HTMLElement {
 function buildDebugSection(args: {
     state: GameState | null | undefined;
     onSolve?: () => void;
-    dismiss: () => void;
-}): HTMLElement {
+}): HTMLDetailsElement {
     const details = document.createElement('details');
     details.className = 'info-section info-section--debug';
     details.dataset.testid = 'debug-section';
@@ -491,15 +511,13 @@ function buildDebugSection(args: {
     );
 
     // Kept inside Debug so all debug tools stay together.
-    if (args.onSolve) {
+    const { onSolve } = args;
+    if (onSolve) {
         const solveBtn = document.createElement('button');
         solveBtn.className = 'info-modal-solve-btn';
         solveBtn.textContent = '🧩 Solve Puzzle';
         solveBtn.type = 'button';
-        solveBtn.addEventListener('click', () => {
-            args.dismiss();
-            args.onSolve!();
-        });
+        solveBtn.addEventListener('click', () => onSolve());
         details.appendChild(solveBtn);
     }
 
@@ -721,19 +739,41 @@ function buildDebugToggleSetting(args: {
     return setting;
 }
 
-/** Returns a cleanup function that removes the modal from the DOM. */
-export function createInfoModal(options: InfoModalOptions): () => void {
-    const { container, onDismiss, onToleranceChanged, getState } = options;
+const CLOSED_BY_OVERLAY_CAUSE: Record<OverlayDismissCause, InfoModalClosedData['closedBy']> = {
+    click: 'backdrop',
+    escape: 'escape',
+};
+
+export function createInfoModal(options: InfoModalOptions): void {
+    const { container, onDismiss, onToleranceChanged, getState, onSolve } = options;
+    const openedAt = Date.now();
+    let maxSeen = 0;
+    let scrolled = false;
+    let debugOpened = false;
 
     const { overlay, dismiss: dismissOverlay } = createDismissableOverlay({
         container,
         className: 'info-modal-overlay',
-        onDismiss,
+        onDismiss: (cause) => {
+            reportClosed(CLOSED_BY_OVERLAY_CAUSE[cause]);
+            onDismiss?.();
+        },
     });
 
-    function dismiss(): void {
+    function close(closedBy: 'button' | 'solve'): void {
         dismissOverlay();
+        reportClosed(closedBy);
         onDismiss?.();
+    }
+
+    function reportClosed(closedBy: InfoModalClosedData['closedBy']): void {
+        track('info-modal-closed', {
+            closedBy,
+            openMs: Date.now() - openedAt,
+            seenPercent: Math.round(maxSeen * 100),
+            scrolled,
+            debugOpened,
+        });
     }
 
     const modal = document.createElement('div');
@@ -768,13 +808,14 @@ export function createInfoModal(options: InfoModalOptions): () => void {
     content.appendChild(buildSettingsSection({ onToleranceChanged }));
     content.appendChild(buildCreditsSection());
     content.appendChild(buildAboutSection());
-    content.appendChild(
-        buildDebugSection({
-            state: getState?.(),
-            onSolve: options.onSolve,
-            dismiss,
+    const debugSection = buildDebugSection({
+        state: getState?.(),
+        onSolve: onSolve && (() => {
+            close('solve');
+            onSolve();
         }),
-    );
+    });
+    content.appendChild(debugSection);
 
     modal.appendChild(header);
     modal.appendChild(content);
@@ -782,7 +823,24 @@ export function createInfoModal(options: InfoModalOptions): () => void {
 
     // Backdrop / Escape are handled by the overlay helper (both fire onDismiss);
     // only the close button needs wiring here.
-    closeButton.addEventListener('click', dismiss);
+    closeButton.addEventListener('click', () => close('button'));
 
-    return dismiss;
+    function sampleSeen(): void {
+        const { scrollTop, clientHeight, scrollHeight } = content;
+        const seen = scrollHeight > clientHeight ? (scrollTop + clientHeight) / scrollHeight : 1;
+        maxSeen = Math.max(maxSeen, Math.min(seen, 1));
+    }
+
+    content.addEventListener('scroll', () => {
+        scrolled = true;
+        sampleSeen();
+    });
+    debugSection.addEventListener('toggle', () => {
+        if (debugSection.open) {
+            debugOpened = true;
+        }
+    });
+    sampleSeen();
+
+    track('info-modal-opened', {});
 }

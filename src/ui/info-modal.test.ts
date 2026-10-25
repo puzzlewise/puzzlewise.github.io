@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi, type Mock } from 'vitest';
 import { createInfoModal } from './info-modal.js';
 import { createSelectToolButton } from './select-tool-button.js';
 import { createMarqueeToolButton } from './marquee-tool-button.js';
@@ -31,6 +31,10 @@ function makeState(overrides?: Partial<GameState>): GameState {
         ...overrides,
     });
 }
+
+afterEach(() => {
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+});
 
 describe('createInfoModal', () => {
     let container: HTMLElement;
@@ -655,5 +659,200 @@ describe('createInfoModal — Device label setting', () => {
         expect(input().value).toBe('test-device');
         expect(el('device-label-error').hidden).toBe(false);
         expect(el('device-label-error').textContent).toBe("Couldn't save the label.");
+    });
+});
+
+describe('createInfoModal — analytics', () => {
+    let container: HTMLElement;
+    let umamiTrack: Mock<NonNullable<Window['umami']>['track']>;
+
+    beforeEach(() => {
+        container = document.createElement('div');
+        document.body.appendChild(container);
+        localStorage.clear();
+        umamiTrack = vi.fn();
+        window.umami = { track: umamiTrack };
+    });
+
+    afterEach(() => {
+        container.remove();
+        delete window.umami;
+        vi.restoreAllMocks();
+        vi.useRealTimers();
+    });
+
+    function trackedData(name: string): unknown[] {
+        return umamiTrack.mock.calls
+            .filter(([eventName]) => eventName === name)
+            .map(([, data]) => data);
+    }
+
+    function closedData(): unknown {
+        const sent = trackedData('info-modal-closed');
+        expect(sent).toHaveLength(1);
+        return sent[0];
+    }
+
+    function stubContentGeometry(scrollHeight: number, clientHeight: number): void {
+        vi.spyOn(Element.prototype, 'scrollHeight', 'get').mockReturnValue(scrollHeight);
+        vi.spyOn(Element.prototype, 'clientHeight', 'get').mockReturnValue(clientHeight);
+    }
+
+    function scrollContentTo(top: number): void {
+        const content = container.querySelector<HTMLElement>('.info-modal-content')!;
+        content.scrollTop = top;
+        content.dispatchEvent(new Event('scroll'));
+    }
+
+    function clickClose(): void {
+        container.querySelector<HTMLButtonElement>('.info-modal-close')!.click();
+    }
+
+    function nextTask(): Promise<void> {
+        return new Promise((resolve) => setTimeout(resolve, 0));
+    }
+
+    it('sends info-modal-opened when the modal opens', () => {
+        createInfoModal({ container });
+
+        expect(umamiTrack).toHaveBeenCalledExactlyOnceWith('info-modal-opened', {});
+    });
+
+    it.each([
+        ['button', () => clickClose()],
+        ['backdrop', () => container.querySelector<HTMLElement>('.info-modal-overlay')!.click()],
+        ['escape', () => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))],
+    ])('reports closedBy %s', (closedBy, close) => {
+        createInfoModal({ container });
+
+        close();
+
+        expect(closedData()).toMatchObject({ closedBy });
+    });
+
+    it('reports closedBy solve when Solve closes the modal', () => {
+        createInfoModal({ container, onSolve: vi.fn() });
+
+        container.querySelector<HTMLButtonElement>('.info-modal-solve-btn')!.click();
+
+        expect(closedData()).toMatchObject({ closedBy: 'solve' });
+    });
+
+    it('reports how long the modal was open', () => {
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(1_000_000);
+        createInfoModal({ container });
+
+        vi.setSystemTime(1_004_200);
+        clickClose();
+
+        expect(closedData()).toMatchObject({ openMs: 4200 });
+    });
+
+    it('reports everything seen and no scroll when the content fits', () => {
+        stubContentGeometry(400, 400);
+        createInfoModal({ container });
+
+        clickClose();
+
+        expect(closedData()).toMatchObject({ seenPercent: 100, scrolled: false });
+    });
+
+    it('reports the share visible on open when the content is never scrolled', () => {
+        stubContentGeometry(1000, 400);
+        createInfoModal({ container });
+
+        clickClose();
+
+        expect(closedData()).toMatchObject({ seenPercent: 40, scrolled: false });
+    });
+
+    it('reports the furthest point reached, even after scrolling back up', () => {
+        stubContentGeometry(1000, 400);
+        createInfoModal({ container });
+
+        scrollContentTo(300);
+        scrollContentTo(0);
+        clickClose();
+
+        expect(closedData()).toMatchObject({ seenPercent: 70, scrolled: true });
+    });
+
+    it('caps seenPercent at 100 when an overscroll reports a scrollTop past the end', () => {
+        stubContentGeometry(1000, 400);
+        createInfoModal({ container });
+
+        scrollContentTo(700);
+        clickClose();
+
+        expect(closedData()).toMatchObject({ seenPercent: 100 });
+    });
+
+    it('reports debugOpened false when Debug stays collapsed', () => {
+        createInfoModal({ container });
+
+        clickClose();
+
+        expect(closedData()).toMatchObject({ debugOpened: false });
+    });
+
+    it('reports debugOpened true once Debug was expanded, even if collapsed again', async () => {
+        createInfoModal({ container });
+        const summary = container.querySelector<HTMLElement>('[data-testid="debug-section"] > summary')!;
+
+        summary.click();
+        await nextTask();
+        summary.click();
+        await nextTask();
+        clickClose();
+
+        expect(closedData()).toMatchObject({ debugOpened: true });
+    });
+
+    it.each([
+        ['snap-distance', 'tolerance-strict', 'normal', 'strict'],
+        ['piece-outline', 'piece-outline-none', 'shadow', 'none'],
+    ])('sends setting-changed for %s', (setting, testid, from, to) => {
+        createInfoModal({ container });
+
+        container.querySelector<HTMLButtonElement>(`[data-testid="${testid}"]`)!.click();
+
+        expect(trackedData('setting-changed')).toEqual([{ setting, from, to }]);
+    });
+
+    it.each(['tolerance-normal', 'piece-outline-shadow'])(
+        'sends no setting-changed when the selected preset %s is clicked again',
+        (testid) => {
+            createInfoModal({ container });
+
+            container.querySelector<HTMLButtonElement>(`[data-testid="${testid}"]`)!.click();
+
+            expect(trackedData('setting-changed')).toEqual([]);
+        },
+    );
+
+    it('sends setting-changed for outline-color', () => {
+        localStorage.setItem('puzzle-piece-outline', 'outline');
+        createInfoModal({ container });
+
+        container.querySelector<HTMLButtonElement>('button.outline-color-button')!.click();
+        container.querySelector<HTMLButtonElement>('[data-swatch-id="blue-default"]')!.click();
+
+        expect(trackedData('setting-changed')).toEqual([
+            { setting: 'outline-color', from: 'gray-darker-3', to: 'blue-default' },
+        ]);
+    });
+
+    it.each([
+        ['offset-drag', 'offset-drag-toggle'],
+        ['enclose-to-select', 'marquee-contain-toggle'],
+    ])('sends setting-changed for %s', (setting, testid) => {
+        createInfoModal({ container });
+        const checkbox = container.querySelector<HTMLInputElement>(`[data-testid="${testid}"]`)!;
+
+        checkbox.checked = true;
+        checkbox.dispatchEvent(new Event('change'));
+
+        expect(trackedData('setting-changed')).toEqual([{ setting, from: false, to: true }]);
     });
 });

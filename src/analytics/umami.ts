@@ -401,6 +401,30 @@ export interface BackgroundColorChangedData {
     to: string;
 }
 
+export type InfoModalOpenedData = Record<string, never>;
+
+/**
+ * Not sent when the page unloads or the app is killed with the modal open,
+ * so `info-modal-opened` minus this counts those.
+ *
+ * `seenPercent` (0–100) is how far down the content was on screen at some
+ * point, as a share of its height: the share visible on open if never
+ * scrolled, 100 once the bottom was reached. An expanded Debug section
+ * counts toward the height from then on.
+ */
+export interface InfoModalClosedData {
+    closedBy: 'button' | 'backdrop' | 'escape' | 'solve';
+    /** Wall-clock, background time included. */
+    openMs: number;
+    seenPercent: number;
+    scrolled: boolean;
+    debugOpened: boolean;
+}
+
+export type SettingChangedData =
+    | { setting: 'snap-distance' | 'piece-outline' | 'outline-color'; from: string; to: string }
+    | { setting: 'offset-drag' | 'enclose-to-select'; from: boolean; to: boolean };
+
 /**
  * Data attached to `traced-chunk-preload-started`.
  *
@@ -1573,6 +1597,9 @@ export function track(name: 'puzzle-completed', data: PuzzleCompletedData): void
 export function track(name: 'puzzle-solved', data: PuzzleSolvedData): void;
 export function track(name: 'puzzle-shared', data: PuzzleSharedData): void;
 export function track(name: 'background-color-changed', data: BackgroundColorChangedData): void;
+export function track(name: 'info-modal-opened', data: InfoModalOpenedData): void;
+export function track(name: 'info-modal-closed', data: InfoModalClosedData): void;
+export function track(name: 'setting-changed', data: SettingChangedData): void;
 export function track(name: 'traced-chunk-preload-started', data: TracedChunkPreloadStartedData): void;
 export function track(name: 'traced-chunk-loaded', data: TracedChunkLoadedData): void;
 export function track(name: 'traced-chunk-load-failed', data: TracedChunkLoadFailedData): void;
