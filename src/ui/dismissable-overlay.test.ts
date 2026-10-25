@@ -479,6 +479,70 @@ describe('attachDismissablePopover', () => {
         expect(onDismiss).not.toHaveBeenCalled();
     });
 
+    describe('Escape with an overlay open', () => {
+        let container: HTMLElement;
+
+        beforeEach(() => {
+            container = document.createElement('div');
+            document.body.appendChild(container);
+        });
+
+        afterEach(() => {
+            container.remove();
+        });
+
+        it('closes a popover inside the overlay and leaves the overlay open', () => {
+            const overlayDismissed = vi.fn();
+            const { overlay, dismiss } = createDismissableOverlay({
+                container,
+                className: 'test-overlay',
+                onDismiss: overlayDismissed,
+            });
+            const panel = makePanel();
+            overlay.appendChild(panel);
+            const popoverDismissed = vi.fn();
+            attachDismissablePopover({ panel, onDismiss: popoverDismissed });
+            document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+
+            expect(panel.isConnected).toBe(false);
+            expect(popoverDismissed).toHaveBeenCalledOnce();
+            expect(overlay.isConnected).toBe(true);
+            expect(overlayDismissed).not.toHaveBeenCalled();
+            dismiss();
+        });
+
+        it('closes the overlay and leaves a popover behind it open', () => {
+            const panel = makePanel();
+            container.appendChild(panel);
+            const popoverDismissed = vi.fn();
+            const popover = attachDismissablePopover({ panel, onDismiss: popoverDismissed });
+            const { overlay } = createDismissableOverlay({ container, className: 'test-overlay' });
+            document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+
+            expect(overlay.isConnected).toBe(false);
+            expect(panel.isConnected).toBe(true);
+            expect(popoverDismissed).not.toHaveBeenCalled();
+            popover.dismiss();
+        });
+
+        it('leaves Escape to the next overlay once the one holding the popover has closed', () => {
+            const first = createDismissableOverlay({ container, className: 'first' });
+            const panel = makePanel();
+            first.overlay.appendChild(panel);
+            attachDismissablePopover({ panel });
+            first.dismiss();
+            const secondDismissed = vi.fn();
+            createDismissableOverlay({
+                container,
+                className: 'second',
+                onDismiss: secondDismissed,
+            });
+            document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+
+            expect(secondDismissed).toHaveBeenCalledExactlyOnceWith('escape');
+        });
+    });
+
     it('skips listener install if dismiss runs before the deferred frame', () => {
         // Restore real RAF for this test so installation truly defers.
         window.requestAnimationFrame = originalRAF;

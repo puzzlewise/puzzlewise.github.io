@@ -134,7 +134,7 @@ export function attachDismissablePopover(
             pointerDownListener = null;
         }
         if (keyListener) {
-            document.removeEventListener('keydown', keyListener);
+            document.removeEventListener('keydown', keyListener, true);
             keyListener = null;
         }
     }
@@ -163,11 +163,11 @@ export function attachDismissablePopover(
 
         if (dismissOnEscape) {
             keyListener = (e: KeyboardEvent) => {
-                if (e.key === 'Escape') {
-                    userDismiss();
-                }
+                if (e.key !== 'Escape' || panel.closest('[inert]')) return;
+                if (panel.isConnected) e.stopPropagation();
+                userDismiss();
             };
-            document.addEventListener('keydown', keyListener);
+            document.addEventListener('keydown', keyListener, true);
         }
     });
 

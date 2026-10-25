@@ -304,9 +304,6 @@ function buildPieceOutlineSetting(): HTMLElement {
     colorLabel.textContent = 'Outline colour';
     colorRow.appendChild(colorLabel);
 
-    // The picker's cleanup is intentionally discarded: the modal removes its
-    // whole subtree on dismiss, and the popover's only out-of-subtree resource
-    // (its document-level dismiss listeners) is torn down by every close path.
     createPieceOutlineColorPicker({
         container: colorRow,
         selectedId: loadPieceOutlineColorPreference(),
