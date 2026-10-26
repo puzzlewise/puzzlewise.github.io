@@ -8,12 +8,14 @@
 import { registerSW } from 'virtual:pwa-register';
 import {
     createUpdateController,
+    reloadOnceActivated,
+    reloadOnControllerChange,
     setupUpdateChecks,
+    watchInstalls,
 } from './update-controller.js';
 import {
     attemptShareLinkRescue,
     type RescueOutcome,
-    type RescueRegistration,
 } from './share-link-rescue.js';
 import { describeRegisterFailure } from './register-failure.js';
 import { createUpdateAvailableIndicator } from '../ui/index.js';
@@ -28,9 +30,13 @@ export interface PwaUpdates {
  * @param flush  Flush pending autosave before any reload, so a change inside
  *               the debounce window survives the version switch.
  */
-export function initPwaUpdates(flush: () => void): PwaUpdates {
+export function initPwaUpdates(
+    flush: () => void,
+    reload: () => void = () => location.reload(),
+): PwaUpdates {
     const controller = createUpdateController({
         flush,
+        reload,
         showIndicator: (onRefresh) => {
             createUpdateAvailableIndicator({ onRefresh });
         },
@@ -39,19 +45,29 @@ export function initPwaUpdates(flush: () => void): PwaUpdates {
     // The registration arrives asynchronously via onRegisteredSW; a rescue
     // started earlier awaits this promise (bounded by its own deadline — it
     // never resolves on the dev server, where no SW registers).
-    let resolveRegistration: (r: RescueRegistration | null) => void = () => {};
-    const registrationPromise = new Promise<RescueRegistration | null>(
+    let resolveRegistration: (r: ServiceWorkerRegistration | null) => void = () => {};
+    const registrationPromise = new Promise<ServiceWorkerRegistration | null>(
         (resolve) => { resolveRegistration = resolve; },
     );
     const updateReadyListeners = new Set<() => void>();
+    const onNeedRefresh = (): void => {
+        controller.onNeedRefresh();
+        for (const listener of updateReadyListeners) listener();
+    };
+
+    if ('serviceWorker' in navigator) {
+        reloadOnControllerChange(navigator.serviceWorker, () => {
+            controller.onControllerChange();
+        });
+    }
 
     const updateSW = registerSW({
-        onNeedRefresh() {
-            controller.onNeedRefresh();
-            for (const listener of updateReadyListeners) listener();
-        },
+        onNeedRefresh,
         onRegisteredSW(_swScriptUrl, registration) {
-            if (registration) setupUpdateChecks(registration, controller);
+            if (registration) {
+                watchInstalls(registration, { onWaiting: onNeedRefresh });
+                setupUpdateChecks(registration, controller);
+            }
             resolveRegistration(registration ?? null);
         },
         // If the SW can't register, there's no update funnel for the session.
@@ -64,7 +80,13 @@ export function initPwaUpdates(flush: () => void): PwaUpdates {
         },
     });
 
-    controller.setUpdateSW(updateSW);
+    controller.setUpdateSW(
+        reloadOnceActivated(
+            updateSW,
+            async () => (await registrationPromise)?.waiting ?? null,
+            reload,
+        ),
+    );
 
     return {
         attemptShareLinkRescue: () =>

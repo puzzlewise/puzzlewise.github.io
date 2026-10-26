@@ -92,8 +92,10 @@ describe('initPwaUpdates share-link rescue wiring', () => {
         const pwa = initPwaUpdates(() => {});
         const registration = {
             update: vi.fn(() => Promise.resolve()),
+            active: {},
             installing: null,
             waiting: null,
+            addEventListener: vi.fn(),
         };
         capturedOptions.current?.onRegisteredSW?.(
             'sw.js',
@@ -131,8 +133,10 @@ describe('initPwaUpdates share-link rescue wiring', () => {
                 queueMicrotask(() => capturedOptions.current?.onNeedRefresh?.());
                 return Promise.resolve();
             }),
-            installing: {},
-            waiting: null,
+            active: {},
+            installing: { state: 'installing', addEventListener: vi.fn() },
+            waiting: { state: 'installed', addEventListener: vi.fn() },
+            addEventListener: vi.fn(),
         };
         capturedOptions.current?.onRegisteredSW?.(
             'sw.js',
@@ -145,5 +149,163 @@ describe('initPwaUpdates share-link rescue wiring', () => {
         expect(track).toHaveBeenCalledWith('pwa-update-applied', {
             trigger: 'share-link-rescue',
         });
+    });
+
+    it('waits for activation when a rescue applies before onRegisteredSW, as Workbox orders it', async () => {
+        vi.useFakeTimers();
+        const updateSW = vi.fn(() => Promise.resolve());
+        registerSW.mockImplementationOnce((options?: RegisterSWOptions) => {
+            capturedOptions.current = options;
+            return updateSW;
+        });
+        const reload = vi.fn();
+        const pwa = initPwaUpdates(() => {}, reload);
+        const workerHandlers: Array<() => void> = [];
+        const worker = {
+            state: 'installed',
+            addEventListener: (_type: string, handler: () => void) => {
+                workerHandlers.push(handler);
+            },
+        };
+        const registration = {
+            update: vi.fn(() => Promise.resolve()),
+            active: {},
+            installing: null,
+            waiting: worker,
+            addEventListener: vi.fn(),
+        };
+        const rescue = pwa.attemptShareLinkRescue();
+
+        capturedOptions.current?.onNeedRefresh?.();
+        capturedOptions.current?.onRegisteredSW?.(
+            'sw.js',
+            registration as unknown as ServiceWorkerRegistration,
+        );
+        await expect(rescue).resolves.toBe('updated');
+        for (let n = 0; n < 10; n++) await Promise.resolve();
+        expect(updateSW).toHaveBeenCalled();
+        expect(reload).not.toHaveBeenCalled();
+
+        worker.state = 'activated';
+        for (const handler of workerHandlers) handler();
+        for (let n = 0; n < 10; n++) await Promise.resolve();
+        expect(reload).toHaveBeenCalledOnce();
+    });
+
+    it('applies an update that only the install watcher saw', async () => {
+        vi.useFakeTimers();
+        const workerHandlers: Array<() => void> = [];
+        const worker = {
+            state: 'installing',
+            addEventListener: (_type: string, handler: () => void) => {
+                workerHandlers.push(handler);
+            },
+        };
+        const updateFoundHandlers: Array<() => void> = [];
+        const registration = {
+            active: {},
+            installing: null as unknown,
+            waiting: null as unknown,
+            addEventListener: (_type: string, handler: () => void) => {
+                updateFoundHandlers.push(handler);
+            },
+            update: vi.fn(() => {
+                if (!registration.installing && !registration.waiting) {
+                    registration.installing = worker;
+                    for (const handler of updateFoundHandlers) handler();
+                }
+                return Promise.resolve();
+            }),
+        };
+        const pwa = initPwaUpdates(() => {});
+        capturedOptions.current?.onRegisteredSW?.(
+            'sw.js',
+            registration as unknown as ServiceWorkerRegistration,
+        );
+        let outcome: string | undefined;
+        void pwa.attemptShareLinkRescue().then((o) => {
+            outcome = o;
+        });
+        for (let n = 0; n < 10; n++) await Promise.resolve();
+
+        registration.installing = null;
+        registration.waiting = worker;
+        worker.state = 'installed';
+        for (const handler of workerHandlers) handler();
+        for (let n = 0; n < 10; n++) await Promise.resolve();
+
+        expect(outcome).toBe('updated');
+        expect(track).toHaveBeenCalledWith('pwa-update-applied', {
+            trigger: 'share-link-rescue',
+        });
+    });
+});
+
+describe('initPwaUpdates controller change', () => {
+    let controllerChangeHandlers: Array<() => void> = [];
+
+    beforeEach(() => {
+        controllerChangeHandlers = [];
+        Object.defineProperty(navigator, 'serviceWorker', {
+            configurable: true,
+            value: {
+                controller: {},
+                addEventListener: (_type: string, handler: () => void) => {
+                    controllerChangeHandlers.push(handler);
+                },
+            },
+        });
+    });
+
+    afterEach(() => {
+        Reflect.deleteProperty(navigator, 'serviceWorker');
+    });
+
+    function register(flush: () => void, reload: () => void) {
+        const pwa = initPwaUpdates(flush, reload);
+        const registration = {
+            update: vi.fn(() => Promise.resolve()),
+            active: {},
+            installing: null,
+            waiting: null,
+            addEventListener: vi.fn(),
+        };
+        capturedOptions.current?.onRegisteredSW?.(
+            'sw.js',
+            registration as unknown as ServiceWorkerRegistration,
+        );
+        return pwa;
+    }
+
+    it('reports and reloads when another tab applied the update, even before registration', async () => {
+        vi.useFakeTimers();
+        const flush = vi.fn();
+        const reload = vi.fn();
+        initPwaUpdates(flush, reload);
+
+        for (const handler of controllerChangeHandlers) handler();
+        for (let n = 0; n < 10; n++) await Promise.resolve();
+
+        expect(track).toHaveBeenCalledWith('pwa-update-applied', { trigger: 'other-tab' });
+        expect(flush).toHaveBeenCalled();
+        expect(reload).toHaveBeenCalled();
+        expect(flush.mock.invocationCallOrder[0]).toBeLessThan(
+            reload.mock.invocationCallOrder[0],
+        );
+    });
+
+    it('reports only the tap on the tab that applied the update', async () => {
+        vi.useFakeTimers();
+        register(vi.fn(), vi.fn());
+        capturedOptions.current?.onNeedRefresh?.();
+        const { createUpdateAvailableIndicator } = await import('../ui/index.js');
+        const { onRefresh } = vi.mocked(createUpdateAvailableIndicator).mock.calls.at(-1)![0];
+        onRefresh();
+
+        for (const handler of controllerChangeHandlers) handler();
+        for (let n = 0; n < 10; n++) await Promise.resolve();
+
+        const applied = track.mock.calls.filter(([name]) => name === 'pwa-update-applied');
+        expect(applied).toEqual([['pwa-update-applied', { trigger: 'manual' }]]);
     });
 });

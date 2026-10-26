@@ -25,12 +25,7 @@ export interface UpdateControllerDeps {
      * applies the update (reload) when the user taps it.
      */
     showIndicator: (onRefresh: () => void) => void;
-    /**
-     * Hard reload fallback for when the SW-driven reload doesn't occur (e.g. a
-     * sibling tab on this shared origin already activated the new worker, so
-     * skip-waiting is a no-op and no `controlling` event fires). Defaults to a
-     * full-page reload.
-     */
+    /** Defaults to a full-page reload. */
     reload?: () => void;
     /** Defaults to `globalThis.setTimeout`. */
     scheduleFallback?: (handler: () => void, ms: number) => void;
@@ -45,6 +40,11 @@ export interface UpdateController {
     setUpdateSW(updateSW: (reload?: boolean) => Promise<void>): void;
     requestReloadIfPending(): void;
     reloadNow(trigger?: UpdateApplyTrigger): void;
+    /**
+     * Another tab's update took over this page. Its worker is already active,
+     * so there is nothing to activate or fall back from.
+     */
+    onControllerChange(): void;
     readonly pending: boolean;
 }
 
@@ -88,9 +88,6 @@ export function createUpdateController(
             });
         });
 
-        // The normal path reloads via workbox's `controlling` event before this
-        // fires. The fallback only runs when that event never arrives (the #404
-        // shared-origin case), where a hard reload loads the new worker.
         scheduleFallback(() => {
             track('pwa-update-fallback-reload', {});
             reload();
@@ -121,6 +118,13 @@ export function createUpdateController(
         reloadNow(trigger = 'manual') {
             apply(trigger);
         },
+        onControllerChange() {
+            if (reloading) return;
+            reloading = true;
+            track('pwa-update-applied', { trigger: 'other-tab' });
+            deps.flush();
+            reload();
+        },
         get pending() {
             return pending;
         },
@@ -135,11 +139,16 @@ export interface UpdateCheckDeps {
 }
 
 /**
- * No background timer: two event-driven triggers cover every case. Page load
- * already checks (registering the SW in `register.ts` fetches and byte-compares
- * the script), and `visibilitychange → visible` checks and applies any pending
- * update (returning to a long-lived tab, reopening from the home screen). An
- * interval would only help a tab left open and foregrounded for hours.
+ * No background timer: a check at registration and on every
+ * `visibilitychange → visible` (which also applies any pending update) cover
+ * every case. An interval would only help a tab left open and foregrounded for
+ * hours.
+ *
+ * The registration check is needed although navigations check too: a repeat
+ * `register()` of the same script never fetches it, and the navigation's check
+ * can install and fail before `register()` runs after `load`, leaving nothing
+ * for `watchInstalls` to see. It costs one `sw.js` request per load, usually a
+ * 304.
  */
 export function setupUpdateChecks(
     registration: UpdatableRegistration,
@@ -179,6 +188,106 @@ export function setupUpdateChecks(
         checkForUpdate();
         controller.requestReloadIfPending();
     });
+    checkForUpdate();
 }
 
 const MAX_CHECK_FAILURE_REASONS = 5;
+
+export interface WatchedWorker {
+    readonly state: string;
+    addEventListener(type: 'statechange', handler: () => void): void;
+}
+
+export interface InstallWatchable {
+    readonly active: unknown;
+    readonly installing: WatchedWorker | null;
+    addEventListener(type: 'updatefound', handler: () => void): void;
+}
+
+export interface InstallWatchDeps {
+    onWaiting: () => void;
+    /** Defaults to `navigator.onLine`. */
+    isOnline?: () => boolean;
+}
+
+/**
+ * Watches the registration itself rather than relying on workbox-window, which
+ * stops listening for `updatefound` after the first "external" one (any after
+ * the first, or later than 60 s after registration; `Workbox.js`
+ * `_onUpdateFound`). Without `onWaiting`, an update that installs after a
+ * failed one in the same session would never be offered.
+ */
+export function watchInstalls(
+    registration: InstallWatchable,
+    deps: InstallWatchDeps,
+): void {
+    const isOnline = deps.isOnline ?? (() => navigator.onLine);
+    let reported = false;
+
+    function watch(worker: WatchedWorker | null): void {
+        if (!worker) return;
+        let previous = worker.state;
+        worker.addEventListener('statechange', () => {
+            if (worker.state === 'installed' && registration.active !== null) {
+                deps.onWaiting();
+            }
+            // A waiting worker replaced by a newer one goes redundant from
+            // `installed`; that is not a failure.
+            if (worker.state === 'redundant' && previous === 'installing' && !reported) {
+                reported = true;
+                track('pwa-update-install-failed', {
+                    isUpdate: registration.active !== null,
+                    online: isOnline(),
+                });
+            }
+            previous = worker.state;
+        });
+    }
+
+    registration.addEventListener('updatefound', () => watch(registration.installing));
+    watch(registration.installing);
+}
+
+/**
+ * Reloads the tapped page once the worker it applied has activated, instead of
+ * waiting for vite-plugin-pwa's reload. That one only comes from workbox-window's
+ * `controlling` event with `isUpdate`, which is fixed at registration as "a
+ * worker controlled this page", and its listener is armed only by the library's
+ * own delayed `waiting` event. So it never fires on a page no worker controlled
+ * at load, nor for an update only `watchInstalls` saw.
+ */
+export function reloadOnceActivated(
+    updateSW: (reloadPage?: boolean) => Promise<void>,
+    waiting: () => Promise<WatchedWorker | null>,
+    reload: () => void,
+): (reloadPage?: boolean) => Promise<void> {
+    return async (reloadPage) => {
+        const worker = await waiting();
+        await updateSW(reloadPage);
+        if (worker && worker.state !== 'activated') {
+            await new Promise<void>((resolve) => {
+                worker.addEventListener('statechange', () => {
+                    if (worker.state === 'activated') resolve();
+                });
+            });
+        }
+        reload();
+    };
+}
+
+export interface ControllerChangeSource {
+    readonly controller: unknown;
+    addEventListener(type: 'controllerchange', handler: () => void): void;
+}
+
+/**
+ * Reloads other tabs when one applies an update. Only on a page a worker
+ * controlled at startup, where a controller change always means a new worker
+ * took over.
+ */
+export function reloadOnControllerChange(
+    container: ControllerChangeSource,
+    reload: () => void,
+): void {
+    if (container.controller) container.addEventListener('controllerchange', reload);
+}

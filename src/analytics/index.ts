@@ -27,6 +27,7 @@ export type {
     PwaUpdateAppliedData,
     PwaUpdateFallbackReloadData,
     PwaUpdateApplyFailedData,
+    PwaUpdateInstallFailedData,
     PwaRegisterFailedData,
     ShareLinkRescueAttemptedData,
     ShareLinkRescueResultData,

@@ -61,9 +61,9 @@ self.addEventListener('message', (event) => {
 //
 // Only the global `error`/`unhandledrejection` events are covered — synchronous
 // throws and unhandled rejections. Failures the platform routes elsewhere (a
-// `respondWith` rejection, a precache install failure, a `waitUntil` rejection)
-// surface as the event's own failure, not here — don't read absent
-// sw-error/sw-rejection events as proof those paths are healthy.
+// `respondWith` rejection, a `waitUntil` rejection) surface as the event's own
+// failure, not here — don't read absent sw-error/sw-rejection events as proof
+// those paths are healthy.
 //
 // Best-effort: with no window client open, `matchAll` returns empty and the
 // report is dropped, since only the page can call `track()`.
