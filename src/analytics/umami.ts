@@ -525,7 +525,7 @@ export interface TracedChunkLoadFailedData {
  *
  * Coverage caveat for the `sw-*` sources: the worker backstop only sees
  * synchronous throws and unhandled promise rejections in the worker scope.
- * It does NOT capture `FetchEvent.respondWith` / precache / `waitUntil`
+ * It does NOT capture `FetchEvent.respondWith` / `waitUntil`
  * failures (those surface as the event's own failure, not a global error),
  * and a report is dropped when no window client is open to relay it. So
  * absence of `sw-rejection`/`sw-error` events is not proof the worker is
@@ -1323,16 +1323,16 @@ export interface SaveRecoveryData {
 /**
  * Data attached to `pwa-update-detected` — a freshly-built service worker is
  * waiting and the persistent "update ready" indicator was shown. This is the
- * funnel denominator: every applied/fallback/failed event below should trace
- * back to one of these. The gap between detected and applied is the
+ * funnel denominator. The gap between detected and applied is the
  * stuck-indicator field signal.
  */
 export type PwaUpdateDetectedData = Record<string, never>;
 
 /**
  * Data attached to `pwa-update-check-failed` — a background update *check*
- * (`registration.update()` on a visibility regain) rejected. This is distinct
- * from `pwa-update-apply-failed`: nothing was being applied, the check itself
+ * (`registration.update()` at registration or on a visibility regain)
+ * rejected. This is distinct from `pwa-update-apply-failed`: nothing was being
+ * applied, the check itself
  * failed (typically offline or a server error), and it self-heals on the next
  * visibility change. It labels the check-failure leg of the funnel
  * (`pwa-update-detected` → check failures → `pwa-update-applied` /
@@ -1353,14 +1353,15 @@ export interface PwaUpdateCheckFailedData {
  * Data attached to `pwa-update-applied` — a deferred service-worker update was
  * applied (the page committed to reloading into the new version).
  *
- * `trigger` records what caused the apply, so an operator can see the split
- * between the three safe-moment paths:
+ * `trigger` records what caused the apply:
  * - `focus-regain` — auto-applied when the app became visible again with an
  *   update pending.
  * - `manual` — the user tapped the persistent indicator.
  * - `share-link-rescue` — an undecodable `#p=` link forced an update check
  *   that found a newer build; applied automatically so the reload can
  *   re-parse the link.
+ * - `other-tab` — another tab applied the update, and this page, which a
+ *   worker controlled at load, reloads as the new worker takes over.
  * This is the numerator against `pwa-update-detected` — the gap between the two
  * is the stuck-indicator signal (detected but never applied).
  *
@@ -1368,18 +1369,34 @@ export interface PwaUpdateCheckFailedData {
  * payload, so the set of triggers has a single source of truth here.
  */
 export interface PwaUpdateAppliedData {
-    trigger: 'focus-regain' | 'manual' | 'share-link-rescue';
+    trigger: 'focus-regain' | 'manual' | 'share-link-rescue' | 'other-tab';
 }
 
 /**
- * Data attached to `pwa-update-fallback-reload` — the service-worker-driven
- * reload did not navigate the page away in time, so the fallback hard reload
- * fired (the #404 shared-origin case, where the new worker was already
- * activated by another tab so skip-waiting is a no-op and no `controlling`
- * event arrives). Tells an operator whether this fallback path is actually
- * load-bearing in the field.
+ * Data attached to `pwa-update-fallback-reload` — the applied worker did not
+ * reach `activated` (or the reload did not navigate the page away) within 3 s,
+ * so the fallback hard reload fired. A worker that another tab already
+ * activated reloads at once and is not reported, so every event is a failed
+ * hand-off.
  */
 export type PwaUpdateFallbackReloadData = Record<string, never>;
+
+/**
+ * Data attached to `pwa-update-install-failed` — a new service worker went
+ * `redundant` while still installing, typically because a precached file
+ * failed to download. The player stays on the build they have, and since the
+ * worker never waits, no `pwa-update-detected` precedes it. Reported at most
+ * once per session.
+ *
+ * - `isUpdate` — false when no worker was active: the first install failed and
+ *   the player has no offline copy yet.
+ * - `online` — `navigator.onLine`. False reliably means offline; true does not
+ *   prove the network works.
+ */
+export interface PwaUpdateInstallFailedData {
+    isUpdate: boolean;
+    online: boolean;
+}
 
 /**
  * Data attached to `pwa-update-apply-failed` — `updateSW(true)` rejected while
@@ -1621,6 +1638,7 @@ export function track(name: 'pwa-update-check-failed', data: PwaUpdateCheckFaile
 export function track(name: 'pwa-update-applied', data: PwaUpdateAppliedData): void;
 export function track(name: 'pwa-update-fallback-reload', data: PwaUpdateFallbackReloadData): void;
 export function track(name: 'pwa-update-apply-failed', data: PwaUpdateApplyFailedData): void;
+export function track(name: 'pwa-update-install-failed', data: PwaUpdateInstallFailedData): void;
 export function track(name: 'pwa-register-failed', data: PwaRegisterFailedData): void;
 export function track(name: 'share-link-rescue-attempted', data: ShareLinkRescueAttemptedData): void;
 export function track(name: 'share-link-rescue-result', data: ShareLinkRescueResultData): void;
