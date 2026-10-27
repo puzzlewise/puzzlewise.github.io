@@ -24,9 +24,9 @@ export interface ImageCategoryOption {
 }
 
 /**
- * `any` sends no query, so Unsplash picks from everything. Keep the other
- * queries single words: extra words AND-narrow the search rather than
- * broadening it.
+ * Extra words AND-narrow the search, so add one only to tighten a category
+ * whose deep result pages drift off-topic (`face` drifted to animals and
+ * non-faces).
  */
 export const IMAGE_CATEGORY_OPTIONS: readonly ImageCategoryOption[] = [
     {
@@ -88,7 +88,7 @@ export const IMAGE_CATEGORY_OPTIONS: readonly ImageCategoryOption[] = [
     {
         id: 'face',
         label: 'Faces',
-        query: 'face',
+        query: 'person face',
         description: 'Close-up faces',
     },
 ] as const;
