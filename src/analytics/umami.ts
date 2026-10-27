@@ -730,9 +730,9 @@ export interface ImagePageCountsUnsavedData {
  * per such page, after the retry settles. `reportedPages` is the page count
  * Unsplash stated on the empty response (0 when it stated none); against
  * `loweredTo` it measures how far the stated count overstates reachable
- * depth. `retry` is whether the player still got photos from that request:
- * `'ok'`, `'empty'` (the retry page was empty too), `'http-error'` (the retry
- * got an error status) or `'threw'` (the retry fetch rejected). `topic` is the
+ * depth. `retry` is the retry page's outcome: `'ok'` (it held photos),
+ * `'empty'`, `'http-error'` (an error status) or `'threw'` (the fetch
+ * rejected, including a canceled Surprise me). `topic` is the
  * slug for topic draws and `''` for searches; `custom` marks a player-typed
  * query, whose text is never sent. Every field is always present.
  */
@@ -777,8 +777,8 @@ export interface ImageStashFallbackData {
  * stash left in place, and `reason` discriminates the ~five causes so a spike
  * separates a benign offline tap from a real client fault (see
  * {@link OfflineDownloadReason}); `reason: 'saved'` accompanies any `saved > 0`
- * row. `requested` is the batch size asked of Unsplash; blocked-photographer
- * filtering and per-photo download failures account for any shortfall.
+ * row. `requested` is how many photos the stash keeps; a shortfall means the
+ * fetched page held fewer usable photos, or per-photo downloads failed.
  */
 export interface OfflineImagesSavedData {
     requested: number;
