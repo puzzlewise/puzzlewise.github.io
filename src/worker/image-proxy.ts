@@ -177,13 +177,6 @@ type Resolution =
     | { ok: true; url: string }
     | { ok: false; status: number; message: string };
 
-/**
- * The key is deliberately *not* added here — it travels as an `Authorization`
- * header, so no URL this returns is secret. That lets a caller log a failing
- * upstream URL, and keeps the key out of Cloudflare's subrequest cache key and
- * out of any upstream error page that echoes the request. Exported (and pure):
- * every routing and validation decision lives here.
- */
 function forwardParams(source: URL, target: URL, names: readonly string[]): void {
     for (const name of names) {
         const value = source.searchParams.get(name);
@@ -193,6 +186,13 @@ function forwardParams(source: URL, target: URL, names: readonly string[]): void
     }
 }
 
+/**
+ * The key is deliberately *not* added here — it travels as an `Authorization`
+ * header, so no URL this returns is secret. That lets a caller log a failing
+ * upstream URL, and keeps the key out of Cloudflare's subrequest cache key and
+ * out of any upstream error page that echoes the request. Exported (and pure):
+ * every routing and validation decision lives here.
+ */
 export function resolveUpstream(url: URL): Resolution {
     const route = FIXED_ROUTES.get(url.pathname);
 
