@@ -10,7 +10,19 @@
 
 import { diagnostics } from '../diagnostics.js';
 import { track } from '../analytics/index.js';
+import type { ImagePageEmptyData } from '../analytics/umami.js';
 import { isBlockedPhotographerUrl } from './blocked-photographers.js';
+import { getPageCount, setPageCount } from './page-count-cache.js';
+import {
+    buildPageUrl,
+    pageCacheKey,
+    parsePage,
+    pickPhotoSource,
+    usablePages,
+    type ParsedPage,
+    type PhotoSource,
+} from './photo-source.js';
+import { shuffled } from './shuffled.js';
 import type { Orientation } from '../model/types.js';
 
 /** Proxy route that forwards to Unsplash's `/photos/random`. */
@@ -157,11 +169,17 @@ export function getImageProxyBaseUrl(): string | undefined {
 function reportProxyHttpError(
     response: Response,
     source: 'single' | 'batch',
+    photoSource: PhotoSource,
 ): void {
     diagnostics.warn(
         `Image proxy error: ${response.status} ${response.statusText}`,
     );
-    track('image-fetch-http-error', { status: response.status, source });
+    track('image-fetch-http-error', {
+        status: response.status,
+        source,
+        sourceKind: photoSource.kind,
+        topic: photoSource.kind === 'topic' ? photoSource.slug : '',
+    });
 }
 
 /**
@@ -183,7 +201,7 @@ export async function fetchRandomImage(
         const response = await fetchFn(url, { signal });
 
         if (!response.ok) {
-            reportProxyHttpError(response, 'single');
+            reportProxyHttpError(response, 'single', { kind: 'search', query: query ?? '' });
 
             return undefined;
         }
@@ -217,7 +235,7 @@ export async function fetchRandomImages(
     const response = await fetchFn(url);
 
     if (!response.ok) {
-        reportProxyHttpError(response, 'batch');
+        reportProxyHttpError(response, 'batch', { kind: 'search', query: query ?? '' });
 
         return undefined;
     }
@@ -231,6 +249,108 @@ export async function fetchRandomImages(
     return data
         .map(parseUnsplashResponse)
         .filter((result) => !isBlockedPhotographerUrl(result.photographerUrl));
+}
+
+export interface PhotoRequestContext {
+    caller: 'picker' | 'surprise' | 'stash';
+    imageCategory: string;
+    vibrant: boolean;
+    custom: boolean;
+}
+
+export interface FetchRandomPhotosOptions {
+    random?: () => number;
+    signal?: AbortSignal;
+}
+
+/**
+ * `/photos/random` draws from a pool of only ~150 photos per query, so draw
+ * from a random page of the full result set instead. A page's count is
+ * cached only when unknown or when lowering it, so a later full response
+ * cannot undo a lowering; error statuses never touch it, so a rate-limit
+ * hour cannot collapse every source to page 1.
+ *
+ * Resolves `undefined` on an error status, `'blocked'` when the page's photos
+ * were all by blocked photographers, `[]` when the page was empty; throws on
+ * a malformed body or a rejected fetch.
+ */
+export async function fetchRandomPhotos(
+    proxyBaseUrl: string,
+    count: number,
+    fetchFn: typeof fetch,
+    query: string | undefined,
+    orientation: Orientation,
+    context: PhotoRequestContext,
+    options: FetchRandomPhotosOptions = {},
+): Promise<UnsplashImageResult[] | 'blocked' | undefined> {
+    const { random = Math.random, signal } = options;
+    const source = pickPhotoSource(query, random);
+    const key = pageCacheKey(source, orientation);
+    const known = getPageCount(key);
+    const page = known === undefined ? 1 : 1 + Math.floor(random() * known);
+
+    const fetchPage = async (pageNumber: number): Promise<ParsedPage | undefined> => {
+        const response = await fetchFn(buildPageUrl(proxyBaseUrl, source, orientation, pageNumber), { signal });
+        if (!response.ok) {
+            reportProxyHttpError(response, context.caller === 'surprise' ? 'single' : 'batch', source);
+            return undefined;
+        }
+        return parsePage(source, await response.json(), response.headers);
+    };
+
+    let result = await fetchPage(page);
+    if (result === undefined) return undefined;
+
+    if (known === undefined && result.reportedPages !== undefined) {
+        setPageCount(key, usablePages(source, result.reportedPages));
+    }
+
+    if (result.photos.length === 0 && page > 1) {
+        const loweredTo = page - 1;
+        const emptyReportedPages = result.reportedPages ?? 0;
+        setPageCount(key, loweredTo);
+        const report = (retry: ImagePageEmptyData['retry']): void => {
+            track('image-page-empty', {
+                caller: context.caller,
+                imageCategory: context.imageCategory,
+                vibrant: context.vibrant,
+                custom: context.custom,
+                orientation,
+                sourceKind: source.kind,
+                topic: source.kind === 'topic' ? source.slug : '',
+                page,
+                reportedPages: emptyReportedPages,
+                loweredTo,
+                retry,
+            });
+        };
+
+        let retried: ParsedPage | undefined;
+        try {
+            retried = await fetchPage(1 + Math.floor(random() * loweredTo));
+        } catch (error) {
+            report('threw');
+            throw error;
+        }
+        report(retried === undefined ? 'http-error' : retried.photos.length > 0 ? 'ok' : 'empty');
+        if (retried === undefined) return undefined;
+        result = retried;
+    }
+
+    const parsed = result.photos.flatMap((photo) => {
+        try {
+            return [parseUnsplashResponse(photo)];
+        } catch {
+            return [];
+        }
+    });
+    if (result.photos.length > 0 && parsed.length === 0) {
+        throw new Error('Invalid Unsplash API response');
+    }
+    const usable = parsed.filter((photo) => !isBlockedPhotographerUrl(photo.photographerUrl));
+    if (parsed.length > 0 && usable.length === 0) return 'blocked';
+
+    return shuffled(usable, random).slice(0, count);
 }
 
 /**

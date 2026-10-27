@@ -12,7 +12,11 @@ import {
     getImageProxyBaseUrl,
     PROXY_RANDOM_PATH,
     PROXY_DOWNLOAD_PATH,
+    fetchRandomPhotos,
+    type UnsplashImageResult,
 } from './unsplash.js';
+import { getPageCount, setPageCount } from './page-count-cache.js';
+import { isBlockedPhotographerUrl } from './blocked-photographers.js';
 import { resolveUpstream, RANDOM_PARAMS } from '../worker/image-proxy.js';
 
 const PROXY = 'https://proxy.example';
@@ -495,6 +499,8 @@ describe('image-fetch-http-error tracking', () => {
         expect(umamiTrack).toHaveBeenCalledExactlyOnceWith('image-fetch-http-error', {
             status: 403,
             source: 'single',
+            sourceKind: 'search',
+            topic: '',
         });
     });
 
@@ -510,6 +516,8 @@ describe('image-fetch-http-error tracking', () => {
         expect(umamiTrack).toHaveBeenCalledExactlyOnceWith('image-fetch-http-error', {
             status: 502,
             source: 'batch',
+            sourceKind: 'search',
+            topic: '',
         });
     });
 
@@ -629,5 +637,277 @@ describe('client/Worker route contract', () => {
         expect([...built.searchParams.keys()].sort()).toEqual(
             [...RANDOM_PARAMS].sort(),
         );
+    });
+});
+
+describe('fetchRandomPhotos', () => {
+    const CTX = { caller: 'picker', imageCategory: 'nature', vibrant: false, custom: false } as const;
+    let umamiTrack: ReturnType<typeof vi.fn>;
+
+    function photo(n: number, blocked = false) {
+        const base = makeUnsplashResponse();
+        return {
+            ...base,
+            urls: {
+                regular: `https://images.unsplash.com/photo-${n}?w=1080`,
+                full: `https://images.unsplash.com/photo-${n}`,
+                small: `https://images.unsplash.com/photo-${n}?w=400`,
+            },
+            user: {
+                name: `Photographer ${n}`,
+                links: { html: blocked ? 'https://unsplash.com/@silverkblack' : `https://unsplash.com/@p${n}` },
+            },
+        };
+    }
+
+    function photos(n: number, blocked = 0) {
+        return Array.from({ length: n }, (_, i) => photo(i, i < blocked));
+    }
+
+    function searchBody(n: number, totalPages: number, opts: { blocked?: number } = {}) {
+        return { total: totalPages * 30, total_pages: totalPages, results: photos(n, opts.blocked) };
+    }
+
+    type Reply = readonly [number, unknown, Record<string, string>?];
+
+    function respondSequence(...replies: Reply[]) {
+        const fn = vi.fn();
+        for (const [status, body, headers] of replies) {
+            fn.mockImplementationOnce(async () =>
+                new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', ...headers } }));
+        }
+        return fn as typeof fn & typeof fetch;
+    }
+
+    function respond(status: number, body: unknown, headers?: Record<string, string>) {
+        return respondSequence([status, body, headers]);
+    }
+
+    function requestedUrl(fetchFn: ReturnType<typeof vi.fn>, call = 0): URL {
+        return new URL(fetchFn.mock.calls[call][0] as string);
+    }
+
+    beforeEach(() => {
+        localStorage.clear();
+        umamiTrack = vi.fn();
+        (window as unknown as { umami: { track: typeof umamiTrack } }).umami = { track: umamiTrack };
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+        delete (window as unknown as { umami?: unknown }).umami;
+        vi.restoreAllMocks();
+    });
+
+    it('fetches page 1 when the page count is unknown, and caches the usable count', async () => {
+        const fetchFn = respond(200, searchBody(30, 334));
+
+        await fetchRandomPhotos(PROXY, 4, fetchFn, 'nature', 'landscape', CTX, { random: () => 0.5 });
+
+        expect(requestedUrl(fetchFn).searchParams.get('page')).toBe('1');
+        expect(getPageCount('search:nature|landscape')).toBe(166);
+    });
+
+    it('draws a random page within the cached count', async () => {
+        setPageCount('search:nature|landscape', 166);
+        const fetchFn = respond(200, searchBody(30, 334));
+
+        await fetchRandomPhotos(PROXY, 4, fetchFn, 'nature', 'landscape', CTX, { random: () => 0.5 });
+
+        expect(requestedUrl(fetchFn).searchParams.get('page')).toBe('84');
+    });
+
+    it('keeps a lowered count when a later page comes back full', async () => {
+        setPageCount('search:nature|landscape', 83);
+        const fetchFn = respond(200, searchBody(30, 334));
+
+        await fetchRandomPhotos(PROXY, 4, fetchFn, 'nature', 'landscape', CTX, { random: () => 0.5 });
+
+        expect(getPageCount('search:nature|landscape')).toBe(83);
+    });
+
+    it('returns count shuffled photos without blocked photographers', async () => {
+        const fetchFn = respond(200, searchBody(30, 2, { blocked: 1 }));
+
+        const result = await fetchRandomPhotos(PROXY, 4, fetchFn, 'q', 'landscape', CTX);
+
+        expect(result).toHaveLength(4);
+        expect((result as UnsplashImageResult[]).some((p) => isBlockedPhotographerUrl(p.photographerUrl))).toBe(false);
+    });
+
+    it('skips a malformed photo instead of failing the draw', async () => {
+        const fetchFn = respond(200, { total: 30, total_pages: 1, results: [{ id: 'odd' }, ...photos(29)] });
+
+        const result = await fetchRandomPhotos(PROXY, 4, fetchFn, 'q', 'landscape', CTX);
+
+        expect(result).toHaveLength(4);
+    });
+
+    it('still throws when no photo on the page parses', async () => {
+        const fetchFn = respond(200, { total: 2, total_pages: 1, results: [{ id: 'odd' }, { id: 'odder' }] });
+
+        await expect(fetchRandomPhotos(PROXY, 4, fetchFn, 'q', 'landscape', CTX)).rejects.toThrow(
+            'Invalid Unsplash API response',
+        );
+    });
+
+    it("returns 'blocked' when every photo on the page is by a blocked photographer", async () => {
+        const fetchFn = respond(200, searchBody(3, 2, { blocked: 3 }));
+
+        expect(await fetchRandomPhotos(PROXY, 1, fetchFn, 'q', 'landscape', CTX)).toBe('blocked');
+    });
+
+    it('uses a topic for no query', async () => {
+        const fetchFn = respond(200, photos(30), { 'x-total': '17898' });
+
+        await fetchRandomPhotos(PROXY, 4, fetchFn, undefined, 'portrait', CTX, { random: () => 0 });
+
+        expect(requestedUrl(fetchFn).pathname).toBe('/topics/nature/photos');
+        expect(getPageCount('topic:nature|portrait')).toBe(596);
+    });
+
+    it('lowers the count, retries once and reports an empty deep page', async () => {
+        setPageCount('search:q|landscape', 166);
+        const fetchFn = respondSequence([200, searchBody(0, 334)], [200, searchBody(30, 334)]);
+
+        const result = await fetchRandomPhotos(PROXY, 4, fetchFn, 'q', 'landscape', CTX, { random: () => 0.5 });
+
+        expect(getPageCount('search:q|landscape')).toBe(83);
+        expect(fetchFn).toHaveBeenCalledTimes(2);
+        expect(Number(requestedUrl(fetchFn, 1).searchParams.get('page'))).toBeLessThanOrEqual(83);
+        expect(result).toHaveLength(4);
+        expect(umamiTrack).toHaveBeenCalledWith('image-page-empty', {
+            caller: 'picker',
+            imageCategory: 'nature',
+            vibrant: false,
+            custom: false,
+            orientation: 'landscape',
+            sourceKind: 'search',
+            topic: '',
+            page: 84,
+            reportedPages: 334,
+            loweredTo: 83,
+            retry: 'ok',
+        });
+    });
+
+    it.each([
+        ['empty', [200, { total: 0, total_pages: 334, results: [] }]],
+        ['http-error', [403, { errors: ['Forbidden'] }]],
+    ] as const)("reports retry '%s' when the retry fails that way", async (retry, second) => {
+        setPageCount('search:q|landscape', 166);
+        const fetchFn = respondSequence([200, searchBody(0, 334)], second);
+
+        await fetchRandomPhotos(PROXY, 4, fetchFn, 'q', 'landscape', CTX, { random: () => 0.5 });
+
+        expect(umamiTrack).toHaveBeenCalledWith('image-page-empty', expect.objectContaining({ retry }));
+    });
+
+    it('sends only the named context fields with image-page-empty', async () => {
+        setPageCount('search:q|landscape', 166);
+        const fetchFn = respondSequence([200, searchBody(0, 334)], [200, searchBody(30, 334)]);
+        const context = { ...CTX, queryText: 'my secret search' } as typeof CTX;
+
+        await fetchRandomPhotos(PROXY, 4, fetchFn, 'q', 'landscape', context, { random: () => 0.5 });
+
+        const payload = umamiTrack.mock.calls.find(([name]) => name === 'image-page-empty')![1];
+        expect(payload).not.toHaveProperty('queryText');
+    });
+
+    it("reports retry 'threw' and rethrows when the retry fetch rejects", async () => {
+        setPageCount('search:q|landscape', 166);
+        const fetchFn = respondSequence([200, searchBody(0, 334)]);
+        fetchFn.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+
+        await expect(
+            fetchRandomPhotos(PROXY, 4, fetchFn, 'q', 'landscape', CTX, { random: () => 0.5 }),
+        ).rejects.toThrow('Failed to fetch');
+        expect(umamiTrack).toHaveBeenCalledWith('image-page-empty', expect.objectContaining({ retry: 'threw' }));
+    });
+
+    it('reports a topic draw with its slug', async () => {
+        setPageCount('topic:nature|landscape', 500);
+        const fetchFn = respondSequence(
+            [200, [], { 'x-total': '15000' }],
+            [200, photos(30), { 'x-total': '15000' }],
+        );
+
+        const draws = [0, 0.5];
+        await fetchRandomPhotos(PROXY, 4, fetchFn, undefined, 'landscape', CTX, {
+            random: () => draws.shift() ?? 0,
+        });
+
+        expect(umamiTrack).toHaveBeenCalledWith(
+            'image-page-empty',
+            expect.objectContaining({ sourceKind: 'topic', topic: 'nature', reportedPages: 500 }),
+        );
+    });
+
+    it('does not retry or report an empty first page', async () => {
+        const fetchFn = respond(200, searchBody(0, 0));
+
+        expect(await fetchRandomPhotos(PROXY, 4, fetchFn, 'zzqx', 'landscape', CTX)).toEqual([]);
+        expect(fetchFn).toHaveBeenCalledTimes(1);
+        expect(umamiTrack).not.toHaveBeenCalledWith('image-page-empty', expect.anything());
+    });
+
+    it('leaves the cache alone on an error status, tagged by caller', async () => {
+        setPageCount('search:q|landscape', 166);
+        const fetchFn = respond(403, { errors: ['Forbidden'] });
+
+        expect(
+            await fetchRandomPhotos(PROXY, 4, fetchFn, 'q', 'landscape', { ...CTX, caller: 'surprise' }),
+        ).toBeUndefined();
+        expect(getPageCount('search:q|landscape')).toBe(166);
+        expect(umamiTrack).toHaveBeenCalledWith('image-fetch-http-error', {
+            status: 403,
+            source: 'single',
+            sourceKind: 'search',
+            topic: '',
+        });
+    });
+
+    it('names the topic on an error status from a topic draw', async () => {
+        const fetchFn = respond(404, { errors: ['Not found'] });
+
+        await fetchRandomPhotos(PROXY, 4, fetchFn, undefined, 'portrait', CTX, { random: () => 0 });
+
+        expect(umamiTrack).toHaveBeenCalledWith('image-fetch-http-error', {
+            status: 404,
+            source: 'batch',
+            sourceKind: 'topic',
+            topic: 'nature',
+        });
+    });
+
+    it('passes the abort signal to every fetch, including the retry', async () => {
+        setPageCount('search:q|landscape', 166);
+        const fetchFn = respondSequence([200, searchBody(0, 334)], [200, searchBody(30, 334)]);
+        const controller = new AbortController();
+
+        await fetchRandomPhotos(PROXY, 1, fetchFn, 'q', 'landscape', CTX, {
+            random: () => 0.5,
+            signal: controller.signal,
+        });
+
+        expect(fetchFn).toHaveBeenCalledTimes(2);
+        for (const call of fetchFn.mock.calls) {
+            expect((call[1] as RequestInit).signal).toBe(controller.signal);
+        }
+    });
+
+    it('still loads photos when localStorage throws', async () => {
+        vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+            throw new Error('denied');
+        });
+        vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+            throw new Error('denied');
+        });
+        const fetchFn = respond(200, searchBody(30, 334));
+
+        const result = await fetchRandomPhotos(PROXY, 4, fetchFn, 'q', 'landscape', CTX);
+
+        expect(requestedUrl(fetchFn).searchParams.get('page')).toBe('1');
+        expect(result).toHaveLength(4);
     });
 });
