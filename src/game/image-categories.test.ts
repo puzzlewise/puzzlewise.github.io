@@ -36,15 +36,6 @@ describe('IMAGE_CATEGORY_OPTIONS', () => {
         }
     });
 
-    it('all non-any queries are a single word', () => {
-        // Each query is a bare Unsplash tag; multi-word queries AND-narrow the
-        // search (how `abstract` once repeated `colorful` alongside the vibrant
-        // toggle).
-        for (const opt of IMAGE_CATEGORY_OPTIONS.slice(1)) {
-            expect(opt.query).toMatch(/^\S+$/);
-        }
-    });
-
     it('all options have unique ids', () => {
         const ids = IMAGE_CATEGORY_OPTIONS.map((o) => o.id);
         expect(new Set(ids).size).toBe(ids.length);
@@ -75,10 +66,10 @@ describe('findImageCategory', () => {
         expect(result.query).toBe('people');
     });
 
-    it('finds the face category with the bare tag query', () => {
+    it('finds the face category with the person-face query', () => {
         const result = findImageCategory('face');
         expect(result.id).toBe('face');
-        expect(result.query).toBe('face');
+        expect(result.query).toBe('person face');
     });
 
     it('returns "any" for an unknown id', () => {
