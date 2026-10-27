@@ -13,7 +13,7 @@ import { rotationModeForNewGame } from '../game/cut-styles.js';
 import type { ComposableConfig } from '../puzzle/composable-generator.js';
 import type { FractalDialogConfig, WavyDialogConfig } from '../ui/index.js';
 import { showLoadingOverlay, hideLoadingOverlay, yieldForPaint } from '../ui/index.js';
-import { getImageProxyBaseUrl, triggerPhotoDownload, type CandidateImage } from '../images/index.js';
+import { getImageProxyBaseUrl, triggerPhotoDownload, type CandidateImage, type PageDraw } from '../images/index.js';
 import { preloadTracedTabGenerator } from '../puzzle/topology/traced-tab-loader.js';
 import { createNewGameAsync, GenerationCanceledError } from '../game/index.js';
 import { diagnostics } from '../diagnostics.js';
@@ -172,6 +172,7 @@ export async function startNewGame(
                 : null;
 
         let downloadLocation: string | undefined;
+        let pageDraw: PageDraw | undefined;
 
         if (imageSource !== 'blank' && pickedImage) {
             // The player picked a concrete candidate in the dialog — use it
@@ -180,6 +181,7 @@ export async function startNewGame(
             imageSize = pickedImage.imageSize;
             attribution = pickedImage.attribution;
             downloadLocation = pickedImage.downloadLocation;
+            pageDraw = pickedImage.pageDraw;
         } else if (proxyBaseUrl) {
             const resolved = await resolveUnsplashImage(proxyBaseUrl, imageCategory ?? 'any', vibrant, orientation, controller.signal, queryOverride);
             if (resolved) {
@@ -187,6 +189,7 @@ export async function startNewGame(
                 imageSize = resolved.imageSize;
                 attribution = resolved.attribution;
                 downloadLocation = resolved.downloadLocation;
+                pageDraw = resolved.pageDraw;
             }
         }
 
@@ -275,6 +278,7 @@ export async function startNewGame(
             imageCategory,
             vibrant,
             pickedImage,
+            pageDraw,
             chunkDegraded,
             bootFallback,
             generation,

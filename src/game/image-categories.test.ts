@@ -9,6 +9,7 @@ import {
     VIBRANT_PREFERENCE_KEY,
     buildImageQuery,
     resolveQueryOverride,
+    isCustomQuery,
     findImageCategory,
     loadImageCategoryPreference,
     loadVibrantPreference,
@@ -207,5 +208,14 @@ describe('buildImageQuery', () => {
         const result = buildImageQuery('nature landscape', true);
         expect(result).toMatch(/^nature landscape/);
         expect(result).toMatch(/vibrant/);
+    });
+});
+
+describe('isCustomQuery', () => {
+    it('is true exactly when the override replaces the category query', () => {
+        expect(isCustomQuery('red bicycles')).toBe(true);
+        expect(isCustomQuery('  ')).toBe(false);
+        expect(isCustomQuery('')).toBe(false);
+        expect(isCustomQuery(undefined)).toBe(false);
     });
 });

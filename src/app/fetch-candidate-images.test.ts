@@ -6,14 +6,14 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 vi.mock('../images/index.js', async (importOriginal) => ({
     ...(await importOriginal<typeof import('../images/index.js')>()),
-    fetchRandomImages: vi.fn(),
+    fetchRandomPhotos: vi.fn(),
 }));
 
 vi.mock('../images/offline-stash.js', () => ({
     stashCandidates: vi.fn(),
 }));
 
-import { fetchRandomImages } from '../images/index.js';
+import { fetchRandomPhotos } from '../images/index.js';
 import { stashCandidates } from '../images/offline-stash.js';
 import { fetchCandidateImages, CANDIDATE_IMAGE_COUNT } from './fetch-candidate-images.js';
 
@@ -35,7 +35,7 @@ describe('fetchCandidateImages', () => {
     let umamiTrack: ReturnType<typeof vi.fn>;
 
     beforeEach(() => {
-        vi.mocked(fetchRandomImages).mockReset();
+        vi.mocked(fetchRandomPhotos).mockReset();
         vi.mocked(stashCandidates).mockReset().mockResolvedValue([]);
         umamiTrack = vi.fn();
         (window as unknown as { umami: { track: typeof umamiTrack } }).umami = { track: umamiTrack };
@@ -46,7 +46,7 @@ describe('fetchCandidateImages', () => {
     });
 
     it('maps results into candidates with 1080-scaled display size', async () => {
-        vi.mocked(fetchRandomImages).mockResolvedValue([makeResult(1), makeResult(2)]);
+        vi.mocked(fetchRandomPhotos).mockResolvedValue([makeResult(1), makeResult(2)]);
 
         const candidates = await fetchCandidateImages('https://proxy.example', 'nature', false, 'landscape');
 
@@ -65,76 +65,94 @@ describe('fetchCandidateImages', () => {
         });
     });
 
+    it('keeps the page draw on each candidate', async () => {
+        vi.mocked(fetchRandomPhotos).mockResolvedValue([{ ...makeResult(1), pageDraw: { page: 12, knownPages: 166 } }]);
+
+        const candidates = await fetchCandidateImages('https://proxy.example', 'nature', false, 'landscape');
+
+        expect(candidates![0].pageDraw).toEqual({ page: 12, knownPages: 166 });
+    });
+
     it('passes the category query, count, and orientation through', async () => {
-        vi.mocked(fetchRandomImages).mockResolvedValue([makeResult(1)]);
+        vi.mocked(fetchRandomPhotos).mockResolvedValue([makeResult(1)]);
 
         await fetchCandidateImages('https://proxy.example', 'nature', true, 'portrait');
 
-        expect(fetchRandomImages).toHaveBeenCalledWith(
+        expect(fetchRandomPhotos).toHaveBeenCalledWith(
             'https://proxy.example',
             CANDIDATE_IMAGE_COUNT,
             fetch,
             'nature vibrant colorful',
             'portrait',
+            { caller: 'picker', imageCategory: 'nature', vibrant: true, custom: false },
         );
     });
 
     it('uses the query override in place of the category query', async () => {
-        vi.mocked(fetchRandomImages).mockResolvedValue([makeResult(1)]);
+        vi.mocked(fetchRandomPhotos).mockResolvedValue([makeResult(1)]);
 
         await fetchCandidateImages('https://proxy.example', 'nature', false, 'landscape', 'red bicycles');
 
-        expect(fetchRandomImages).toHaveBeenCalledWith(
+        expect(fetchRandomPhotos).toHaveBeenCalledWith(
             'https://proxy.example',
             CANDIDATE_IMAGE_COUNT,
             fetch,
             'red bicycles',
             'landscape',
+            { caller: 'picker', imageCategory: 'nature', vibrant: false, custom: true },
         );
     });
 
     it('appends the vibrant terms to the query override', async () => {
-        vi.mocked(fetchRandomImages).mockResolvedValue([makeResult(1)]);
+        vi.mocked(fetchRandomPhotos).mockResolvedValue([makeResult(1)]);
 
         await fetchCandidateImages('https://proxy.example', 'nature', true, 'portrait', 'red bicycles');
 
-        expect(fetchRandomImages).toHaveBeenCalledWith(
+        expect(fetchRandomPhotos).toHaveBeenCalledWith(
             'https://proxy.example',
             CANDIDATE_IMAGE_COUNT,
             fetch,
             'red bicycles vibrant colorful',
             'portrait',
+            { caller: 'picker', imageCategory: 'nature', vibrant: true, custom: true },
         );
     });
 
     it('falls back to the category query when the override is blank', async () => {
-        vi.mocked(fetchRandomImages).mockResolvedValue([makeResult(1)]);
+        vi.mocked(fetchRandomPhotos).mockResolvedValue([makeResult(1)]);
 
         await fetchCandidateImages('https://proxy.example', 'nature', false, 'landscape', '   ');
 
-        expect(fetchRandomImages).toHaveBeenCalledWith(
+        expect(fetchRandomPhotos).toHaveBeenCalledWith(
             'https://proxy.example',
             CANDIDATE_IMAGE_COUNT,
             fetch,
             'nature',
             'landscape',
+            { caller: 'picker', imageCategory: 'nature', vibrant: false, custom: false },
         );
     });
 
     it('returns null when the fetch yields nothing', async () => {
-        vi.mocked(fetchRandomImages).mockResolvedValue(undefined);
+        vi.mocked(fetchRandomPhotos).mockResolvedValue(undefined);
 
         expect(await fetchCandidateImages('https://proxy.example', 'any', false, 'landscape')).toBeNull();
     });
 
     it('returns null when the fetch returns an empty array', async () => {
-        vi.mocked(fetchRandomImages).mockResolvedValue([]);
+        vi.mocked(fetchRandomPhotos).mockResolvedValue([]);
+
+        expect(await fetchCandidateImages('https://proxy.example', 'any', false, 'landscape')).toBeNull();
+    });
+
+    it("returns null when the page's photos were all blocked", async () => {
+        vi.mocked(fetchRandomPhotos).mockResolvedValue('blocked');
 
         expect(await fetchCandidateImages('https://proxy.example', 'any', false, 'landscape')).toBeNull();
     });
 
     it('returns null and warns when the fetch throws', async () => {
-        vi.mocked(fetchRandomImages).mockRejectedValue(new Error('network down'));
+        vi.mocked(fetchRandomPhotos).mockRejectedValue(new Error('network down'));
 
         const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
         expect(await fetchCandidateImages('https://proxy.example', 'any', false, 'landscape')).toBeNull();
@@ -156,7 +174,7 @@ describe('fetchCandidateImages', () => {
     };
 
     it('serves stash candidates when the fetch throws', async () => {
-        vi.mocked(fetchRandomImages).mockRejectedValue(new Error('network down'));
+        vi.mocked(fetchRandomPhotos).mockRejectedValue(new Error('network down'));
         vi.mocked(stashCandidates).mockResolvedValue([stashEntry]);
         vi.spyOn(console, 'warn').mockImplementation(() => {});
 
@@ -174,7 +192,7 @@ describe('fetchCandidateImages', () => {
     });
 
     it('serves stash candidates when the fetch yields nothing', async () => {
-        vi.mocked(fetchRandomImages).mockResolvedValue(undefined);
+        vi.mocked(fetchRandomPhotos).mockResolvedValue(undefined);
         vi.mocked(stashCandidates).mockResolvedValue([stashEntry]);
 
         expect(await fetchCandidateImages('https://proxy.example', 'any', false, 'landscape'))
@@ -182,7 +200,7 @@ describe('fetchCandidateImages', () => {
     });
 
     it('reports a stash miss when the fetch fails and the stash is empty', async () => {
-        vi.mocked(fetchRandomImages).mockResolvedValue(undefined);
+        vi.mocked(fetchRandomPhotos).mockResolvedValue(undefined);
 
         expect(await fetchCandidateImages('https://proxy.example', 'any', false, 'portrait')).toBeNull();
         expect(umamiTrack).toHaveBeenCalledWith('image-stash-fallback', {
@@ -195,7 +213,7 @@ describe('fetchCandidateImages', () => {
     });
 
     it('does not consult the stash when the fetch succeeds', async () => {
-        vi.mocked(fetchRandomImages).mockResolvedValue([makeResult(1)]);
+        vi.mocked(fetchRandomPhotos).mockResolvedValue([makeResult(1)]);
 
         await fetchCandidateImages('https://proxy.example', 'any', false, 'landscape');
 

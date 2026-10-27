@@ -26,7 +26,7 @@ vi.mock('../puzzle/topology/traced-tab-loader.js', async (importOriginal) => {
     return { ...actual, preloadTracedTabGenerator: vi.fn(async () => {}) };
 });
 // `resolveUnsplashImage` isn't exercised here, so it's stubbed — left real it
-// would reach `fetchRandomImage` behind the `../images/index.js` mock, which
+// would reach `fetchRandomPhotos` behind the `../images/index.js` mock, which
 // doesn't export it. Stubbing also gives the "no second API call" test
 // something to assert on.
 vi.mock('./resolve-image.js', () => ({ resolveUnsplashImage: vi.fn() }));
@@ -356,6 +356,37 @@ describe('startNewGame', () => {
             picked.downloadLocation,
             'https://proxy.example',
         );
+    });
+
+    it("reports a picked photo's page draw on new-game-started", async () => {
+        vi.mocked(getImageProxyBaseUrl).mockReturnValue('https://proxy.example');
+        const picked = { ...makeCandidateImage(), pageDraw: { page: 9, knownPages: 166 } };
+
+        await startNewGame(
+            { cols: 2, rows: 2 },
+            noTracedTabsOptions({ imageSource: undefined, pickedImage: picked }),
+            deps,
+        );
+
+        expect(umamiTrack).toHaveBeenCalledWith('new-game-started', expect.objectContaining({
+            imagePage: 9,
+            imagePagesKnown: 166,
+        }));
+    });
+
+    it("reports a Surprise me photo's page draw on new-game-started", async () => {
+        vi.mocked(getImageProxyBaseUrl).mockReturnValue('https://proxy.example');
+        vi.mocked(resolveUnsplashImage).mockResolvedValue({
+            ...makeCandidateImage(),
+            pageDraw: { page: 3, knownPages: 0 },
+        });
+
+        await startNewGame({ cols: 2, rows: 2 }, noTracedTabsOptions({ imageSource: undefined }), deps);
+
+        expect(umamiTrack).toHaveBeenCalledWith('new-game-started', expect.objectContaining({
+            imagePage: 3,
+            imagePagesKnown: 0,
+        }));
     });
 
     // Pins ordering step 2 (first half): the chunk preload starts

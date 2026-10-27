@@ -210,6 +210,19 @@ export interface NewGameData {
      * adoption. Absent for shared games and non-photo sources.
      */
     imagePicked?: boolean;
+    /**
+     * Fresh unsplash games whose photo came from a page draw (picker or
+     * Surprise me), not from the backup pool, the offline stash or a share
+     * link: the result page the photo came from. With `imagePagesKnown` it
+     * shows whether players actually reach past page 1. Absent otherwise,
+     * so a pool fallback is an unsplash row without it.
+     */
+    imagePage?: number;
+    /**
+     * The cached usable page count before that draw; 0 when none was known,
+     * which forces page 1. Present exactly when `imagePage` is.
+     */
+    imagePagesKnown?: number;
     includesProgress?: boolean;
     recipientHadSavedState?: boolean;
     /**
@@ -630,7 +643,7 @@ export interface SharedLoadFailedData {
 /**
  * Data attached to `image-fetch-failed` — fetching a random Unsplash image
  * threw (network/parse failure). This is NOT the "no image found" case:
- * `fetchRandomImage` returns `undefined` on a 4xx/5xx response, which is
+ * `fetchRandomPhotos` resolves `undefined` on a 4xx/5xx response, which is
  * `image-fetch-http-error`'s case ({@link ImageFetchHttpErrorData}), so this
  * event only fires on a genuine throw. The new game still proceeds with the
  * fallback image. `reason` is the sanitized error message.
@@ -652,7 +665,7 @@ export interface ImageFetchFailedData {
 
 /**
  * Data attached to `image-fetch-http-error` — the image proxy answered a
- * random-photo request with an error status (#533). `status = 403` is
+ * photo request with an error status (#533). `status = 403` is
  * Unsplash's rate limit: a 50-requests/hour demo-tier budget shared by
  * every player, so one hot hour blanks the picker for everyone. Keep the
  * fields mandatory — rows that all carry the keys never need the
@@ -671,13 +684,16 @@ export interface ImageFetchHttpErrorData {
 }
 
 /**
- * Data attached to `image-pool-fallback` — a single random-photo request
+ * Data attached to `image-pool-fallback` — a single photo request
  * produced no usable photo and the app served a backup-pool image instead of
  * calling Unsplash. `cause` says why: `'http-error'` is a proxy refusal (the
  * `image-fetch-http-error` tier, `source:'single'`: the network is up but the
  * API said no — those rows correlate with an http-error event); `'blocked'`
- * means both draws landed on a blocked photographer (#568) with every
- * response ok, so no http-error row accompanies it. Batch/picker errors
+ * means the fetched page had photos but every one was by a blocked
+ * photographer (#568), with every response ok, so no http-error row
+ * accompanies it; `'empty'` means the fetched page held no photos, even after
+ * the one retry — an `image-page-empty` row with `caller: 'surprise'`
+ * accompanies it unless the empty page was page 1. Batch/picker errors
  * never fall back. `hit` is false when the matching bucket was empty and the
  * app dropped to the single offline image; those rows isolate a category
  * whose pool needs refilling.
@@ -691,7 +707,7 @@ export interface ImagePoolFallbackData {
      * Absent on rows predating the blocklist, so split by key presence, not
      * subtraction (same arithmetic {@link SharedLoadFailedData} documents).
      */
-    cause: 'http-error' | 'blocked';
+    cause: 'http-error' | 'blocked' | 'empty';
 }
 
 /**
