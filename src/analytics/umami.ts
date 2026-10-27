@@ -688,6 +688,19 @@ export interface ImagePoolFallbackData {
 }
 
 /**
+ * Data attached to `image-page-counts-unsaved` — writing the photo-source page
+ * counts to localStorage failed, at most once per page load. The app keeps the
+ * counts in memory for the rest of that load, so only the first draw per
+ * source falls back to page 1; on the next load the first draw does again.
+ * `errorName` is the thrown error's `name` (`'QuotaExceededError'` for full
+ * storage, often alongside `save-compressed`/`save-failed` rows) or
+ * `'unknown'`.
+ */
+export interface ImagePageCountsUnsavedData {
+    errorName: string;
+}
+
+/**
  * Data attached to `image-stash-fallback` — every network image source had
  * failed and the app consulted the player's offline stash. `cause` says which
  * path led here: `'fetch-failed'` is a thrown fetch (the offline case) — the
@@ -1644,6 +1657,7 @@ export function track(name: 'share-link-rescue-attempted', data: ShareLinkRescue
 export function track(name: 'share-link-rescue-result', data: ShareLinkRescueResultData): void;
 export function track(name: 'generation-canceled', data: GenerationCanceledData): void;
 export function track(name: 'image-pool-fallback', data: ImagePoolFallbackData): void;
+export function track(name: 'image-page-counts-unsaved', data: ImagePageCountsUnsavedData): void;
 export function track(name: 'image-stash-fallback', data: ImageStashFallbackData): void;
 export function track(name: 'offline-images-saved', data: OfflineImagesSavedData): void;
 export function track(name: 'move-dialog-shown', data: MoveDialogShownData): void;

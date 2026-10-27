@@ -322,6 +322,15 @@ describe('track', () => {
         });
     });
 
+    it('forwards image-page-counts-unsaved with the typed payload', () => {
+        const umamiTrack = vi.fn();
+        (window as unknown as { umami: { track: typeof umamiTrack } }).umami = { track: umamiTrack };
+
+        track('image-page-counts-unsaved', { errorName: 'QuotaExceededError' });
+
+        expect(umamiTrack).toHaveBeenCalledWith('image-page-counts-unsaved', { errorName: 'QuotaExceededError' });
+    });
+
     it('forwards new-game-failed with the typed payload', () => {
         const umamiTrack = vi.fn();
         (window as unknown as { umami: { track: typeof umamiTrack } }).umami = { track: umamiTrack };
