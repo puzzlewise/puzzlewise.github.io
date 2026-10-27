@@ -1,9 +1,9 @@
 import { diagnostics } from '../diagnostics.js';
 import { track, sanitizeErrorReason } from '../analytics/index.js';
-import { fetchRandomImage, toDisplayImage, type DisplayImage } from '../images/index.js';
+import { fetchRandomPhotos, toDisplayImage, type DisplayImage } from '../images/index.js';
 import { pickStashImage } from '../images/offline-stash.js';
 import { GenerationCanceledError } from '../game/index.js';
-import { findImageCategory, buildImageQuery, resolveQueryOverride } from '../game/image-categories.js';
+import { findImageCategory, buildImageQuery, resolveQueryOverride, isCustomQuery } from '../game/image-categories.js';
 import type { Orientation } from '../model/types.js';
 
 export type ResolvedImage = DisplayImage;
@@ -36,9 +36,17 @@ export async function resolveUnsplashImage(
     try {
         const category = findImageCategory(imageCategory);
         const query = buildImageQuery(resolveQueryOverride(category.query, queryOverride), vibrant);
-        const result = await fetchRandomImage(proxyBaseUrl, fetch, query, orientation, signal);
+        const result = await fetchRandomPhotos(
+            proxyBaseUrl,
+            1,
+            fetch,
+            query,
+            orientation,
+            { caller: 'surprise', imageCategory, vibrant, custom: isCustomQuery(queryOverride) },
+            { signal },
+        );
 
-        if (!result || result === 'blocked') {
+        if (!result || result === 'blocked' || result.length === 0) {
             const { resolveFromPool } = await import('../images/backup-pool.js');
             const poolImage = resolveFromPool(category.id, vibrant, orientation);
             track('image-pool-fallback', {
@@ -46,13 +54,17 @@ export async function resolveUnsplashImage(
                 orientation,
                 vibrant,
                 hit: poolImage !== null,
-                cause: result === 'blocked' ? 'blocked' : 'http-error',
+                cause: result === undefined ? 'http-error' : result === 'blocked' ? 'blocked' : 'empty',
             });
             if (poolImage) return poolImage;
             return await resolveFromStash('pool-miss', imageCategory, vibrant, orientation);
         }
 
-        return toDisplayImage(result);
+        const image = toDisplayImage(result[0]);
+        if (result[0].pageDraw !== undefined) {
+            image.pageDraw = result[0].pageDraw;
+        }
+        return image;
     } catch (error) {
         // A canceled start aborts the fetch; surface it as the same cancellation
         // the generation phase throws so `startNewGame` tears the overlay down,

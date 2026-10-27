@@ -35,6 +35,7 @@ describe('downloadOfflineImagesForCategory', () => {
         expect(saved).toBe(5);
         expect(vi.mocked(downloadOfflineImages)).toHaveBeenCalledWith({
             proxyBaseUrl: 'https://proxy.example',
+            context: { caller: 'stash', imageCategory: 'nature', vibrant: true, custom: false },
             query: 'nature vibrant colorful',
             orientation: 'portrait',
             onProgress,
@@ -50,6 +51,7 @@ describe('downloadOfflineImagesForCategory', () => {
 
         expect(vi.mocked(downloadOfflineImages)).toHaveBeenCalledWith({
             proxyBaseUrl: 'https://proxy.example',
+            context: { caller: 'stash', imageCategory: 'nature', vibrant: true, custom: true },
             query: 'red bicycles vibrant colorful',
             orientation: 'portrait',
             onProgress,

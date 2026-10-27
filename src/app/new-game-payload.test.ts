@@ -74,6 +74,22 @@ describe('buildFreshGameData', () => {
         expect(data.imagePicked).toBe(false);
     });
 
+    it('reports the page an Unsplash photo was drawn from', () => {
+        const unsplash = makeGameState({ imageUrl: 'https://images.unsplash.com/photo-1' });
+        const data = buildFreshGameData(freshOpts({
+            state: unsplash, pageDraw: { page: 84, knownPages: 166 },
+        }));
+        expect(data.imagePage).toBe(84);
+        expect(data.imagePagesKnown).toBe(166);
+    });
+
+    it('omits the page fields when the photo came from no page draw', () => {
+        const unsplash = makeGameState({ imageUrl: 'https://images.unsplash.com/photo-1' });
+        const data = buildFreshGameData(freshOpts({ state: unsplash }));
+        expect('imagePage' in data).toBe(false);
+        expect('imagePagesKnown' in data).toBe(false);
+    });
+
     it('reports imagePicked when the player chose a candidate', () => {
         const unsplash = makeGameState({ imageUrl: 'https://images.unsplash.com/photo-1' });
         const data = buildFreshGameData(freshOpts({

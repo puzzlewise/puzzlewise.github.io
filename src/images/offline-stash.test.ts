@@ -15,6 +15,7 @@ import {
 } from './offline-stash.js';
 import { OFFLINE_STASH_CACHE } from './offline-stash-cache.js';
 
+const CTX = { caller: 'stash', imageCategory: 'nature', vibrant: false, custom: false } as const;
 const PROXY = 'https://proxy.example.com';
 
 function makePhoto(n: number) {
@@ -85,7 +86,7 @@ function makeFakeCaches(): FakeCacheStore {
 }
 
 /**
- * Routes the three URL families the download flow hits: the proxy batch
+ * Routes the three URL families the download flow hits: the proxy page
  * request, the CDN blob fetches, and the download pings.
  */
 function makeDownloadFetch(photos: unknown[], failUrls: string[] = []) {
@@ -93,8 +94,19 @@ function makeDownloadFetch(photos: unknown[], failUrls: string[] = []) {
         if (failUrls.includes(url)) {
             return { ok: false, status: 500 };
         }
-        if (url.startsWith(`${PROXY}/random`)) {
-            return { ok: true, json: async () => photos };
+        if (url.startsWith(`${PROXY}/search`)) {
+            return {
+                ok: true,
+                headers: new Headers(),
+                json: async () => ({ total: photos.length, total_pages: 1, results: photos }),
+            };
+        }
+        if (url.startsWith(`${PROXY}/topics/`)) {
+            return {
+                ok: true,
+                headers: new Headers({ 'x-total': String(photos.length) }),
+                json: async () => photos,
+            };
         }
         return { ok: true };
     }) as unknown as typeof fetch & ReturnType<typeof vi.fn>;
@@ -112,6 +124,7 @@ describe('downloadOfflineImages', () => {
 
         const { saved } = await downloadOfflineImages({
             proxyBaseUrl: PROXY,
+            context: CTX,
             query: 'nature',
             orientation: 'landscape',
             fetchFn,
@@ -121,14 +134,15 @@ describe('downloadOfflineImages', () => {
         expect(saved).toBe(2);
         const stash = loadStash();
         expect(stash).toHaveLength(2);
-        expect(stash[0]).toEqual(makeStashedImage(1));
+        expect(stash).toEqual(expect.arrayContaining([makeStashedImage(1), makeStashedImage(2)]));
     });
 
-    it('requests one batch of OFFLINE_STASH_COUNT photos through the proxy', async () => {
-        const fetchFn = makeDownloadFetch([makePhoto(1)]);
+    it('requests one page of search results through the proxy and keeps OFFLINE_STASH_COUNT', async () => {
+        const fetchFn = makeDownloadFetch(Array.from({ length: 30 }, (_, i) => makePhoto(i + 1)));
 
         await downloadOfflineImages({
             proxyBaseUrl: PROXY,
+            context: CTX,
             query: 'nature',
             orientation: 'portrait',
             fetchFn,
@@ -136,10 +150,10 @@ describe('downloadOfflineImages', () => {
         });
 
         const batchUrl = String(fetchFn.mock.calls[0][0]);
-        expect(batchUrl).toContain(`${PROXY}/random?`);
+        expect(batchUrl).toContain(`${PROXY}/search?`);
         expect(batchUrl).toContain('query=nature');
         expect(batchUrl).toContain('orientation=portrait');
-        expect(batchUrl).toContain(`count=${OFFLINE_STASH_COUNT}`);
+        expect(loadStash()).toHaveLength(OFFLINE_STASH_COUNT);
     });
 
     it('caches the full image and the thumbnail under their URLs', async () => {
@@ -148,6 +162,7 @@ describe('downloadOfflineImages', () => {
 
         await downloadOfflineImages({
             proxyBaseUrl: PROXY,
+            context: CTX,
             query: undefined,
             orientation: 'landscape',
             fetchFn: makeDownloadFetch([photo]),
@@ -164,6 +179,7 @@ describe('downloadOfflineImages', () => {
 
         await downloadOfflineImages({
             proxyBaseUrl: PROXY,
+            context: CTX,
             query: undefined,
             orientation: 'landscape',
             fetchFn,
@@ -174,9 +190,10 @@ describe('downloadOfflineImages', () => {
             .map((call) => String(call[0]))
             .filter((url) => url.startsWith(`${PROXY}/download`));
         expect(downloadPings).toHaveLength(2);
-        expect(downloadPings[0]).toContain(
-            encodeURIComponent('https://api.unsplash.com/photos/p1/download'),
-        );
+        expect(downloadPings).toEqual(expect.arrayContaining([
+            expect.stringContaining(encodeURIComponent('https://api.unsplash.com/photos/p1/download')),
+            expect.stringContaining(encodeURIComponent('https://api.unsplash.com/photos/p2/download')),
+        ]));
     });
 
     it('reports progress after each photo', async () => {
@@ -184,6 +201,7 @@ describe('downloadOfflineImages', () => {
 
         await downloadOfflineImages({
             proxyBaseUrl: PROXY,
+            context: CTX,
             query: undefined,
             orientation: 'landscape',
             onProgress,
@@ -200,6 +218,7 @@ describe('downloadOfflineImages', () => {
 
         const { saved } = await downloadOfflineImages({
             proxyBaseUrl: PROXY,
+            context: CTX,
             query: undefined,
             orientation: 'landscape',
             fetchFn,
@@ -218,6 +237,7 @@ describe('downloadOfflineImages', () => {
 
         const { saved } = await downloadOfflineImages({
             proxyBaseUrl: PROXY,
+            context: CTX,
             query: undefined,
             orientation: 'landscape',
             fetchFn,
@@ -233,6 +253,7 @@ describe('downloadOfflineImages', () => {
 
         const { saved } = await downloadOfflineImages({
             proxyBaseUrl: PROXY,
+            context: CTX,
             query: undefined,
             orientation: 'landscape',
             fetchFn: makeDownloadFetch(photos, [photos[0].urls.regular]),
@@ -248,6 +269,7 @@ describe('downloadOfflineImages', () => {
 
         const { saved } = await downloadOfflineImages({
             proxyBaseUrl: PROXY,
+            context: CTX,
             query: undefined,
             orientation: 'landscape',
             fetchFn: makeDownloadFetch([photo], [photo.urls.small]),
@@ -269,6 +291,7 @@ describe('downloadOfflineImages', () => {
 
         await downloadOfflineImages({
             proxyBaseUrl: PROXY,
+            context: CTX,
             query: undefined,
             orientation: 'landscape',
             fetchFn: makeDownloadFetch([makePhoto(1)]),
@@ -286,24 +309,24 @@ describe('downloadOfflineImages', () => {
             throw new Error('offline');
         }) as unknown as typeof fetch;
         await expect(downloadOfflineImages({
-            proxyBaseUrl: PROXY, query: undefined, orientation: 'landscape',
+            proxyBaseUrl: PROXY, context: CTX, query: undefined, orientation: 'landscape',
             fetchFn: threw, cacheStorage: makeFakeCaches().caches,
         })).resolves.toEqual({ saved: 0, reason: 'batch-threw' });
 
         await expect(downloadOfflineImages({
-            proxyBaseUrl: PROXY, query: undefined, orientation: 'landscape',
+            proxyBaseUrl: PROXY, context: CTX, query: undefined, orientation: 'landscape',
             fetchFn: makeDownloadFetch([makePhoto(1)]), cacheStorage: undefined,
         })).resolves.toEqual({ saved: 0, reason: 'cache-unavailable' });
 
         const empty = makeDownloadFetch([]);
         await expect(downloadOfflineImages({
-            proxyBaseUrl: PROXY, query: undefined, orientation: 'landscape',
+            proxyBaseUrl: PROXY, context: CTX, query: undefined, orientation: 'landscape',
             fetchFn: empty, cacheStorage: makeFakeCaches().caches,
         })).resolves.toEqual({ saved: 0, reason: 'batch-empty' });
 
         const photo = makePhoto(2);
         await expect(downloadOfflineImages({
-            proxyBaseUrl: PROXY, query: undefined, orientation: 'landscape',
+            proxyBaseUrl: PROXY, context: CTX, query: undefined, orientation: 'landscape',
             fetchFn: makeDownloadFetch([photo], [photo.urls.regular]),
             cacheStorage: makeFakeCaches().caches,
         })).resolves.toEqual({ saved: 0, reason: 'no-photos' });
@@ -316,7 +339,7 @@ describe('downloadOfflineImages', () => {
         vi.spyOn(console, 'warn').mockImplementation(() => {});
 
         await expect(downloadOfflineImages({
-            proxyBaseUrl: PROXY, query: undefined, orientation: 'landscape',
+            proxyBaseUrl: PROXY, context: CTX, query: undefined, orientation: 'landscape',
             fetchFn: makeDownloadFetch([makePhoto(1)]), cacheStorage: makeFakeCaches().caches,
         })).resolves.toEqual({ saved: 0, reason: 'write-failed' });
 
@@ -337,7 +360,7 @@ describe('downloadOfflineImages', () => {
 
         const photo = makePhoto(1);
         await expect(downloadOfflineImages({
-            proxyBaseUrl: PROXY, query: undefined, orientation: 'landscape',
+            proxyBaseUrl: PROXY, context: CTX, query: undefined, orientation: 'landscape',
             fetchFn: makeDownloadFetch([photo]), cacheStorage: caches,
         })).resolves.toEqual({ saved: 0, reason: 'write-failed' });
 
@@ -362,7 +385,7 @@ describe('downloadOfflineImages', () => {
         vi.spyOn(console, 'warn').mockImplementation(() => {});
 
         await expect(downloadOfflineImages({
-            proxyBaseUrl: PROXY, query: undefined, orientation: 'landscape',
+            proxyBaseUrl: PROXY, context: CTX, query: undefined, orientation: 'landscape',
             fetchFn: makeDownloadFetch([makePhoto(1)]), cacheStorage: caches,
         })).resolves.toEqual({ saved: 1, reason: 'saved' });
         expect(loadStash()).toHaveLength(1);
@@ -375,6 +398,7 @@ describe('downloadOfflineImages', () => {
 
         const { saved } = await downloadOfflineImages({
             proxyBaseUrl: PROXY,
+            context: CTX,
             query: undefined,
             orientation: 'landscape',
             fetchFn: makeDownloadFetch([makePhoto(1), makePhoto(1)]),
@@ -391,6 +415,7 @@ describe('downloadOfflineImages', () => {
 
         const { saved } = await downloadOfflineImages({
             proxyBaseUrl: PROXY,
+            context: CTX,
             query: undefined,
             orientation: 'landscape',
             fetchFn: makeDownloadFetch([makePhoto(1)]),

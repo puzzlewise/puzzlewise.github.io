@@ -6,7 +6,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 vi.mock('../images/index.js', async (importOriginal) => ({
     ...(await importOriginal<typeof import('../images/index.js')>()),
-    fetchRandomImage: vi.fn(),
+    fetchRandomPhotos: vi.fn(),
 }));
 
 vi.mock('../images/backup-pool.js', () => ({
@@ -17,7 +17,7 @@ vi.mock('../images/offline-stash.js', () => ({
     pickStashImage: vi.fn(),
 }));
 
-import { fetchRandomImage } from '../images/index.js';
+import { fetchRandomPhotos } from '../images/index.js';
 import { resolveFromPool } from '../images/backup-pool.js';
 import { pickStashImage } from '../images/offline-stash.js';
 import { GenerationCanceledError } from '../game/index.js';
@@ -41,7 +41,7 @@ describe('resolveUnsplashImage', () => {
     });
 
     it('maps a fetched photo into a ResolvedImage and reports nothing', async () => {
-        vi.mocked(fetchRandomImage).mockResolvedValue({
+        vi.mocked(fetchRandomPhotos).mockResolvedValue([{
             imageUrl: 'https://images.example/photo',
             width: 2000,
             height: 1000,
@@ -50,7 +50,7 @@ describe('resolveUnsplashImage', () => {
             photoUrl: 'https://p.example/1',
             thumbUrl: 'https://images.unsplash.com/photo-abc?w=400',
             downloadLocation: 'https://api.unsplash.com/photos/abc123/download?ixid=xyz',
-        });
+        }]);
 
         const resolved = await resolveUnsplashImage('https://proxy.example', 'any', false, 'landscape');
 
@@ -70,8 +70,8 @@ describe('resolveUnsplashImage', () => {
         expect(umamiTrack).not.toHaveBeenCalled();
     });
 
-    it('uses the query override in place of the category query', async () => {
-        vi.mocked(fetchRandomImage).mockResolvedValue({
+    it('keeps the page draw on the resolved image', async () => {
+        vi.mocked(fetchRandomPhotos).mockResolvedValue([{
             imageUrl: 'https://images.example/photo',
             width: 2000,
             height: 1000,
@@ -80,17 +80,37 @@ describe('resolveUnsplashImage', () => {
             photoUrl: 'https://p.example/1',
             thumbUrl: 'https://images.unsplash.com/photo-abc?w=400',
             downloadLocation: 'https://api.unsplash.com/photos/abc123/download',
-        });
+            pageDraw: { page: 7, knownPages: 0 },
+        }]);
+
+        const resolved = await resolveUnsplashImage('https://proxy.example', 'nature', false, 'landscape');
+
+        expect(resolved!.pageDraw).toEqual({ page: 7, knownPages: 0 });
+    });
+
+    it('uses the query override in place of the category query', async () => {
+        vi.mocked(fetchRandomPhotos).mockResolvedValue([{
+            imageUrl: 'https://images.example/photo',
+            width: 2000,
+            height: 1000,
+            photographerName: 'Ada',
+            photographerUrl: 'https://u.example/ada',
+            photoUrl: 'https://p.example/1',
+            thumbUrl: 'https://images.unsplash.com/photo-abc?w=400',
+            downloadLocation: 'https://api.unsplash.com/photos/abc123/download',
+        }]);
 
         await resolveUnsplashImage('https://proxy.example', 'nature', false, 'landscape', undefined, 'red bicycles');
 
-        expect(fetchRandomImage).toHaveBeenCalledWith(
-            'https://proxy.example', fetch, 'red bicycles', 'landscape', undefined,
+        expect(fetchRandomPhotos).toHaveBeenCalledWith(
+            'https://proxy.example', 1, fetch, 'red bicycles', 'landscape',
+            { caller: 'surprise', imageCategory: 'nature', vibrant: false, custom: true },
+            { signal: undefined },
         );
     });
 
     it('appends the vibrant terms to the query override', async () => {
-        vi.mocked(fetchRandomImage).mockResolvedValue({
+        vi.mocked(fetchRandomPhotos).mockResolvedValue([{
             imageUrl: 'https://images.example/photo',
             width: 2000,
             height: 1000,
@@ -99,17 +119,19 @@ describe('resolveUnsplashImage', () => {
             photoUrl: 'https://p.example/1',
             thumbUrl: 'https://images.unsplash.com/photo-abc?w=400',
             downloadLocation: 'https://api.unsplash.com/photos/abc123/download',
-        });
+        }]);
 
         await resolveUnsplashImage('https://proxy.example', 'nature', true, 'portrait', undefined, 'red bicycles');
 
-        expect(fetchRandomImage).toHaveBeenCalledWith(
-            'https://proxy.example', fetch, 'red bicycles vibrant colorful', 'portrait', undefined,
+        expect(fetchRandomPhotos).toHaveBeenCalledWith(
+            'https://proxy.example', 1, fetch, 'red bicycles vibrant colorful', 'portrait',
+            { caller: 'surprise', imageCategory: 'nature', vibrant: true, custom: true },
+            { signal: undefined },
         );
     });
 
     it('keys the pool fallback on the selected category, not the override', async () => {
-        vi.mocked(fetchRandomImage).mockResolvedValue(undefined);
+        vi.mocked(fetchRandomPhotos).mockResolvedValue(undefined);
 
         await resolveUnsplashImage('https://proxy.example', 'nature', false, 'landscape', undefined, 'red bicycles');
 
@@ -117,7 +139,7 @@ describe('resolveUnsplashImage', () => {
     });
 
     it('serves a pool image and reports a hit when the proxy refuses (HTTP error)', async () => {
-        vi.mocked(fetchRandomImage).mockResolvedValue(undefined);
+        vi.mocked(fetchRandomPhotos).mockResolvedValue(undefined);
         const poolImage = {
             imageUrl: 'https://images.unsplash.com/photo-pool',
             imageSize: { width: 1080, height: 720 },
@@ -143,8 +165,8 @@ describe('resolveUnsplashImage', () => {
         });
     });
 
-    it("reports cause 'blocked' when both draws hit a blocked photographer", async () => {
-        vi.mocked(fetchRandomImage).mockResolvedValue('blocked');
+    it("reports cause 'blocked' when the page's photos were all by blocked photographers", async () => {
+        vi.mocked(fetchRandomPhotos).mockResolvedValue('blocked');
         vi.mocked(resolveFromPool).mockReturnValue(null);
 
         const resolved = await resolveUnsplashImage('https://proxy.example', 'face', false, 'landscape');
@@ -159,8 +181,23 @@ describe('resolveUnsplashImage', () => {
         });
     });
 
+    it("reports cause 'empty' when the page held no photos", async () => {
+        vi.mocked(fetchRandomPhotos).mockResolvedValue([]);
+
+        const resolved = await resolveUnsplashImage('https://proxy.example', 'face', false, 'landscape');
+
+        expect(resolved).toBeNull();
+        expect(umamiTrack).toHaveBeenCalledWith('image-pool-fallback', {
+            imageCategory: 'face',
+            orientation: 'landscape',
+            vibrant: false,
+            hit: false,
+            cause: 'empty',
+        });
+    });
+
     it('returns null and reports a miss when the matching bucket is empty', async () => {
-        vi.mocked(fetchRandomImage).mockResolvedValue(undefined);
+        vi.mocked(fetchRandomPhotos).mockResolvedValue(undefined);
         vi.mocked(resolveFromPool).mockReturnValue(null);
 
         const resolved = await resolveUnsplashImage('https://proxy.example', 'astronomy', false, 'portrait');
@@ -176,7 +213,7 @@ describe('resolveUnsplashImage', () => {
     });
 
     it('reports image-fetch-failed and returns null when the fetch throws', async () => {
-        vi.mocked(fetchRandomImage).mockRejectedValue(new Error('network down'));
+        vi.mocked(fetchRandomPhotos).mockRejectedValue(new Error('network down'));
 
         const resolved = await resolveUnsplashImage('https://proxy.example', 'any', false, 'landscape');
 
@@ -188,8 +225,8 @@ describe('resolveUnsplashImage', () => {
         });
     });
 
-    it('forwards orientation to fetchRandomImage and scales a portrait photo', async () => {
-        vi.mocked(fetchRandomImage).mockResolvedValue({
+    it('forwards orientation to fetchRandomPhotos and scales a portrait photo', async () => {
+        vi.mocked(fetchRandomPhotos).mockResolvedValue([{
             imageUrl: 'https://images.example/portrait',
             width: 2000,
             height: 3000,
@@ -198,28 +235,28 @@ describe('resolveUnsplashImage', () => {
             photoUrl: 'https://p.example/1',
             thumbUrl: 'https://images.unsplash.com/photo-abc?w=400',
             downloadLocation: 'https://api.unsplash.com/photos/abc123/download?ixid=xyz',
-        });
+        }]);
 
         const resolved = await resolveUnsplashImage('https://proxy.example', 'any', false, 'portrait');
 
-        expect(vi.mocked(fetchRandomImage).mock.calls[0][3]).toBe('portrait');
+        expect(vi.mocked(fetchRandomPhotos).mock.calls[0][4]).toBe('portrait');
         // 1080 wide, height derived from the 2:3 portrait aspect.
         expect(resolved?.imageSize).toEqual({ width: 1080, height: 1620 });
     });
 
-    it('forwards the abort signal to fetchRandomImage', async () => {
-        vi.mocked(fetchRandomImage).mockResolvedValue(undefined);
+    it('forwards the abort signal to fetchRandomPhotos', async () => {
+        vi.mocked(fetchRandomPhotos).mockResolvedValue(undefined);
         const { signal } = new AbortController();
 
         await resolveUnsplashImage('https://proxy.example', 'any', false, 'landscape', signal);
 
-        expect(vi.mocked(fetchRandomImage).mock.calls[0][4]).toBe(signal);
+        expect(vi.mocked(fetchRandomPhotos).mock.calls[0][6]).toEqual({ signal });
     });
 
     it('throws GenerationCanceledError when the fetch is aborted', async () => {
         const controller = new AbortController();
         controller.abort();
-        vi.mocked(fetchRandomImage).mockRejectedValue(new DOMException('Aborted', 'AbortError'));
+        vi.mocked(fetchRandomPhotos).mockRejectedValue(new DOMException('Aborted', 'AbortError'));
 
         await expect(
             resolveUnsplashImage('https://proxy.example', 'any', false, 'landscape', controller.signal),
@@ -229,7 +266,7 @@ describe('resolveUnsplashImage', () => {
     it('keys cancellation off the aborted signal, not the error type', async () => {
         const controller = new AbortController();
         controller.abort();
-        vi.mocked(fetchRandomImage).mockRejectedValue(new Error('network down'));
+        vi.mocked(fetchRandomPhotos).mockRejectedValue(new Error('network down'));
 
         await expect(
             resolveUnsplashImage('https://proxy.example', 'any', false, 'landscape', controller.signal),
@@ -250,7 +287,7 @@ describe('resolveUnsplashImage', () => {
     };
 
     it('serves a stash image when the pool also misses', async () => {
-        vi.mocked(fetchRandomImage).mockResolvedValue(undefined);
+        vi.mocked(fetchRandomPhotos).mockResolvedValue(undefined);
         vi.mocked(pickStashImage).mockResolvedValue(stashImage);
 
         const resolved = await resolveUnsplashImage('https://proxy.example', 'nature', true, 'landscape');
@@ -267,7 +304,7 @@ describe('resolveUnsplashImage', () => {
     });
 
     it('serves a stash image when the fetch throws', async () => {
-        vi.mocked(fetchRandomImage).mockRejectedValue(new Error('network down'));
+        vi.mocked(fetchRandomPhotos).mockRejectedValue(new Error('network down'));
         vi.mocked(pickStashImage).mockResolvedValue(stashImage);
 
         const resolved = await resolveUnsplashImage('https://proxy.example', 'any', false, 'landscape');
@@ -288,7 +325,7 @@ describe('resolveUnsplashImage', () => {
     });
 
     it('reports a stash miss when the fetch throws and the stash is empty', async () => {
-        vi.mocked(fetchRandomImage).mockRejectedValue(new Error('network down'));
+        vi.mocked(fetchRandomPhotos).mockRejectedValue(new Error('network down'));
 
         const resolved = await resolveUnsplashImage('https://proxy.example', 'any', false, 'portrait');
 
@@ -303,7 +340,7 @@ describe('resolveUnsplashImage', () => {
     });
 
     it('does not consult the stash when the pool covers the failure', async () => {
-        vi.mocked(fetchRandomImage).mockResolvedValue(undefined);
+        vi.mocked(fetchRandomPhotos).mockResolvedValue(undefined);
         vi.mocked(resolveFromPool).mockReturnValue({
             imageUrl: 'https://images.unsplash.com/photo-pool',
             imageSize: { width: 1080, height: 720 },
@@ -323,7 +360,7 @@ describe('resolveUnsplashImage', () => {
     it('does not report image-fetch-failed when the fetch is aborted', async () => {
         const controller = new AbortController();
         controller.abort();
-        vi.mocked(fetchRandomImage).mockRejectedValue(new DOMException('Aborted', 'AbortError'));
+        vi.mocked(fetchRandomPhotos).mockRejectedValue(new DOMException('Aborted', 'AbortError'));
 
         await resolveUnsplashImage('https://proxy.example', 'any', false, 'landscape', controller.signal)
             .catch(() => {});

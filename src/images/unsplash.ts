@@ -5,7 +5,7 @@
  * The Worker holds the key. `VITE_IMAGE_PROXY_URL` names it — a plain URL, not
  * a secret; its absence means "no photo source", the gate the key used to be.
  *
- * @see https://unsplash.com/documentation#get-a-random-photo
+ * @see https://unsplash.com/documentation#search-photos
  */
 
 import { diagnostics } from '../diagnostics.js';
@@ -24,9 +24,6 @@ import {
 } from './photo-source.js';
 import { shuffled } from './shuffled.js';
 import type { Orientation } from '../model/types.js';
-
-/** Proxy route that forwards to Unsplash's `/photos/random`. */
-export const PROXY_RANDOM_PATH = '/random';
 
 /** Proxy route that forwards a photo's `download_location`. */
 export const PROXY_DOWNLOAD_PATH = '/download';
@@ -55,6 +52,15 @@ export interface UnsplashPhoto {
     alt_description?: string | null;
 }
 
+/**
+ * Where a drawn photo came from: `knownPages` is the cached usable page count
+ * before the draw, 0 when unknown (so page 1 was forced).
+ */
+export interface PageDraw {
+    page: number;
+    knownPages: number;
+}
+
 export interface UnsplashImageResult {
     imageUrl: string;
     width: number;
@@ -66,30 +72,7 @@ export interface UnsplashImageResult {
     /** Unsplash download-reporting endpoint (not the image URL). */
     downloadLocation: string;
     description?: string;
-}
-
-/**
- * Carries no credential: the Worker adds its own `Authorization` header and
- * strips any `client_id`. A key in this URL would put the key back in the
- * bundle.
- */
-export function buildRandomPhotoUrl(
-    proxyBaseUrl: string,
-    query?: string,
-    orientation: Orientation = 'landscape',
-    count?: number,
-): string {
-    const params = new URLSearchParams({ orientation });
-
-    if (query) {
-        params.set('query', query);
-    }
-
-    if (count !== undefined) {
-        params.set('count', String(count));
-    }
-
-    return `${proxyBaseUrl}${PROXY_RANDOM_PATH}?${params.toString()}`;
+    pageDraw?: PageDraw;
 }
 
 export function parseUnsplashResponse(data: unknown): UnsplashImageResult {
@@ -182,75 +165,6 @@ function reportProxyHttpError(
     });
 }
 
-/**
- * Resolves `undefined` on HTTP failure, `'blocked'` when both draws landed on
- * a blocked photographer; throws on a malformed response body.
- */
-export async function fetchRandomImage(
-    proxyBaseUrl: string,
-    fetchFn: typeof fetch = fetch,
-    query?: string,
-    orientation: Orientation = 'landscape',
-    signal?: AbortSignal,
-): Promise<UnsplashImageResult | 'blocked' | undefined> {
-    const url = buildRandomPhotoUrl(proxyBaseUrl, query, orientation);
-
-    // A blocked-photographer draw costs one redraw; a second one falls
-    // through to the pool fallback rather than spending more quota.
-    for (let attempt = 0; attempt < 2; attempt++) {
-        const response = await fetchFn(url, { signal });
-
-        if (!response.ok) {
-            reportProxyHttpError(response, 'single', { kind: 'search', query: query ?? '' });
-
-            return undefined;
-        }
-
-        const data: unknown = await response.json();
-        const result = parseUnsplashResponse(data);
-
-        if (!isBlockedPhotographerUrl(result.photographerUrl)) {
-            return result;
-        }
-    }
-
-    return 'blocked';
-}
-
-/**
- * `/photos/random?count=N` returns an array and costs one request against the
- * (per-application) rate limit regardless of count.
- *
- * Resolves `undefined` on HTTP failure; throws on a malformed response body.
- */
-export async function fetchRandomImages(
-    proxyBaseUrl: string,
-    count: number,
-    fetchFn: typeof fetch = fetch,
-    query?: string,
-    orientation: Orientation = 'landscape',
-): Promise<UnsplashImageResult[] | undefined> {
-    const url = buildRandomPhotoUrl(proxyBaseUrl, query, orientation, count);
-
-    const response = await fetchFn(url);
-
-    if (!response.ok) {
-        reportProxyHttpError(response, 'batch', { kind: 'search', query: query ?? '' });
-
-        return undefined;
-    }
-
-    const data: unknown = await response.json();
-
-    if (!Array.isArray(data)) {
-        throw new Error('Invalid Unsplash API response');
-    }
-
-    return data
-        .map(parseUnsplashResponse)
-        .filter((result) => !isBlockedPhotographerUrl(result.photographerUrl));
-}
-
 export interface PhotoRequestContext {
     caller: 'picker' | 'surprise' | 'stash';
     imageCategory: string;
@@ -298,6 +212,7 @@ export async function fetchRandomPhotos(
         return parsePage(source, await response.json(), response.headers);
     };
 
+    let servedPage = page;
     let result = await fetchPage(page);
     if (result === undefined) return undefined;
 
@@ -326,8 +241,9 @@ export async function fetchRandomPhotos(
         };
 
         let retried: ParsedPage | undefined;
+        servedPage = 1 + Math.floor(random() * loweredTo);
         try {
-            retried = await fetchPage(1 + Math.floor(random() * loweredTo));
+            retried = await fetchPage(servedPage);
         } catch (error) {
             report('threw');
             throw error;
@@ -350,7 +266,10 @@ export async function fetchRandomPhotos(
     const usable = parsed.filter((photo) => !isBlockedPhotographerUrl(photo.photographerUrl));
     if (parsed.length > 0 && usable.length === 0) return 'blocked';
 
-    return shuffled(usable, random).slice(0, count);
+    const pageDraw: PageDraw = { page: servedPage, knownPages: known ?? 0 };
+    return shuffled(usable, random)
+        .slice(0, count)
+        .map((photo) => ({ ...photo, pageDraw }));
 }
 
 /**

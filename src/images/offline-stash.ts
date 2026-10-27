@@ -14,7 +14,7 @@ import { diagnostics } from '../diagnostics.js';
 import type { Orientation } from '../model/types.js';
 import { OFFLINE_STASH_CACHE } from './offline-stash-cache.js';
 import { toDisplayImage, type CandidateImage } from './unsplash-display-image.js';
-import { fetchRandomImages, triggerPhotoDownload } from './unsplash.js';
+import { fetchRandomPhotos, triggerPhotoDownload, type PhotoRequestContext } from './unsplash.js';
 import { shuffled } from './shuffled.js';
 
 export const OFFLINE_STASH_KEY = 'puzzle-offline-image-stash';
@@ -157,6 +157,7 @@ export async function stashCandidates(
 
 export interface DownloadOfflineImagesOptions {
     proxyBaseUrl: string;
+    context: PhotoRequestContext;
     query: string | undefined;
     orientation: Orientation;
     onProgress?: (done: number, total: number) => void;
@@ -168,7 +169,7 @@ export interface DownloadOfflineImagesOptions {
  * Why the download settled the way it did. Every `saved: 0` path carries a
  * distinct reason so a production `offline-images-saved` spike is triageable:
  * `batch-threw` is the benign offline tap (the fetch threw); `batch-empty`
- * (proxy HTTP error or every photographer blocked) and `no-photos` (the batch
+ * (proxy HTTP error, or a page with no usable photo) and `no-photos` (the batch
  * returned photos but every blob fetch failed) point at the proxy/CDN;
  * `cache-unavailable` and `write-failed` are a real client fault (the Cache
  * API or localStorage failing). `diagnostics.warn`, the only other signal,
@@ -198,6 +199,7 @@ export async function downloadOfflineImages(
 ): Promise<OfflineDownloadResult> {
     const {
         proxyBaseUrl,
+        context,
         query,
         orientation,
         onProgress,
@@ -209,19 +211,20 @@ export async function downloadOfflineImages(
 
     let results;
     try {
-        results = await fetchRandomImages(
+        results = await fetchRandomPhotos(
             proxyBaseUrl,
             OFFLINE_STASH_COUNT,
             fetchFn,
             query,
             orientation,
+            context,
         );
     } catch (error) {
         diagnostics.warn('Offline image download failed:', error);
         return { saved: 0, reason: 'batch-threw' };
     }
 
-    if (!results || results.length === 0) return { saved: 0, reason: 'batch-empty' };
+    if (!results || results === 'blocked' || results.length === 0) return { saved: 0, reason: 'batch-empty' };
 
     let cache: Cache;
     try {

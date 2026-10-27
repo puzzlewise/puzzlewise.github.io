@@ -5,7 +5,7 @@
  * original aspect ratio.
  */
 
-import type { UnsplashImageResult } from './unsplash.js';
+import type { PageDraw, UnsplashImageResult } from './unsplash.js';
 
 export interface DisplayImage {
     imageUrl: string;
@@ -17,6 +17,8 @@ export interface DisplayImage {
     };
     /** Unsplash download-reporting endpoint, triggered when the game starts. */
     downloadLocation: string;
+    /** Set only on fresh page draws, never on stash or pool images. */
+    pageDraw?: PageDraw;
 }
 
 /**

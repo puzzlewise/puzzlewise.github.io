@@ -7,9 +7,9 @@
 
 import { diagnostics } from '../diagnostics.js';
 import { track } from '../analytics/index.js';
-import { fetchRandomImages, CANDIDATE_COUNT, toDisplayImage, type CandidateImage } from '../images/index.js';
+import { fetchRandomPhotos, CANDIDATE_COUNT, toDisplayImage, type CandidateImage } from '../images/index.js';
 import { stashCandidates } from '../images/offline-stash.js';
-import { findImageCategory, buildImageQuery, resolveQueryOverride } from '../game/image-categories.js';
+import { findImageCategory, buildImageQuery, resolveQueryOverride, isCustomQuery } from '../game/image-categories.js';
 import type { Orientation } from '../model/types.js';
 
 /** Candidates per picker fetch — one per grid tile, so tied to the tile count. */
@@ -43,15 +43,16 @@ export async function fetchCandidateImages(
     try {
         const category = findImageCategory(imageCategory);
         const query = buildImageQuery(resolveQueryOverride(category.query, queryOverride), vibrant);
-        const results = await fetchRandomImages(
+        const results = await fetchRandomPhotos(
             proxyBaseUrl,
             CANDIDATE_IMAGE_COUNT,
             fetchFn,
             query,
             orientation,
+            { caller: 'picker', imageCategory, vibrant, custom: isCustomQuery(queryOverride) },
         );
 
-        if (!results || results.length === 0) {
+        if (!results || results === 'blocked' || results.length === 0) {
             return await candidatesFromStash('no-candidates', imageCategory, vibrant, orientation);
         }
 
@@ -62,6 +63,9 @@ export async function fetchCandidateImages(
             };
             if (result.description !== undefined) {
                 candidate.description = result.description;
+            }
+            if (result.pageDraw !== undefined) {
+                candidate.pageDraw = result.pageDraw;
             }
             return candidate;
         });

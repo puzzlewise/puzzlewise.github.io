@@ -1,7 +1,7 @@
 import type { GameState, GridSize, Orientation } from '../model/types.js';
 import type { NewGameData } from '../analytics/index.js';
 import type { GenerationOutcome } from '../game/index.js';
-import type { CandidateImage } from '../images/index.js';
+import type { CandidateImage, PageDraw } from '../images/index.js';
 import { classifyImageSource, resolveNewGameImageSource } from './classify-image-source.js';
 import { traceSetVersionOf } from './trace-set-version.js';
 
@@ -15,13 +15,14 @@ export function buildFreshGameData(opts: {
     imageCategory?: string;
     vibrant: boolean;
     pickedImage?: CandidateImage;
+    pageDraw?: PageDraw;
     chunkDegraded: boolean;
     bootFallback: boolean;
     generation: GenerationOutcome;
 }): NewGameData {
     const {
         state, cutStyle, rotationMode, orientation, oriented,
-        imageSource, imageCategory, vibrant, pickedImage, chunkDegraded, bootFallback, generation,
+        imageSource, imageCategory, vibrant, pickedImage, pageDraw, chunkDegraded, bootFallback, generation,
     } = opts;
 
     const data: NewGameData = {
@@ -65,6 +66,10 @@ export function buildFreshGameData(opts: {
         data.imageCategory = imageCategory ?? 'any';
         data.vibrant = vibrant;
         data.imagePicked = pickedImage !== undefined;
+        if (pageDraw !== undefined) {
+            data.imagePage = pageDraw.page;
+            data.imagePagesKnown = pageDraw.knownPages;
+        }
     }
 
     return data;

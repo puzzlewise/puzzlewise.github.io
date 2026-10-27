@@ -118,6 +118,15 @@ export function buildImageQuery(
     return `${categoryQuery} ${VIBRANT_QUERY_TERMS}`;
 }
 
+function effectiveOverride(queryOverride: string | undefined): string | undefined {
+    const trimmed = queryOverride?.trim();
+    return trimmed ? trimmed : undefined;
+}
+
+export function isCustomQuery(queryOverride: string | undefined): boolean {
+    return effectiveOverride(queryOverride) !== undefined;
+}
+
 /**
  * A non-empty (trimmed) override replaces the category's query outright; an
  * absent/blank one leaves the category query in force. The override is the raw
@@ -127,8 +136,7 @@ export function resolveQueryOverride(
     categoryQuery: string | undefined,
     queryOverride: string | undefined,
 ): string | undefined {
-    const trimmed = queryOverride?.trim();
-    return trimmed ? trimmed : categoryQuery;
+    return effectiveOverride(queryOverride) ?? categoryQuery;
 }
 
 export function findImageCategory(

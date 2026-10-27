@@ -60,7 +60,10 @@ describe('buildPageUrl', () => {
         expect(topic.pathname).toBe('/topics/film/photos');
         expect([...topic.searchParams.keys()].sort()).toEqual([...TOPIC_PHOTOS_PARAMS].sort());
 
-        for (const url of [search, topic]) expect(resolveUpstream(url).ok).toBe(true);
+        for (const url of [search, topic]) {
+            expect(url.origin).toBe(PROXY);
+            expect(resolveUpstream(url).ok).toBe(true);
+        }
     });
 });
 
