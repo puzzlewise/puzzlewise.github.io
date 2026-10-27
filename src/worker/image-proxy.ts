@@ -71,6 +71,14 @@ export const FEED_PARAMS: readonly string[] = ['page', 'per_page'];
 
 export const TOPIC_LIST_PARAMS: readonly string[] = ['page', 'per_page'];
 
+export const TOPIC_PHOTOS_PARAMS: readonly string[] = ['page', 'per_page', 'orientation'];
+
+/**
+ * Format-checked rather than allowlisted: `/search` already forwards any
+ * free-text query, so a slug list would add no protection.
+ */
+const TOPIC_PHOTOS_PATH = /^\/topics\/([a-z0-9-]+)\/photos$/;
+
 const FIXED_ROUTES: ReadonlyMap<string, { upstreamPath: string; params: readonly string[] }> =
     new Map([
         ['/random', { upstreamPath: '/photos/random', params: RANDOM_PARAMS }],
@@ -191,6 +199,15 @@ export function resolveUpstream(url: URL): Resolution {
     if (route !== undefined) {
         const target = new URL(`${UNSPLASH_API_ORIGIN}${route.upstreamPath}`);
         forwardParams(url, target, route.params);
+
+        return { ok: true, url: target.toString() };
+    }
+
+    const topic = TOPIC_PHOTOS_PATH.exec(url.pathname);
+
+    if (topic !== null) {
+        const target = new URL(`${UNSPLASH_API_ORIGIN}/topics/${topic[1]}/photos`);
+        forwardParams(url, target, TOPIC_PHOTOS_PARAMS);
 
         return { ok: true, url: target.toString() };
     }
