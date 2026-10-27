@@ -69,6 +69,13 @@ forwarded):
   `query`, `orientation`, `page`, `per_page`.
 - `/photos` → `GET https://api.unsplash.com/photos` (editorial feed), forwarding
   only `page`, `per_page`.
+- `/topics` → `GET https://api.unsplash.com/topics` (topic list, for the probe
+  to discover slugs and `total_photos`), forwarding only `page`, `per_page`.
+- `/topics/:slug/photos` → `GET https://api.unsplash.com/topics/:slug/photos`,
+  forwarding only `page`, `per_page`, `orientation`. The slug is validated by
+  format (`^[a-z0-9-]+$`), not against a list: `/search` already forwards any
+  free-text query, so a slug allowlist would add no protection while forcing a
+  Worker deploy to try a different topic.
 
 `/random` and `/download` stay unchanged. Merging deploys the Worker via
 `deploy-worker.yml`; the app does not call the new routes yet, so this is
@@ -86,15 +93,21 @@ plus the editorial feed, both orientations, `per_page=30`:
 3. Build contact sheets of thumbnails from page 1, a middle page and the last
    page per category, to judge off-topic drift.
 4. For `/photos`: the share of each page that is landscape vs portrait.
+5. Topics: list them with `total_photos`; for topics matching a category
+   (e.g. nature, animals, architecture-interior, food-drink, travel, people)
+   and broad ones suited to Any (e.g. wallpapers), check depth per orientation
+   and build contact sheets next to the matching search's, to compare quality
+   against pool size.
 
 Report findings to the player before step 3. Decisions that hang on it:
 
 - **Page range:** default is the full range (variety). If deep pages are badly
   off-topic, propose a cap to the player rather than applying one silently.
-- **Any:** editorial feed with client-side orientation filtering, unless too
-  few portrait photos per page survive; then fall back to
-  `/topics/:slug/photos` (which supports `orientation`) with a Worker-side slug
-  allowlist — that would be a further additive Worker PR.
+- **Any:** editorial feed with client-side orientation filtering, or a random
+  pick across a set of broad topics (which filter by orientation upstream) —
+  whichever the probe favors.
+- **Categories:** search by default; a category whose topic is clearly better
+  and still large enough may be sourced from its topic instead.
 - **Memory:** back on the table only if the effective pool is small.
 
 ### Step 3 — App PR
