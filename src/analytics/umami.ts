@@ -654,13 +654,20 @@ export interface ImageFetchFailedData {
  * Data attached to `image-fetch-http-error` — the image proxy answered a
  * random-photo request with an error status (#533). `status = 403` is
  * Unsplash's rate limit: a 50-requests/hour demo-tier budget shared by
- * every player, so one hot hour blanks the picker for everyone. Keep both
+ * every player, so one hot hour blanks the picker for everyone. Keep the
  * fields mandatory — rows that all carry the keys never need the
  * absent-property arithmetic {@link SharedLoadFailedData} documents.
  */
 export interface ImageFetchHttpErrorData {
     status: number;
     source: 'single' | 'batch';
+    /**
+     * What was requested: `topic` is the slug for topic draws and `''` for
+     * searches, so a topic Unsplash retired shows up by name as 404s.
+     * Absent on rows predating random-page draws; split by key presence.
+     */
+    sourceKind: 'search' | 'topic';
+    topic: string;
 }
 
 /**
@@ -698,6 +705,33 @@ export interface ImagePoolFallbackData {
  */
 export interface ImagePageCountsUnsavedData {
     errorName: string;
+}
+
+/**
+ * Data attached to `image-page-empty` — a photo request drew a page beyond
+ * page 1 that Unsplash answered with 200 and zero photos, so the app lowered
+ * that source's cached page count to `loweredTo` and retried once. Fires once
+ * per such page, after the retry settles. `reportedPages` is the page count
+ * Unsplash stated on the empty response (0 when it stated none); against
+ * `loweredTo` it measures how far the stated count overstates reachable
+ * depth. `retry` is whether the player still got photos from that request:
+ * `'ok'`, `'empty'` (the retry page was empty too), `'http-error'` (the retry
+ * got an error status) or `'threw'` (the retry fetch rejected). `topic` is the
+ * slug for topic draws and `''` for searches; `custom` marks a player-typed
+ * query, whose text is never sent. Every field is always present.
+ */
+export interface ImagePageEmptyData {
+    caller: 'picker' | 'surprise' | 'stash';
+    imageCategory: string;
+    vibrant: boolean;
+    custom: boolean;
+    orientation: Orientation;
+    sourceKind: 'search' | 'topic';
+    topic: string;
+    page: number;
+    reportedPages: number;
+    loweredTo: number;
+    retry: 'ok' | 'empty' | 'http-error' | 'threw';
 }
 
 /**
@@ -1657,6 +1691,7 @@ export function track(name: 'share-link-rescue-attempted', data: ShareLinkRescue
 export function track(name: 'share-link-rescue-result', data: ShareLinkRescueResultData): void;
 export function track(name: 'generation-canceled', data: GenerationCanceledData): void;
 export function track(name: 'image-pool-fallback', data: ImagePoolFallbackData): void;
+export function track(name: 'image-page-empty', data: ImagePageEmptyData): void;
 export function track(name: 'image-page-counts-unsaved', data: ImagePageCountsUnsavedData): void;
 export function track(name: 'image-stash-fallback', data: ImageStashFallbackData): void;
 export function track(name: 'offline-images-saved', data: OfflineImagesSavedData): void;

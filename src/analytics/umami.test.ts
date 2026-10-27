@@ -293,11 +293,15 @@ describe('track', () => {
         track('image-fetch-http-error', {
             status: 403,
             source: 'batch',
+            sourceKind: 'topic',
+            topic: 'nature',
         });
 
         expect(umamiTrack).toHaveBeenCalledWith('image-fetch-http-error', {
             status: 403,
             source: 'batch',
+            sourceKind: 'topic',
+            topic: 'nature',
         });
     });
 
@@ -329,6 +333,28 @@ describe('track', () => {
         track('image-page-counts-unsaved', { errorName: 'QuotaExceededError' });
 
         expect(umamiTrack).toHaveBeenCalledWith('image-page-counts-unsaved', { errorName: 'QuotaExceededError' });
+    });
+
+    it('forwards image-page-empty with the typed payload', () => {
+        const umamiTrack = vi.fn();
+        (window as unknown as { umami: { track: typeof umamiTrack } }).umami = { track: umamiTrack };
+        const data = {
+            caller: 'surprise',
+            imageCategory: 'nature',
+            vibrant: false,
+            custom: false,
+            orientation: 'portrait',
+            sourceKind: 'topic',
+            topic: 'nature',
+            page: 412,
+            reportedPages: 597,
+            loweredTo: 411,
+            retry: 'ok',
+        } as const;
+
+        track('image-page-empty', data);
+
+        expect(umamiTrack).toHaveBeenCalledWith('image-page-empty', data);
     });
 
     it('forwards new-game-failed with the typed payload', () => {

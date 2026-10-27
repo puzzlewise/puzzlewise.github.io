@@ -15,6 +15,7 @@ import type { Orientation } from '../model/types.js';
 import { OFFLINE_STASH_CACHE } from './offline-stash-cache.js';
 import { toDisplayImage, type CandidateImage } from './unsplash-display-image.js';
 import { fetchRandomImages, triggerPhotoDownload } from './unsplash.js';
+import { shuffled } from './shuffled.js';
 
 export const OFFLINE_STASH_KEY = 'puzzle-offline-image-stash';
 
@@ -91,15 +92,6 @@ export function stashCount(): number {
 
 export function isOfflineStashSupported(): boolean {
     return globalThis.caches !== undefined;
-}
-
-function shuffled<T>(items: readonly T[], random: () => number): T[] {
-    const result = [...items];
-    for (let i = result.length - 1; i > 0; i--) {
-        const j = Math.floor(random() * (i + 1));
-        [result[i], result[j]] = [result[j], result[i]];
-    }
-    return result;
 }
 
 function byOrientation(
