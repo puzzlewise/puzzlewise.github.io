@@ -275,6 +275,39 @@ describe('resolveUpstream', () => {
         expect([...url.searchParams.keys()]).toEqual([]);
     });
 
+    it('routes /topics/:slug/photos to the topic photo list', () => {
+        const url = upstreamUrl(resolveUpstream(new URL(
+            'https://proxy.example/topics/architecture-interior/photos?page=2&per_page=30&orientation=landscape&order_by=popular&client_id=k',
+        )));
+
+        expect(url.origin).toBe('https://api.unsplash.com');
+        expect(url.pathname).toBe('/topics/architecture-interior/photos');
+        expect(Object.fromEntries(url.searchParams)).toEqual({
+            page: '2', per_page: '30', orientation: 'landscape',
+        });
+    });
+
+    it.each([
+        '/topics/Nature/photos',
+        '/topics//photos',
+        '/topics/a%2Fb/photos',
+        '/topics/na_ture/photos',
+        '/topics/nature',
+        '/topics/nature/photos/extra',
+        '/topics/nature/photos/',
+    ])('404s %s', (path) => {
+        expect(resolveUpstream(new URL(`https://proxy.example${path}`))).toEqual({
+            ok: false, status: 404, message: 'Not found',
+        });
+    });
+
+    it('lets no dot-segment slug reach a topic URL', () => {
+        // WHATWG URL parsing treats %2e%2e as `..`, so this arrives as /photos.
+        const url = upstreamUrl(resolveUpstream(new URL('https://proxy.example/topics/%2e%2e/photos')));
+
+        expect(url.pathname).toBe('/photos');
+    });
+
     it('404s a trailing-slash variant of a route', () => {
         expect(resolveUpstream(new URL('https://proxy.example/search/'))).toEqual({
             ok: false, status: 404, message: 'Not found',
