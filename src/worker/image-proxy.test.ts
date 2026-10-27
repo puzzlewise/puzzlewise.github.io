@@ -238,6 +238,49 @@ describe('resolveUpstream', () => {
         expect(url.searchParams.get('client_id')).toBeNull();
     });
 
+    it.each([
+        ['/search', '/search/photos'],
+        ['/photos', '/photos'],
+        ['/topics', '/topics'],
+    ])('routes %s to Unsplash %s', (path, upstreamPath) => {
+        const url = upstreamUrl(resolveUpstream(new URL(`https://proxy.example${path}`)));
+
+        expect(url.origin).toBe('https://api.unsplash.com');
+        expect(url.pathname).toBe(upstreamPath);
+    });
+
+    it('forwards query, orientation, page and per_page on /search', () => {
+        const url = upstreamUrl(resolveUpstream(new URL(
+            'https://proxy.example/search?query=nature&orientation=portrait&page=7&per_page=30',
+        )));
+
+        expect(Object.fromEntries(url.searchParams)).toEqual({
+            query: 'nature', orientation: 'portrait', page: '7', per_page: '30',
+        });
+    });
+
+    it.each(['/photos', '/topics'])('forwards only page and per_page on %s', (path) => {
+        const url = upstreamUrl(resolveUpstream(new URL(
+            `https://proxy.example${path}?page=3&per_page=30&order_by=popular&query=x&orientation=portrait`,
+        )));
+
+        expect(Object.fromEntries(url.searchParams)).toEqual({ page: '3', per_page: '30' });
+    });
+
+    it.each(['/search', '/photos', '/topics'])('drops client_id and unlisted parameters on %s', (path) => {
+        const url = upstreamUrl(resolveUpstream(new URL(
+            `https://proxy.example${path}?client_id=attacker-key&collections=1&content_filter=high&username=x`,
+        )));
+
+        expect([...url.searchParams.keys()]).toEqual([]);
+    });
+
+    it('404s a trailing-slash variant of a route', () => {
+        expect(resolveUpstream(new URL('https://proxy.example/search/'))).toEqual({
+            ok: false, status: 404, message: 'Not found',
+        });
+    });
+
     it('routes a valid /download URL', () => {
         const url = upstreamUrl(
             resolveUpstream(
@@ -443,6 +486,33 @@ describe('handleRequest', () => {
         expect(response.headers.get('access-control-expose-headers')).toContain(
             'x-ratelimit-remaining',
         );
+    });
+
+    it('forwards the pagination headers and exposes them to the browser', async () => {
+        const link = '<https://api.unsplash.com/photos?page=346>; rel="last"';
+        const fetchFn = stubFetch(
+            new Response('[]', {
+                status: 200,
+                headers: {
+                    'content-type': 'application/json',
+                    link,
+                    'x-total': '10380',
+                    'x-per-page': '30',
+                },
+            }),
+        );
+
+        const response = await handleRequest(
+            get('/photos?per_page=30', ALLOWED),
+            ENV,
+            fetchFn,
+        );
+
+        expect(response.headers.get('link')).toBe(link);
+        expect(response.headers.get('x-total')).toBe('10380');
+        expect(response.headers.get('x-per-page')).toBe('30');
+        const exposed = response.headers.get('access-control-expose-headers') ?? '';
+        expect(exposed.split(', ')).toEqual(expect.arrayContaining(['link', 'x-total', 'x-per-page']));
     });
 
     it('allows a known origin to read the response', async () => {

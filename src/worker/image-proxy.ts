@@ -1,9 +1,9 @@
 /**
  * Cloudflare Worker: Unsplash API proxy. The app is a static site, so a
  * build-time key is inlined into the bundle and readable by every visitor
- * (#534); this Worker holds the key and forwards the only two Unsplash calls
- * the app makes. Not a passthrough relay — a `/*` proxy would expose the whole
- * API under our key. On `/random` only `RANDOM_PARAMS` survive the hop;
+ * (#534); this Worker holds the key and forwards the Unsplash calls the app
+ * makes. Not a passthrough relay — a `/*` proxy would expose the whole API
+ * under our key. Each fixed route forwards only its own parameter allowlist;
  * `/download` forwards the caller's query whole, minus `client_id`.
  *
  * Lives under `src/` (not a top-level `worker/`) so it stays in the one tree
@@ -60,16 +60,37 @@ export const RANDOM_PARAMS: readonly string[] = [
     'count',
 ];
 
+export const SEARCH_PARAMS: readonly string[] = [
+    'query',
+    'orientation',
+    'page',
+    'per_page',
+];
+
+export const FEED_PARAMS: readonly string[] = ['page', 'per_page'];
+
+export const TOPIC_LIST_PARAMS: readonly string[] = ['page', 'per_page'];
+
+const FIXED_ROUTES: ReadonlyMap<string, { upstreamPath: string; params: readonly string[] }> =
+    new Map([
+        ['/random', { upstreamPath: '/photos/random', params: RANDOM_PARAMS }],
+        ['/search', { upstreamPath: '/search/photos', params: SEARCH_PARAMS }],
+        ['/photos', { upstreamPath: '/photos', params: FEED_PARAMS }],
+        ['/topics', { upstreamPath: '/topics', params: TOPIC_LIST_PARAMS }],
+    ]);
+
 /**
  * Shape of a legitimate `download_location` path. Without this check the Worker
  * would fetch any URL a caller named, with our key attached.
  */
 const DOWNLOAD_PATH = /^\/photos\/[\w-]+\/download$/;
 
-/** Rate-limit headers forwarded so the client can see the remaining budget. */
 const FORWARDED_HEADERS: readonly string[] = [
     'x-ratelimit-limit',
     'x-ratelimit-remaining',
+    'link',
+    'x-total',
+    'x-per-page',
 ];
 
 /**
@@ -79,9 +100,8 @@ const FORWARDED_HEADERS: readonly string[] = [
 const NULL_BODY_STATUSES: ReadonlySet<number> = new Set([101, 204, 205, 304]);
 
 /**
- * Headers common to every response. `no-store` because neither route is
- * reusable (/random varies each call, /download is a usage report) and
- * Unsplash's own directives don't survive the hop. `vary` is unconditional:
+ * Headers common to every response. `no-store` because Unsplash's own
+ * directives don't survive the hop. `vary` is unconditional:
  * the response that would poison a shared cache is the one *without* an
  * allow-origin header, so marking only the allowed branch would miss it.
  */
@@ -156,16 +176,21 @@ type Resolution =
  * out of any upstream error page that echoes the request. Exported (and pure):
  * every routing and validation decision lives here.
  */
-export function resolveUpstream(url: URL): Resolution {
-    if (url.pathname === '/random') {
-        const target = new URL(`${UNSPLASH_API_ORIGIN}/photos/random`);
-
-        for (const name of RANDOM_PARAMS) {
-            const value = url.searchParams.get(name);
-            if (value !== null) {
-                target.searchParams.set(name, value);
-            }
+function forwardParams(source: URL, target: URL, names: readonly string[]): void {
+    for (const name of names) {
+        const value = source.searchParams.get(name);
+        if (value !== null) {
+            target.searchParams.set(name, value);
         }
+    }
+}
+
+export function resolveUpstream(url: URL): Resolution {
+    const route = FIXED_ROUTES.get(url.pathname);
+
+    if (route !== undefined) {
+        const target = new URL(`${UNSPLASH_API_ORIGIN}${route.upstreamPath}`);
+        forwardParams(url, target, route.params);
 
         return { ok: true, url: target.toString() };
     }
