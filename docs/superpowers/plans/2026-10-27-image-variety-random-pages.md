@@ -155,28 +155,53 @@ it('rejects a body of the wrong shape', () => {
 **Files:**
 - Modify: `src/images/unsplash.ts` (add next to `fetchRandomImages`; old functions stay until Task 4)
 - Create: `src/images/shuffled.ts` — move `shuffled` out of `src/images/offline-stash.ts` and import it from both places
-- Test: `src/images/unsplash.test.ts` (already jsdom; new `describe('fetchRandomPhotos')`; observe analytics via `window.umami.track` as the file does at ~line 477)
+- Modify: `src/analytics/umami.ts` — new `ImagePageEmptyData` + `track('image-page-empty', …)` overload, next to `ImagePoolFallbackData`
+- Test: `src/images/unsplash.test.ts` (already jsdom; new `describe('fetchRandomPhotos')`; observe analytics via `window.umami.track` as the file does at ~line 477); `src/analytics/umami.test.ts` (forwarding test like the existing `image-pool-fallback` one at ~line 304)
 
 **Interfaces:**
 - Consumes: Task 1 `getPageCount`/`setPageCount`; Task 2 `pickPhotoSource`, `usablePages`, `pageCacheKey`, `buildPageUrl`, `parsePage`; existing `isBlockedPhotographerUrl`, `reportProxyHttpError`.
 - Produces:
 
 ```ts
+export interface PhotoRequestContext {
+    caller: 'picker' | 'surprise' | 'stash';
+    imageCategory: string;
+    vibrant: boolean;
+    custom: boolean;                // a player-typed query override is in use
+}
 export interface FetchRandomPhotosOptions {
     random?: () => number;          // default Math.random
     signal?: AbortSignal;
-    source?: 'single' | 'batch';    // image-fetch-http-error tag; default 'batch'
 }
 export async function fetchRandomPhotos(
     proxyBaseUrl: string,
     count: number,
-    fetchFn: typeof fetch = fetch,
-    query?: string,
-    orientation: Orientation = 'landscape',
+    fetchFn: typeof fetch,
+    query: string | undefined,
+    orientation: Orientation,
+    context: PhotoRequestContext,
     options: FetchRandomPhotosOptions = {},
-): Promise<UnsplashImageResult[] | undefined>
+): Promise<UnsplashImageResult[] | 'blocked' | undefined>
 ```
-Resolves `undefined` on a non-2xx answer (after `reportProxyHttpError`), `[]` when the page held no usable photo, otherwise up to `count` photos. Throws on a malformed body or a rejected fetch.
+Resolves `undefined` on a non-2xx answer (after `reportProxyHttpError(response, caller === 'surprise' ? 'single' : 'batch')`); `'blocked'` when the final page had photos but every one was by a blocked photographer; `[]` when the final page was empty; otherwise up to `count` photos. Throws on a malformed body or a rejected fetch.
+
+```ts
+// in umami.ts
+export interface ImagePageEmptyData {
+    caller: 'picker' | 'surprise' | 'stash';
+    imageCategory: string;
+    vibrant: boolean;
+    custom: boolean;
+    orientation: Orientation;
+    sourceKind: 'search' | 'topic';
+    topic: string;          // slug for topic draws, '' for search (query text is never sent)
+    page: number;           // the page that came back empty
+    reportedPages: number;  // Unsplash's page count on that response; 0 when absent
+    loweredTo: number;      // the new cached count (page − 1)
+    retry: 'ok' | 'empty' | 'http-error' | 'threw';
+}
+```
+Doc comment (operator-facing, keep to facts the code can't show): fires once per 200 response with zero photos on page > 1, after the one retry settles; `loweredTo` against `reportedPages` measures how far Unsplash's count overstates reachable depth; `retry` says whether the player still got photos from that request; all fields always present.
 
 Algorithm (not determined by the signature):
 
@@ -188,93 +213,125 @@ res = fetch page → undefined on non-2xx
 if known === undefined and res.reportedPages !== undefined: setPageCount(key, usablePages(source, res.reportedPages))
 if res.photos is empty and page > 1:
     setPageCount(key, page - 1)
-    res = fetch page 1 + floor(random() * (page - 1)) → undefined on non-2xx
-return shuffled(res.photos without blocked photographers, random).slice(0, count)
+    retry = fetch page 1 + floor(random() * (page - 1))
+    track('image-page-empty', { ...context, orientation, sourceKind, topic, page,
+        reportedPages: res.reportedPages ?? 0, loweredTo: page - 1,
+        retry: threw ? 'threw' : retry === undefined ? 'http-error' : retry.photos.length ? 'ok' : 'empty' })
+    rethrow if the retry threw; return undefined if it was non-2xx; else res = retry
+usable = res.photos without blocked photographers
+return res.photos nonempty and usable empty ? 'blocked' : shuffled(usable, random).slice(0, count)
 ```
 (The cache is written only when unknown or when lowering, so a later full response can't undo a lowering.)
 
 - [ ] **Step 1: Write the failing tests** (stub `fetchFn` with `vi.fn()` returning `new Response(JSON.stringify(body), { status, headers })`; `localStorage.clear()` in `beforeEach`):
 
 ```ts
+const CTX = { caller: 'picker', imageCategory: 'nature', vibrant: false, custom: false } as const;
+
 it('fetches page 1 when the page count is unknown, and caches the usable count', async () => {
     const fetchFn = respond(200, searchBody(30, 334));
-    await fetchRandomPhotos(PROXY, 4, fetchFn, 'nature', 'landscape', { random: () => 0.5 });
+    await fetchRandomPhotos(PROXY, 4, fetchFn, 'nature', 'landscape', CTX, { random: () => 0.5 });
     expect(new URL(fetchFn.mock.calls[0][0]).searchParams.get('page')).toBe('1');
     expect(getPageCount('search:nature|landscape')).toBe(166);
 });
 it('draws a random page within the cached count', async () => {
     setPageCount('search:nature|landscape', 166);
     const fetchFn = respond(200, searchBody(30, 334));
-    await fetchRandomPhotos(PROXY, 4, fetchFn, 'nature', 'landscape', { random: () => 0.5 });
+    await fetchRandomPhotos(PROXY, 4, fetchFn, 'nature', 'landscape', CTX, { random: () => 0.5 });
     expect(new URL(fetchFn.mock.calls[0][0]).searchParams.get('page')).toBe('84');
 });
 it('returns count shuffled photos without blocked photographers', async () => {
-    const fetchFn = respond(200, searchBody(30, 2, { blockedFirst: 1 }));
-    const photos = await fetchRandomPhotos(PROXY, 4, fetchFn, 'q');
+    const fetchFn = respond(200, searchBody(30, 2, { blocked: 1 }));
+    const photos = await fetchRandomPhotos(PROXY, 4, fetchFn, 'q', 'landscape', CTX);
     expect(photos).toHaveLength(4);
-    expect(photos!.some((p) => isBlockedPhotographerUrl(p.photographerUrl))).toBe(false);
+    expect((photos as UnsplashImageResult[]).some((p) => isBlockedPhotographerUrl(p.photographerUrl))).toBe(false);
+});
+it("returns 'blocked' when every photo on the page is by a blocked photographer", async () => {
+    const fetchFn = respond(200, searchBody(3, 2, { blocked: 3 }));
+    expect(await fetchRandomPhotos(PROXY, 1, fetchFn, 'q', 'landscape', CTX)).toBe('blocked');
 });
 it('uses a topic for no query', async () => {
     const fetchFn = respond(200, topicBody(30), { 'x-total': '17898' });
-    await fetchRandomPhotos(PROXY, 4, fetchFn, undefined, 'portrait', { random: () => 0 });
+    await fetchRandomPhotos(PROXY, 4, fetchFn, undefined, 'portrait', CTX, { random: () => 0 });
     expect(new URL(fetchFn.mock.calls[0][0]).pathname).toBe('/topics/nature/photos');
     expect(getPageCount('topic:nature|portrait')).toBe(596);
 });
-it('lowers the count and retries once on an empty deep page', async () => {
+it('lowers the count, retries once and reports an empty deep page', async () => {
     setPageCount('search:q|landscape', 166);
     const fetchFn = respondSequence([200, searchBody(0, 334)], [200, searchBody(30, 334)]);
-    const photos = await fetchRandomPhotos(PROXY, 4, fetchFn, 'q', 'landscape', { random: () => 0.5 });
+    const photos = await fetchRandomPhotos(PROXY, 4, fetchFn, 'q', 'landscape', CTX, { random: () => 0.5 });
     expect(getPageCount('search:q|landscape')).toBe(83);
     expect(fetchFn).toHaveBeenCalledTimes(2);
     expect(Number(new URL(fetchFn.mock.calls[1][0]).searchParams.get('page'))).toBeLessThanOrEqual(83);
     expect(photos).toHaveLength(4);
+    expect(umamiTrack).toHaveBeenCalledWith('image-page-empty', {
+        caller: 'picker', imageCategory: 'nature', vibrant: false, custom: false,
+        orientation: 'landscape', sourceKind: 'search', topic: '',
+        page: 84, reportedPages: 334, loweredTo: 83, retry: 'ok',
+    });
 });
-it('does not retry an empty first page', async () => {
+it.each([
+    ['empty', [200, searchBody(0, 334)]],
+    ['http-error', [403, { errors: ['Forbidden'] }]],
+] as const)("reports retry '%s' when the retry fails that way", async (retry, second) => {
+    setPageCount('search:q|landscape', 166);
+    const fetchFn = respondSequence([200, searchBody(0, 334)], second);
+    await fetchRandomPhotos(PROXY, 4, fetchFn, 'q', 'landscape', CTX, { random: () => 0.5 });
+    expect(umamiTrack).toHaveBeenCalledWith('image-page-empty', expect.objectContaining({ retry }));
+});
+it("reports retry 'threw' and rethrows when the retry fetch rejects", async () => { /* second call rejects → promise rejects; event has retry: 'threw' */ });
+it('reports a topic draw with its slug', async () => { /* topic, empty deep page → sourceKind 'topic', topic 'nature' */ });
+it('does not retry or report an empty first page', async () => {
     const fetchFn = respond(200, searchBody(0, 0));
-    expect(await fetchRandomPhotos(PROXY, 4, fetchFn, 'zzqx')).toEqual([]);
+    expect(await fetchRandomPhotos(PROXY, 4, fetchFn, 'zzqx', 'landscape', CTX)).toEqual([]);
     expect(fetchFn).toHaveBeenCalledTimes(1);
+    expect(umamiTrack).not.toHaveBeenCalledWith('image-page-empty', expect.anything());
 });
-it('leaves the cache alone on an error status', async () => {
+it('leaves the cache alone on an error status, tagged by caller', async () => {
     setPageCount('search:q|landscape', 166);
     const fetchFn = respond(403, { errors: ['Forbidden'] });
-    expect(await fetchRandomPhotos(PROXY, 4, fetchFn, 'q', 'landscape', { source: 'single' })).toBeUndefined();
+    expect(await fetchRandomPhotos(PROXY, 4, fetchFn, 'q', 'landscape', { ...CTX, caller: 'surprise' })).toBeUndefined();
     expect(getPageCount('search:q|landscape')).toBe(166);
     expect(umamiTrack).toHaveBeenCalledWith('image-fetch-http-error', { status: 403, source: 'single' });
 });
 it('passes the abort signal to every fetch, including the retry', async () => { /* empty deep page then full; both calls' init.signal === controller.signal */ });
 it('still loads photos when localStorage throws', async () => { /* getItem/setItem throw → page 1, photos returned */ });
 ```
-(Mirror how `unsplash.test.ts` already observes `track` for the analytics assertion.)
+Plus in `umami.test.ts`: `it('forwards image-page-empty with the typed payload', …)` mirroring the `image-pool-fallback` test.
 
 - [ ] **Step 2: Run** the test file — Expected: FAIL (`fetchRandomPhotos` not exported).
-- [ ] **Step 3: Implement** `fetchRandomPhotos` and `src/images/shuffled.ts`; export `fetchRandomPhotos` and `FetchRandomPhotosOptions` from `src/images/index.ts`.
-- [ ] **Step 4: Run** the test file plus `src/images/offline-stash.test.ts` — Expected: PASS.
+- [ ] **Step 3: Implement** `fetchRandomPhotos`, `src/images/shuffled.ts`, and the `umami.ts` event type + overload + doc; export `fetchRandomPhotos`, `PhotoRequestContext` and `FetchRandomPhotosOptions` from `src/images/index.ts`.
+- [ ] **Step 4: Run** the test file plus `src/images/offline-stash.test.ts` and `src/analytics/umami.test.ts` — Expected: PASS.
 - [ ] **Step 5: Commit** `feat(images): fetch random photos from a random result page`
 
 ### Task 4: Switch the consumers and remove the client's random-photo code
 
 **Files:**
-- Modify: `src/app/fetch-candidate-images.ts`, `src/app/resolve-image.ts`, `src/images/offline-stash.ts`, `src/images/unsplash.ts`, `src/images/index.ts`, `src/analytics/umami.ts` (doc comments ~630-690)
-- Test: `src/app/fetch-candidate-images.test.ts`, `src/app/resolve-image.test.ts`, `src/images/offline-stash.test.ts`, `src/images/unsplash.test.ts`
+- Modify: `src/app/fetch-candidate-images.ts`, `src/app/resolve-image.ts`, `src/app/download-offline-images.ts`, `src/images/offline-stash.ts`, `src/images/unsplash.ts`, `src/images/index.ts`, `src/analytics/umami.ts` (doc comments ~630-690, `ImagePoolFallbackData.cause`)
+- Test: `src/app/fetch-candidate-images.test.ts`, `src/app/resolve-image.test.ts`, `src/app/download-offline-images.test.ts` (if present), `src/images/offline-stash.test.ts`, `src/images/unsplash.test.ts`
 
 **Interfaces:**
 - Consumes: Task 3 `fetchRandomPhotos`.
 - Produces: no new exports. Removed: `fetchRandomImage`, `fetchRandomImages`, `buildRandomPhotoUrl`, `PROXY_RANDOM_PATH`.
 
-Call mapping:
-- Picker: `fetchRandomPhotos(proxyBaseUrl, CANDIDATE_IMAGE_COUNT, fetchFn, query, orientation, { source: 'batch' })`; `undefined` or `[]` → existing `'no-candidates'` stash path.
-- Surprise me: `fetchRandomPhotos(proxyBaseUrl, 1, fetch, query, orientation, { signal, source: 'single' })`; `undefined` → pool fallback `cause: 'http-error'`; `[]` → pool fallback `cause: 'blocked'`; else `toDisplayImage(photos[0])`.
-- Offline stash: `fetchRandomPhotos(proxyBaseUrl, OFFLINE_STASH_COUNT, fetchFn, query, orientation, { source: 'batch' })`; `undefined` or `[]` → existing `'batch-empty'`.
+Call mapping (`ctx = { caller, imageCategory, vibrant, custom: Boolean(queryOverride?.trim()) }`; `src/app/download-offline-images.ts` already holds category, vibrant and override, so thread a `context: PhotoRequestContext` through `DownloadOfflineImagesOptions`):
+- Picker: `fetchRandomPhotos(proxyBaseUrl, CANDIDATE_IMAGE_COUNT, fetchFn, query, orientation, { ...ctx, caller: 'picker' })`; `undefined`, `'blocked'` or `[]` → existing `'no-candidates'` stash path.
+- Surprise me: `fetchRandomPhotos(proxyBaseUrl, 1, fetch, query, orientation, { ...ctx, caller: 'surprise' }, { signal })`; `undefined` → pool fallback `cause: 'http-error'`; `'blocked'` → `cause: 'blocked'`; `[]` → `cause: 'empty'`; else `toDisplayImage(photos[0])`.
+- Offline stash: `fetchRandomPhotos(proxyBaseUrl, OFFLINE_STASH_COUNT, fetchFn, query, orientation, { ...ctx, caller: 'stash' })`; `undefined`, `'blocked'` or `[]` → existing `'batch-empty'`.
 
 - [ ] **Step 1: Update the consumer tests first.** Re-point each `vi.mock` of `fetchRandomImages`/`fetchRandomImage` at `fetchRandomPhotos`, and assert the call arguments above, e.g. in `resolve-image.test.ts`:
 
 ```ts
-expect(fetchRandomPhotos).toHaveBeenCalledWith(PROXY, 1, fetch, 'nature', 'landscape', { signal, source: 'single' });
-it('falls back to the pool with cause blocked when the page held no usable photo', /* mock [] → track('image-pool-fallback', expect.objectContaining({ cause: 'blocked' })) */);
+expect(fetchRandomPhotos).toHaveBeenCalledWith(PROXY, 1, fetch, 'nature', 'landscape',
+    { caller: 'surprise', imageCategory: 'nature', vibrant: false, custom: false }, { signal });
+it.each([['blocked', 'blocked'], [[], 'empty']] as const)(
+    'falls back to the pool with the matching cause when fetchRandomPhotos returns %o',
+    /* → track('image-pool-fallback', expect.objectContaining({ cause })) */);
+it('marks a player-typed query as custom', /* queryOverride 'lighthouse' → context.custom true */);
 ```
 Delete the `unsplash.test.ts` tests for the removed functions, including "emits exactly the parameters the Worker forwards" for `/random` (Task 2's URL test replaces it).
 - [ ] **Step 2: Run** `/Users/bot/homebrew/bin/fnm exec npm test -- src/app src/images` — Expected: FAIL in the three consumer test files.
-- [ ] **Step 3: Implement** the call mapping; delete the removed functions and exports. In `umami.ts`: replace the `fetchRandomImage` mention (~line 633) with `fetchRandomPhotos`; `ImageFetchHttpErrorData` "random-photo request" → "photo request"; `ImagePoolFallbackData`: "a single random-photo request" → "a single photo request", and `'blocked'` → "the fetched page held no usable photo (every photo on it by a blocked photographer (#568), or empty even after one retry)". Change nothing else there.
+- [ ] **Step 3: Implement** the call mapping; delete the removed functions and exports. In `umami.ts`: replace the `fetchRandomImage` mention (~line 633) with `fetchRandomPhotos`; `ImageFetchHttpErrorData` "random-photo request" → "photo request"; `ImagePoolFallbackData`: "a single random-photo request" → "a single photo request"; `'blocked'` → "the fetched page had photos but every one was by a blocked photographer (#568)"; add `'empty'` to the `cause` union, documented as "the fetched page was empty, even after the one retry; an `image-page-empty` row with `caller: 'surprise'` accompanies it unless the empty page was page 1". Change nothing else there.
 - [ ] **Step 4: Run** `/Users/bot/homebrew/bin/fnm exec npm test && /Users/bot/homebrew/bin/fnm exec npm run lint && /Users/bot/homebrew/bin/fnm exec npm run build` — Expected: all PASS, lint clean, build succeeds; `git grep -n "fetchRandomImage\|buildRandomPhotoUrl\|PROXY_RANDOM_PATH" src` prints nothing.
 - [ ] **Step 5: Commit** `feat(images): draw picker, Surprise me and stash photos from random pages`
 
