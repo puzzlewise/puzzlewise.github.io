@@ -716,8 +716,8 @@ export interface ImagePoolFallbackData {
  * counts in memory for the rest of that load, so only the first draw per
  * source falls back to page 1; on the next load the first draw does again.
  * `errorName` is the thrown error's `name` (`'QuotaExceededError'` for full
- * storage, often alongside `save-compressed`/`save-failed` rows) or
- * `'unknown'`.
+ * storage, often alongside `save-compressed`/`save-failed` rows), or the
+ * thrown value's type name when it is not an `Error`.
  */
 export interface ImagePageCountsUnsavedData {
     errorName: string;
