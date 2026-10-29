@@ -1,6 +1,5 @@
 import type { GameState } from '../model/types.js';
 import { gameStateToPayload, buildShareUrl } from '../sharing/index.js';
-import { shareBaseUrl } from '../move/move-config.js';
 import { track, sanitizeErrorReason } from '../analytics/index.js';
 import { createDismissableOverlay } from './dismissable-overlay.js';
 import { sharePuzzle } from './share.js';
@@ -61,7 +60,7 @@ export function showCompletionOverlay(
             includeProgress: false,
             backgroundColorId: loadColorPreference(),
         });
-        const url = buildShareUrl(shareBaseUrl(), payload);
+        const url = buildShareUrl(window.location.href, payload);
         void sharePuzzle({
             url,
             title: 'Puzzle',

@@ -38,7 +38,6 @@ import {
     readDistinctId,
     writeDistinctId,
 } from '../analytics/distinct-id.js';
-import { shareBaseUrl } from '../move/move-config.js';
 import { track } from '../analytics/index.js';
 import type { InfoModalClosedData, SettingChangedData } from '../analytics/index.js';
 
@@ -799,7 +798,7 @@ export function createInfoModal(options: InfoModalOptions): void {
     content.tabIndex = -1;
 
     if (options.state) {
-        attachShareSection(content, options.state, shareBaseUrl());
+        attachShareSection(content, options.state, window.location.href);
     }
 
     content.appendChild(buildHowToPlaySection());
