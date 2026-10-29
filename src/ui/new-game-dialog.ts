@@ -6,10 +6,15 @@
 import { PUZZLE_SIZE_OPTIONS } from '../game/puzzle-sizes.js';
 import { createCutStylePicker } from './cut-style-picker.js';
 import { cutStyleNeedsTracedTabs, DEFAULT_CUT_STYLE_ID, getVisibleCutStyleOptions, isDevDeploy } from '../game/cut-styles.js';
-import { IMAGE_CATEGORY_OPTIONS } from '../game/image-categories.js';
+import { IMAGE_CATEGORY_OPTIONS, isCustomQuery } from '../game/image-categories.js';
 import { createDismissableOverlay } from './dismissable-overlay.js';
-import { createImagePicker, type ImagePicker, type NewGameImageChoice } from './image-picker.js';
-import type { CandidateImage } from '../images/index.js';
+import {
+    createImagePicker,
+    type CandidateTrigger,
+    type ImagePicker,
+    type NewGameImageChoice,
+} from './image-picker.js';
+import type { CandidateFetchResult, CandidateImage } from '../images/index.js';
 
 export interface ComposableSliderConfig {
     baseCut: 'sine' | 'triangular';
@@ -63,8 +68,9 @@ export interface NewGameDialogOptions {
     fetchImageCandidates?: (
         imageCategory: string,
         vibrant: boolean,
-        queryOverride?: string,
-    ) => Promise<CandidateImage[] | null>;
+        queryOverride: string | undefined,
+        trigger: CandidateTrigger,
+    ) => Promise<CandidateFetchResult>;
     /**
      * Absent when no image proxy is configured or the Cache API is missing —
      * the offline-download row is hidden.
@@ -73,7 +79,8 @@ export interface NewGameDialogOptions {
     /** Called when the player picks an image (photo tile, Surprise me, or Blank puzzle). */
     onSelect: (selection: NewGameSelection) => void;
     /** Called when the dialog is dismissed without selecting. */
-    onCancel?: () => void;
+    onCancel?: (values: { imageCategory: string; vibrant: boolean }) => void;
+    analytics?: NewGameDialogAnalytics;
     /**
      * Fires when the effective tab generator becomes `'traced'`, so the host can
      * preload the traced-tab lazy chunk. Idempotent — safe to call repeatedly.
@@ -103,6 +110,14 @@ interface ComposableSection {
     setVisible(visible: boolean): void;
     /** Currently picked tab generator, regardless of section visibility. */
     getSelectedTabGenerator(): ComposableSliderConfig['tabGenerator'];
+}
+
+export interface NewGameDialogAnalytics {
+    optionChanged(setting: 'category' | 'vibrant' | 'query', from: string, to: string): void;
+    thumbnailLoaded(): void;
+    thumbnailFailed(slot: number, candidate: CandidateImage, imageCategory: string): void;
+    creditOpened(candidate: CandidateImage): void;
+    offlineDownloadUsed(): void;
 }
 
 interface ImageOptionsValues {
@@ -196,6 +211,7 @@ function appendOfflineImagesRow(
     section: HTMLElement,
     offlineImages: OfflineImagesOptions,
     getValues: () => ImageOptionsValues,
+    analytics: NewGameDialogAnalytics | undefined,
 ): void {
     const row = document.createElement('div');
     row.className = 'dialog-row';
@@ -221,6 +237,7 @@ function appendOfflineImagesRow(
     showCount(offlineImages.count());
 
     button.addEventListener('click', () => {
+        analytics?.offlineDownloadUsed();
         button.disabled = true;
         status.textContent = 'Saving…';
         const { imageCategory, vibrant, queryOverride } = getValues();
@@ -256,6 +273,7 @@ function buildImageOptionsSection(args: {
     savedVibrant?: boolean;
     offlineImages?: OfflineImagesOptions;
     onChange: () => void;
+    analytics?: NewGameDialogAnalytics;
 }): ImageOptionsSection {
     const section = document.createElement('div');
     section.className = 'image-options-section';
@@ -313,8 +331,25 @@ function buildImageOptionsSection(args: {
     vibrantRow.appendChild(vibrantCheckbox);
     section.appendChild(vibrantRow);
 
-    categorySelect.addEventListener('change', args.onChange);
-    vibrantCheckbox.addEventListener('change', args.onChange);
+    let lastCategory = categorySelect.value;
+    categorySelect.addEventListener('change', () => {
+        args.analytics?.optionChanged('category', lastCategory, categorySelect.value);
+        lastCategory = categorySelect.value;
+        args.onChange();
+    });
+    vibrantCheckbox.addEventListener('change', () => {
+        args.analytics?.optionChanged('vibrant', String(!vibrantCheckbox.checked), String(vibrantCheckbox.checked));
+        args.onChange();
+    });
+    if (queryOverrideInput) {
+        const input = queryOverrideInput;
+        const queryState = (): string => (isCustomQuery(input.value) ? 'custom' : 'none');
+        let lastQuery = queryState();
+        input.addEventListener('change', () => {
+            args.analytics?.optionChanged('query', lastQuery, queryState());
+            lastQuery = queryState();
+        });
+    }
 
     const getValues = (): ImageOptionsValues => {
         const values: ImageOptionsValues = {
@@ -327,7 +362,7 @@ function buildImageOptionsSection(args: {
     };
 
     if (args.offlineImages) {
-        appendOfflineImagesRow(section, args.offlineImages, getValues);
+        appendOfflineImagesRow(section, args.offlineImages, getValues, args.analytics);
     }
 
     return { element: section, getValues };
@@ -601,11 +636,22 @@ export function createNewGameDialog(options: NewGameDialogOptions): () => void {
         currentCutStyleId = DEFAULT_CUT_STYLE_ID;
     }
 
-    // onCancel fires only on Escape/backdrop dismissal, not on dismiss() after a pick.
+    let imagePicker: ImagePicker | undefined;
+    const imageOptions = buildImageOptionsSection({
+        savedImageCategory: options.savedImageCategory,
+        savedVibrant: options.savedVibrant,
+        offlineImages: options.offlineImages,
+        onChange: () => imagePicker?.refresh('options'),
+        analytics: options.analytics,
+    });
+
     const { overlay, dismiss } = createDismissableOverlay({
         container,
         className: 'size-picker-overlay',
-        onDismiss: onCancel,
+        onDismiss: onCancel && (() => {
+            const { imageCategory, vibrant } = imageOptions.getValues();
+            onCancel({ imageCategory, vibrant });
+        }),
     });
 
     const dialog = document.createElement('div');
@@ -617,8 +663,6 @@ export function createNewGameDialog(options: NewGameDialogOptions): () => void {
     title.className = 'size-picker-title';
     title.textContent = 'New Game';
     dialog.appendChild(title);
-
-    let imagePicker: ImagePicker | undefined;
 
     const fractalSection = buildBorderlessOptionsSection({
         saved: options.savedFractalConfig,
@@ -634,12 +678,6 @@ export function createNewGameDialog(options: NewGameDialogOptions): () => void {
         onTabGeneratorChange: (value) => {
             if (value === 'traced') options.onPreloadTracedTabs?.();
         },
-    });
-    const imageOptionsSection = buildImageOptionsSection({
-        savedImageCategory: options.savedImageCategory,
-        savedVibrant: options.savedVibrant,
-        offlineImages: options.offlineImages,
-        onChange: () => imagePicker?.refresh(),
     });
 
     // Preloading here keeps the traced-tab fetch off startNewGame's critical path.
@@ -661,11 +699,16 @@ export function createNewGameDialog(options: NewGameDialogOptions): () => void {
 
     imagePicker = createImagePicker({
         fetchCandidates: options.fetchImageCandidates
-            ? () => {
-                const { imageCategory, vibrant, queryOverride } = imageOptionsSection.getValues();
-                return options.fetchImageCandidates!(imageCategory, vibrant, queryOverride);
+            ? (trigger) => {
+                const { imageCategory, vibrant, queryOverride } = imageOptions.getValues();
+                return options.fetchImageCandidates!(imageCategory, vibrant, queryOverride, trigger);
             }
             : undefined,
+        onThumbnailLoad: () => options.analytics?.thumbnailLoaded(),
+        onThumbnailError: (slot, candidate) => options.analytics?.thumbnailFailed(
+            slot, candidate, imageOptions.getValues().imageCategory,
+        ),
+        onCreditOpen: (candidate) => options.analytics?.creditOpened(candidate),
         onPick: (imageChoice) => {
             dismiss();
             onSelect({
@@ -682,7 +725,7 @@ export function createNewGameDialog(options: NewGameDialogOptions): () => void {
                     : undefined,
                 rotationEnabled: rotationCheckbox.checked,
                 imageChoice,
-                ...imageOptionsSection.getValues(),
+                ...imageOptions.getValues(),
             });
         },
     });
@@ -722,7 +765,7 @@ export function createNewGameDialog(options: NewGameDialogOptions): () => void {
     settingsGroup.appendChild(wavySection.element);
     settingsGroup.appendChild(composableSection.element);
     settingsGroup.appendChild(sizeRow.element);
-    settingsGroup.appendChild(imageOptionsSection.element);
+    settingsGroup.appendChild(imageOptions.element);
 
     const startGroup = document.createElement('div');
     startGroup.className = 'dialog-group dialog-group--start';

@@ -91,9 +91,7 @@ export function initErrorTracking(): () => void {
         report('error', event.error, event.message);
     };
 
-    // A CSP refusal has its own event, not an `error` event. Without this,
-    // `index.html`'s `img-src` blocking an image is invisible — the SVG
-    // `<image>` has no error handler, so pieces render transparent.
+    // A CSP refusal has its own event, not an `error` event.
     const onCspViolation = (event: SecurityPolicyViolationEvent): void => {
         // Keyed on the directive, not the URI, so a page blocking one image
         // per piece can't exhaust the session budget.

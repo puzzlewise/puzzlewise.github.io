@@ -55,6 +55,7 @@ export {
 export { createNewGameDialog } from './new-game-dialog.js';
 export type {
     NewGameDialogOptions,
+    NewGameDialogAnalytics,
     NewGameSelection,
     FractalDialogConfig,
     WavyDialogConfig,

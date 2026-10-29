@@ -54,5 +54,11 @@ export interface Renderer {
      */
     pieceIdAtPoint(point: Point): number | null;
 
+    /**
+     * Settles when the photo of the most recently rendered puzzle has loaded
+     * or failed. Re-rendering the same puzzle keeps its earlier result.
+     */
+    photoSettled(): Promise<'loaded' | 'failed'>;
+
     destroy(): void;
 }

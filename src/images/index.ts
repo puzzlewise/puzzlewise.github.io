@@ -13,4 +13,9 @@ export type {
     FetchRandomPhotosOptions,
 } from './unsplash.js';
 export { CANDIDATE_COUNT, toDisplayImage } from './unsplash-display-image.js';
-export type { DisplayImage, CandidateImage } from './unsplash-display-image.js';
+export type {
+    DisplayImage,
+    CandidateImage,
+    CandidateCause,
+    CandidateFetchResult,
+} from './unsplash-display-image.js';

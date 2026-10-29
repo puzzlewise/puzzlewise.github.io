@@ -21,7 +21,7 @@ import {
 import type { GameState, PieceGroup } from '../model/types.js';
 import type { MergeResult } from '../game/group-merging.js';
 import type { SharePayload } from '../sharing/index.js';
-import { makeGameState, makeRectPiece } from '../test-helpers/fixtures.js';
+import { makeGameState, makeSavedGameState, makeRectPiece } from '../test-helpers/fixtures.js';
 
 // `virtual:pwa-register` exists only at build time, so the real module can't
 // load under Vitest (see `pwa/register.ts`).
@@ -409,6 +409,65 @@ describe('bootstrap', () => {
             hasGameSpy.mockRestore();
             currentSpy.mockRestore();
         }
+    });
+
+    it("reports the installed puzzle's photo load for a fresh, a shared and a resumed puzzle", async () => {
+        bootstrap(root);
+        const { start } = vi.mocked(installDevHooks).mock.calls[0][0];
+        void start({ cols: 2, rows: 2 }, {});
+        const startNewGameDeps = vi.mocked(startNewGame).mock.calls.at(-1)![2];
+        const bootDeps = vi.mocked(runBootSequence).mock.calls[0][0];
+        const state = { ...makeSavedGameState(), imageUrl: 'https://images.unsplash.com/photo-1' };
+        createdSession().install(state);
+        vi.mocked(track).mockClear();
+
+        startNewGameDeps.onGameAnalytics({ source: 'fresh', imagePhotoId: 'abc123' } as NewGameData, state);
+        root.querySelector('image')!.dispatchEvent(new Event('load'));
+        await Promise.resolve();
+        startNewGameDeps.onGameAnalytics({ source: 'shared' } as NewGameData, state);
+        await Promise.resolve();
+        bootDeps.onResumed(state);
+        await Promise.resolve();
+        await Promise.resolve();
+
+        const calls = vi.mocked(track).mock.calls as unknown as Array<[string, Record<string, unknown>]>;
+        expect(calls.filter(([name]) => name === 'puzzle-image-loaded').map(([, data]) => data)).toEqual([
+            expect.objectContaining({ outcome: 'loaded', trigger: 'new', imagePhotoId: 'abc123' }),
+            expect.objectContaining({ outcome: 'loaded', trigger: 'shared' }),
+            expect.objectContaining({ outcome: 'loaded', trigger: 'resume' }),
+        ]);
+    });
+
+    it("reports a puzzle credit tap with the game's in-memory photo id", () => {
+        bootstrap(root);
+        const { start } = vi.mocked(installDevHooks).mock.calls[0][0];
+        void start({ cols: 2, rows: 2 }, {});
+        const startNewGameDeps = vi.mocked(startNewGame).mock.calls.at(-1)![2];
+        const state = makeGameState({
+            attribution: { photographerName: 'Ada', photographerUrl: 'https://unsplash.com/@ada', photoUrl: 'https://unsplash.com/photos/abc123' },
+        });
+        createdSession().install(state);
+        startNewGameDeps.onGameAnalytics({ source: 'fresh', imagePhotoId: 'abc123' } as NewGameData, state);
+        vi.mocked(track).mockClear();
+
+        root.querySelectorAll<HTMLAnchorElement>('.image-attribution a')[1]
+            .dispatchEvent(new MouseEvent('click', { cancelable: true }));
+
+        expect(vi.mocked(track)).toHaveBeenCalledWith('photo-credit-opened', { where: 'puzzle', link: 'photo', photoId: 'abc123' });
+    });
+
+    it("abandons the previous puzzle's pending photo when another puzzle installs", () => {
+        bootstrap(root);
+        const bootDeps = vi.mocked(runBootSequence).mock.calls[0][0];
+        const { onInstalled } = vi.mocked(createGameSession).mock.calls[0][0];
+        bootDeps.onResumed(makeGameState({ imageUrl: 'https://images.unsplash.com/photo-1' }));
+        vi.mocked(track).mockClear();
+
+        onInstalled(makeGameState());
+
+        const calls = vi.mocked(track).mock.calls as unknown as Array<[string, { outcome?: string; trigger?: string }]>;
+        expect(calls.filter(([name]) => name === 'puzzle-image-loaded').map(([, data]) => data))
+            .toEqual([expect.objectContaining({ outcome: 'abandoned', trigger: 'resume' })]);
     });
 
     it('keeps the background-color control between deselect and Info', () => {

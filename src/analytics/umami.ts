@@ -223,6 +223,13 @@ export interface NewGameData {
      * which forces page 1. Present exactly when `imagePage` is.
      */
     imagePagesKnown?: number;
+    /**
+     * Fresh unsplash games whose photo came with a download location (page
+     * draws, backup pool, offline stash): the Unsplash photo id, for counting
+     * repeats. Absent for shared, bundled and blank puzzles. Carried onto
+     * `puzzle-completed` with the other fields here.
+     */
+    imagePhotoId?: string;
     includesProgress?: boolean;
     recipientHadSavedState?: boolean;
     /**
@@ -555,12 +562,10 @@ export interface UnhandledErrorData {
  * under `index.html`'s Content-Security-Policy.
  *
  * The policy is `img-src` only, so in practice this fires for a blocked
- * image. It exists because a wrong `img-src` is otherwise **invisible**: the
- * SVG `<image>` the puzzle renders through carries no `error` handler, and
- * `initErrorTracking`'s `error` listener deliberately omits the capture
- * phase, so a blocked image produces transparent pieces while
- * `new-game-started` still reports a healthy `imageSource`. Nothing else in
- * the app would notice.
+ * image. It names the cause: `initErrorTracking`'s `error` listener
+ * deliberately omits the capture phase, so a blocked image produces
+ * transparent pieces while `new-game-started` still reports a healthy
+ * `imageSource`.
  *
  * The failure this is for is drift the repo cannot see: the policy names
  * `https://*.unsplash.com`, so an Unsplash CDN move to another domain blocks
@@ -681,6 +686,146 @@ export interface ImageFetchHttpErrorData {
      */
     sourceKind: 'search' | 'topic';
     topic: string;
+}
+
+/**
+ * Data attached to `new-game-dialog-opened` — the New Game dialog opened.
+ * `hasPuzzle`/`puzzleCompleted` describe the puzzle on screen at that moment;
+ * `imageCategory`/`vibrant` are the dialog's starting values; `picker` is
+ * whether thumbnails are available (a photo proxy is configured);
+ * `offlineDownload` is whether the offline-download row is offered.
+ * `new-game-dialog-opened` minus `new-game-dialog-closed` counts visits that
+ * ended with the page unloading.
+ */
+export interface NewGameDialogOpenedData {
+    hasPuzzle: boolean;
+    puzzleCompleted: boolean;
+    imageCategory: string;
+    vibrant: boolean;
+    picker: boolean;
+    offlineDownload: boolean;
+}
+
+/**
+ * Data attached to `image-candidates-loaded` — one thumbnail batch settled.
+ * `trigger` is what started it: the dialog opening, ↻, or a Picture Type /
+ * Vibrant change. `outcome`: `'shown'` (tiles filled), `'empty'` (no photos:
+ * `cause` `'blocked'` or `'empty-page'`), `'error'` (`cause` `'threw'` or
+ * `'http-error'`), `'superseded'` (a newer batch started before this one
+ * settled, so it was never displayed) or `'abandoned'` (the dialog closed
+ * first). Superseded and abandoned batches are still sent when they settle,
+ * so they can arrive after `new-game-dialog-closed`. `cause` is why no network
+ * photos came back (`'none'` when they did); `source: 'stash'` means the
+ * offline stash served the batch after that failure. `ms` runs from the
+ * batch starting to it settling. `imagePage`/`imagePagesKnown` are the page
+ * requested from Unsplash and the page count known before it;
+ * `sourceKind`/`topic` say what was requested: a search, or a topic and its
+ * slug. All four describe the request even when it failed or the stash then
+ * served the batch (0, 0, `'none'` and `''` only when no page was requested).
+ * `photoIds` lists the Unsplash ids offered, comma-separated in tile order
+ * (`''` when none).
+ * `custom` marks a dev query, whose text is never sent.
+ */
+export interface ImageCandidatesLoadedData {
+    trigger: 'open' | 'refresh' | 'options';
+    outcome: 'shown' | 'empty' | 'error' | 'superseded' | 'abandoned';
+    cause: 'none' | 'http-error' | 'blocked' | 'empty-page' | 'threw';
+    source: 'unsplash' | 'stash' | 'none';
+    count: number;
+    ms: number;
+    imageCategory: string;
+    vibrant: boolean;
+    custom: boolean;
+    orientation: Orientation;
+    imagePage: number;
+    imagePagesKnown: number;
+    sourceKind: 'search' | 'topic' | 'none';
+    topic: string;
+    photoIds: string;
+}
+
+/**
+ * Data attached to `image-option-changed` — a New Game dialog image option
+ * changed. `from`/`to` are category ids for `category`, `'true'`/`'false'`
+ * for `vibrant`, and `'custom'`/`'none'` for the dev `query` (its text is
+ * never sent).
+ */
+export interface ImageOptionChangedData {
+    setting: 'category' | 'vibrant' | 'query';
+    from: string;
+    to: string;
+}
+
+/**
+ * Data attached to `image-thumbnail-failed` — a picker thumbnail image failed
+ * to load (a CDN failure; the tile stays tappable). `slot` is the 0-based
+ * tile; `photoId` is `''` when the candidate had no Unsplash id.
+ */
+export interface ImageThumbnailFailedData {
+    slot: number;
+    photoId: string;
+    imageCategory: string;
+}
+
+/**
+ * Data attached to `new-game-dialog-closed` — one New Game dialog visit
+ * ended. `outcome` is the tile, Surprise me, Blank puzzle, or a dismissal
+ * (`'cancel'`). `firstThumbnailsMs` runs from opening to the first batch
+ * shown, `firstThumbnailLoadedMs` to the first thumbnail image finishing its
+ * download (each -1 if it never happened); `pickedSlot` is the 0-based tile
+ * (-1 unless `'photo'`). Counts are per visit: `batches` includes batches still loading
+ * at close; `thumbnailsOffered` counts tiles filled with a candidate,
+ * `thumbnailsLoaded`/`thumbnailsFailed` the thumbnail images that finished or
+ * failed. `imageCategory`/`vibrant` are the values at close.
+ */
+export interface NewGameDialogClosedData {
+    outcome: 'photo' | 'surprise' | 'blank' | 'cancel';
+    openMs: number;
+    firstThumbnailsMs: number;
+    firstThumbnailLoadedMs: number;
+    pickedSlot: number;
+    refreshes: number;
+    optionChanges: number;
+    batches: number;
+    thumbnailsOffered: number;
+    thumbnailsLoaded: number;
+    thumbnailsFailed: number;
+    offlineDownloadUsed: boolean;
+    imageCategory: string;
+    vibrant: boolean;
+}
+
+/**
+ * Data attached to `photo-credit-opened` — a tap on a photo credit link, in
+ * the picker (its photographer link) or under a puzzle (`'photographer'` or
+ * `'photo'`, the Unsplash page). `photoId` is `''` when unknown.
+ */
+export interface PhotoCreditOpenedData {
+    where: 'picker' | 'puzzle';
+    link: 'photographer' | 'photo';
+    photoId: string;
+}
+
+/**
+ * Data attached to `puzzle-image-loaded` — the photo behind an installed
+ * puzzle settled, once per installed puzzle with a photo (blank puzzles send
+ * nothing). `trigger` is how the puzzle was installed: a fresh game, a resume
+ * from the save, or a shared link. `ms` runs from install to settle; a cached
+ * photo may settle almost at once. `outcome: 'abandoned'` means another
+ * puzzle was installed before this one's photo settled, so it never counts as
+ * a failure; a shared puzzle rolled back during its own install sends
+ * nothing. A photo still loading when the page unloads sends no row either,
+ * so `failed / (loaded + failed)` is a lower bound. `imageSource` is the same
+ * classification as `new-game-started`. `imagePhotoId` is absent for shared,
+ * bundled and blank puzzles, and for resumes of puzzles whose saved context
+ * has none.
+ */
+export interface PuzzleImageLoadedData {
+    outcome: 'loaded' | 'failed' | 'abandoned';
+    ms: number;
+    trigger: 'new' | 'resume' | 'shared';
+    imageSource: string;
+    imagePhotoId?: string;
 }
 
 /**
@@ -1707,6 +1852,13 @@ export function track(name: 'share-link-rescue-attempted', data: ShareLinkRescue
 export function track(name: 'share-link-rescue-result', data: ShareLinkRescueResultData): void;
 export function track(name: 'generation-canceled', data: GenerationCanceledData): void;
 export function track(name: 'image-pool-fallback', data: ImagePoolFallbackData): void;
+export function track(name: 'new-game-dialog-opened', data: NewGameDialogOpenedData): void;
+export function track(name: 'image-candidates-loaded', data: ImageCandidatesLoadedData): void;
+export function track(name: 'image-option-changed', data: ImageOptionChangedData): void;
+export function track(name: 'image-thumbnail-failed', data: ImageThumbnailFailedData): void;
+export function track(name: 'new-game-dialog-closed', data: NewGameDialogClosedData): void;
+export function track(name: 'photo-credit-opened', data: PhotoCreditOpenedData): void;
+export function track(name: 'puzzle-image-loaded', data: PuzzleImageLoadedData): void;
 export function track(name: 'image-page-empty', data: ImagePageEmptyData): void;
 export function track(name: 'image-page-counts-unsaved', data: ImagePageCountsUnsavedData): void;
 export function track(name: 'image-stash-fallback', data: ImageStashFallbackData): void;

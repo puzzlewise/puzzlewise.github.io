@@ -13,6 +13,16 @@ function pickSurprise(container: HTMLElement): void {
         .click();
 }
 
+function makeAnalytics() {
+    return {
+        optionChanged: vi.fn(),
+        thumbnailLoaded: vi.fn(),
+        thumbnailFailed: vi.fn(),
+        creditOpened: vi.fn(),
+        offlineDownloadUsed: vi.fn(),
+    };
+}
+
 describe('createNewGameDialog', () => {
     let container: HTMLElement;
 
@@ -394,7 +404,7 @@ describe('createNewGameDialog', () => {
             container,
             selectedSizeId: '48',
             onSelect,
-            fetchImageCandidates: vi.fn().mockResolvedValue([candidate]),
+            fetchImageCandidates: vi.fn().mockResolvedValue({ candidates: [candidate], cause: 'none', source: 'unsplash' }),
         });
         await Promise.resolve();
         await Promise.resolve();
@@ -402,13 +412,13 @@ describe('createNewGameDialog', () => {
         container.querySelector<HTMLButtonElement>('[data-testid="image-picker-tile"]')!.click();
 
         expect(onSelect).toHaveBeenCalledWith(
-            expect.objectContaining({ imageChoice: { kind: 'photo', photo: candidate } }),
+            expect.objectContaining({ imageChoice: { kind: 'photo', photo: candidate, slot: 0 } }),
         );
         expect(container.querySelector('.size-picker-overlay')).toBeNull();
     });
 
     it('re-fetches candidates when the category or vibrant option changes', () => {
-        const fetchImageCandidates = vi.fn().mockResolvedValue(null);
+        const fetchImageCandidates = vi.fn().mockResolvedValue({ candidates: [], cause: 'http-error', source: 'none' });
         createNewGameDialog({
             container,
             selectedSizeId: '48',
@@ -416,7 +426,7 @@ describe('createNewGameDialog', () => {
             fetchImageCandidates,
         });
         expect(fetchImageCandidates).toHaveBeenCalledTimes(1);
-        expect(fetchImageCandidates).toHaveBeenLastCalledWith('any', false, undefined);
+        expect(fetchImageCandidates).toHaveBeenLastCalledWith('any', false, undefined, 'open');
 
         const categorySelect = container.querySelector<HTMLSelectElement>(
             '.image-options-section select',
@@ -424,7 +434,7 @@ describe('createNewGameDialog', () => {
         categorySelect.value = 'nature';
         categorySelect.dispatchEvent(new Event('change'));
         expect(fetchImageCandidates).toHaveBeenCalledTimes(2);
-        expect(fetchImageCandidates).toHaveBeenLastCalledWith('nature', false, undefined);
+        expect(fetchImageCandidates).toHaveBeenLastCalledWith('nature', false, undefined, 'options');
 
         const vibrant = container.querySelector<HTMLInputElement>(
             '.image-options-section input[type="checkbox"]',
@@ -432,7 +442,71 @@ describe('createNewGameDialog', () => {
         vibrant.checked = true;
         vibrant.dispatchEvent(new Event('change'));
         expect(fetchImageCandidates).toHaveBeenCalledTimes(3);
-        expect(fetchImageCandidates).toHaveBeenLastCalledWith('nature', true, undefined);
+        expect(fetchImageCandidates).toHaveBeenLastCalledWith('nature', true, undefined, 'options');
+    });
+
+    it('reports Picture Type and Vibrant changes', () => {
+        const analytics = makeAnalytics();
+        createNewGameDialog({
+            container,
+            selectedSizeId: '48',
+            onSelect: vi.fn(),
+            fetchImageCandidates: vi.fn().mockResolvedValue({ candidates: [], cause: 'http-error', source: 'none' }),
+            analytics,
+        });
+
+        const categorySelect = container.querySelector<HTMLSelectElement>('.image-options-section select')!;
+        categorySelect.value = 'face';
+        categorySelect.dispatchEvent(new Event('change'));
+        const vibrant = container.querySelector<HTMLInputElement>('.image-options-section input[type="checkbox"]')!;
+        vibrant.checked = true;
+        vibrant.dispatchEvent(new Event('change'));
+
+        expect(analytics.optionChanged.mock.calls).toEqual([
+            ['category', 'any', 'face'],
+            ['vibrant', 'false', 'true'],
+        ]);
+    });
+
+    it("reports the dev query only as 'custom'/'none'", () => {
+        const analytics = makeAnalytics();
+        createNewGameDialog({ container, selectedSizeId: '48', onSelect: vi.fn(), analytics });
+
+        const override = container.querySelector<HTMLInputElement>('[data-testid="image-query-override"]')!;
+        override.value = 'red bikes';
+        override.dispatchEvent(new Event('change'));
+        override.value = '';
+        override.dispatchEvent(new Event('change'));
+
+        expect(analytics.optionChanged.mock.calls).toEqual([
+            ['query', 'none', 'custom'],
+            ['query', 'custom', 'none'],
+        ]);
+        expect(JSON.stringify(analytics.optionChanged.mock.calls)).not.toContain('red bikes');
+    });
+
+    it('reports an offline download tap', () => {
+        const analytics = makeAnalytics();
+        createNewGameDialog({
+            container,
+            selectedSizeId: '48',
+            onSelect: vi.fn(),
+            offlineImages: { count: () => 0, download: vi.fn().mockResolvedValue(8) },
+            analytics,
+        });
+
+        container.querySelector<HTMLButtonElement>('[data-testid="offline-images-download"]')!.click();
+
+        expect(analytics.offlineDownloadUsed).toHaveBeenCalledOnce();
+    });
+
+    it('passes the image options to onCancel', () => {
+        const onCancel = vi.fn();
+        createNewGameDialog({ container, selectedSizeId: '48', onSelect: vi.fn(), onCancel });
+
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+
+        expect(onCancel).toHaveBeenCalledWith(expect.objectContaining({ imageCategory: 'any', vibrant: false }));
     });
 
     it('passes the typed query override through onSelect', () => {
@@ -451,7 +525,7 @@ describe('createNewGameDialog', () => {
     });
 
     it('uses the typed query override when reloading the previews', () => {
-        const fetchImageCandidates = vi.fn().mockResolvedValue(null);
+        const fetchImageCandidates = vi.fn().mockResolvedValue({ candidates: [], cause: 'http-error', source: 'none' });
         createNewGameDialog({
             container,
             selectedSizeId: '48',
@@ -467,7 +541,7 @@ describe('createNewGameDialog', () => {
             .querySelector<HTMLButtonElement>('[data-testid="image-picker-refresh"]')!
             .click();
 
-        expect(fetchImageCandidates).toHaveBeenLastCalledWith('any', false, 'red bicycles');
+        expect(fetchImageCandidates).toHaveBeenLastCalledWith('any', false, 'red bicycles', 'refresh');
     });
 
     it('hides the candidate grid when no fetchImageCandidates is provided', () => {

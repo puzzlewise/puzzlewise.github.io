@@ -28,6 +28,7 @@ export interface FakeRenderer extends Renderer {
     setGroupSelected: Mock<Renderer['setGroupSelected']>;
     pieceIdFromTarget: Mock<Renderer['pieceIdFromTarget']>;
     pieceIdAtPoint: Mock<Renderer['pieceIdAtPoint']>;
+    photoSettled: Mock<Renderer['photoSettled']>;
     destroy: Mock<Renderer['destroy']>;
 }
 
@@ -44,6 +45,7 @@ export function createFakeRenderer(): FakeRenderer {
         setGroupSelected: vi.fn(),
         pieceIdFromTarget: vi.fn<Renderer['pieceIdFromTarget']>(() => null),
         pieceIdAtPoint: vi.fn<Renderer['pieceIdAtPoint']>(() => null),
+        photoSettled: vi.fn(() => new Promise<'loaded' | 'failed'>(() => {})),
         destroy: vi.fn(),
     };
 }

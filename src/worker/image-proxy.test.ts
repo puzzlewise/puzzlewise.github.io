@@ -11,6 +11,11 @@ import {
     resolveUpstream,
     type Env,
 } from './image-proxy.js';
+import {
+    DOWNLOAD_LOCATION,
+    HOSTILE_DOWNLOAD_LOCATIONS,
+    VALID_DOWNLOAD_LOCATIONS,
+} from './download-location-samples.js';
 import wranglerSrc from '../../wrangler.jsonc?raw';
 import deployWorkerSrc from '../../.github/workflows/deploy-worker.yml?raw';
 
@@ -23,9 +28,6 @@ const ENV: Env = { UNSPLASH_ACCESS_KEY: 'test-key' };
  */
 const ALLOWED = 'https://adrianschmidt.github.io';
 
-/** A `download_location` shaped like the ones Unsplash actually returns. */
-const DOWNLOAD_LOCATION =
-    'https://api.unsplash.com/photos/mEZ3PoFGs_k/download?ixid=abc123';
 
 function get(path: string, origin?: string): Request {
     return new Request(`https://proxy.example${path}`, {
@@ -328,6 +330,14 @@ describe('resolveUpstream', () => {
         expect(url.searchParams.get('ixid')).toBe('abc123');
     });
 
+    it.each(VALID_DOWNLOAD_LOCATIONS)('routes the sample download location %s', (location) => {
+        const result = resolveUpstream(
+            new URL(`https://proxy.example/download?url=${encodeURIComponent(location)}`),
+        );
+
+        expect(result.ok).toBe(true);
+    });
+
     it('does not let a caller nominate the key /download is billed to', () => {
         // This route forwards the caller's query whole, so unlike /random the
         // allowlist is not doing the work — the parameter is stripped by name.
@@ -363,16 +373,7 @@ describe('resolveUpstream', () => {
     // All look like api.unsplash.com to a careless check. The first two matter
     // most: a suffix match (`endsWith('unsplash.com')`) would wave them
     // through, the likeliest way this guard becomes an open relay.
-    it.each([
-        ['hostname ending in unsplash.com', 'https://evil-unsplash.com/photos/x/download'],
-        ['different unsplash.com subdomain', 'https://cdn.unsplash.com/photos/x/download'],
-        ['userinfo before the host', 'https://api.unsplash.com@evil.example/photos/x/download'],
-        ['userinfo on the real host', 'https://user:pass@api.unsplash.com/photos/x/download'],
-        ['hostname suffix', 'https://api.unsplash.com.evil.example/photos/x/download'],
-        ['different TLD', 'https://api.unsplash.com.co/photos/x/download'],
-        ['scheme downgrade', 'http://api.unsplash.com/photos/x/download'],
-        ['encoded traversal', 'https://api.unsplash.com/photos/x%2f..%2f..%2fusers%2fme/download'],
-    ])('rejects a /download URL that only looks like Unsplash (%s)', (_label, hostile) => {
+    it.each(HOSTILE_DOWNLOAD_LOCATIONS)('rejects a /download URL that only looks like Unsplash (%s)', (_label, hostile) => {
         const result = resolveUpstream(
             new URL(
                 `https://proxy.example/download?url=${encodeURIComponent(hostile)}`,

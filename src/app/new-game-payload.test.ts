@@ -77,7 +77,7 @@ describe('buildFreshGameData', () => {
     it('reports the page an Unsplash photo was drawn from', () => {
         const unsplash = makeGameState({ imageUrl: 'https://images.unsplash.com/photo-1' });
         const data = buildFreshGameData(freshOpts({
-            state: unsplash, pageDraw: { page: 84, knownPages: 166 },
+            state: unsplash, pageDraw: { page: 84, knownPages: 166, sourceKind: 'search', topic: '' },
         }));
         expect(data.imagePage).toBe(84);
         expect(data.imagePagesKnown).toBe(166);
@@ -88,6 +88,23 @@ describe('buildFreshGameData', () => {
         const data = buildFreshGameData(freshOpts({ state: unsplash }));
         expect('imagePage' in data).toBe(false);
         expect('imagePagesKnown' in data).toBe(false);
+    });
+
+    it('reports the photo id for an Unsplash photo with a download location', () => {
+        const data = buildFreshGameData(freshOpts({
+            state: makeGameState({ imageUrl: 'https://images.unsplash.com/photo-1' }),
+            downloadLocation: 'https://api.unsplash.com/photos/abc123/download',
+        }));
+        expect(data.imagePhotoId).toBe('abc123');
+    });
+
+    it('omits imagePhotoId without a download location or for non-Unsplash images', () => {
+        expect('imagePhotoId' in buildFreshGameData(freshOpts({
+            state: makeGameState({ imageUrl: 'https://images.unsplash.com/photo-1' }),
+        }))).toBe(false);
+        expect('imagePhotoId' in buildFreshGameData(freshOpts({
+            downloadLocation: 'https://api.unsplash.com/photos/abc123/download',
+        }))).toBe(false);
     });
 
     it('reports imagePicked when the player chose a candidate', () => {

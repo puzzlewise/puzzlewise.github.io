@@ -409,7 +409,7 @@ describe('fetchRandomPhotos', () => {
         const result = await fetchRandomPhotos(PROXY, 2, fetchFn, 'nature', 'landscape', CTX, { random: () => 0.5 });
 
         for (const drawn of result as UnsplashImageResult[]) {
-            expect(drawn.pageDraw).toEqual({ page: 84, knownPages: 166 });
+            expect(drawn.pageDraw).toEqual({ page: 84, knownPages: 166, sourceKind: 'search', topic: '' });
         }
     });
 
@@ -418,7 +418,17 @@ describe('fetchRandomPhotos', () => {
 
         const result = await fetchRandomPhotos(PROXY, 1, fetchFn, 'nature', 'landscape', CTX);
 
-        expect((result as UnsplashImageResult[])[0].pageDraw).toEqual({ page: 1, knownPages: 0 });
+        expect((result as UnsplashImageResult[])[0].pageDraw).toEqual({ page: 1, knownPages: 0, sourceKind: 'search', topic: '' });
+    });
+
+    it('tags a topic draw with its slug', async () => {
+        const fetchFn = respond(200, photos(30), { 'x-total': '17898' });
+
+        const result = await fetchRandomPhotos(PROXY, 1, fetchFn, undefined, 'portrait', CTX, { random: () => 0 });
+
+        expect((result as UnsplashImageResult[])[0].pageDraw).toEqual({
+            page: 1, knownPages: 0, sourceKind: 'topic', topic: 'nature',
+        });
     });
 
     it('tags a retried draw with the retry page', async () => {
@@ -427,7 +437,7 @@ describe('fetchRandomPhotos', () => {
 
         const result = await fetchRandomPhotos(PROXY, 1, fetchFn, 'q', 'landscape', CTX, { random: () => 0.5 });
 
-        expect((result as UnsplashImageResult[])[0].pageDraw).toEqual({ page: 42, knownPages: 166 });
+        expect((result as UnsplashImageResult[])[0].pageDraw).toEqual({ page: 42, knownPages: 166, sourceKind: 'search', topic: '' });
     });
 
     it('returns count shuffled photos without blocked photographers', async () => {
@@ -553,6 +563,29 @@ describe('fetchRandomPhotos', () => {
         expect(await fetchRandomPhotos(PROXY, 4, fetchFn, 'zzqx', 'landscape', CTX)).toEqual([]);
         expect(fetchFn).toHaveBeenCalledTimes(1);
         expect(umamiTrack).not.toHaveBeenCalledWith('image-page-empty', expect.anything());
+    });
+
+    it('reports the draw even when the request fails', async () => {
+        setPageCount('topic:nature|portrait', 500);
+        const onDraw = vi.fn();
+        const fetchFn = respond(403, { errors: ['Forbidden'] });
+
+        await fetchRandomPhotos(PROXY, 4, fetchFn, undefined, 'portrait', CTX, {
+            random: (() => { const draws = [0, 0.5]; return () => draws.shift() ?? 0; })(),
+            onDraw,
+        });
+
+        expect(onDraw).toHaveBeenLastCalledWith({ page: 251, knownPages: 500, sourceKind: 'topic', topic: 'nature' });
+    });
+
+    it('reports the retry page as the last draw after an empty deep page', async () => {
+        setPageCount('search:q|landscape', 166);
+        const onDraw = vi.fn();
+        const fetchFn = respondSequence([200, searchBody(0, 334)], [200, searchBody(0, 334)]);
+
+        await fetchRandomPhotos(PROXY, 4, fetchFn, 'q', 'landscape', CTX, { random: () => 0.5, onDraw });
+
+        expect(onDraw.mock.calls.map(([d]) => (d as { page: number }).page)).toEqual([84, 42]);
     });
 
     it('leaves the cache alone on an error status, tagged by caller', async () => {

@@ -80,12 +80,12 @@ describe('resolveUnsplashImage', () => {
             photoUrl: 'https://p.example/1',
             thumbUrl: 'https://images.unsplash.com/photo-abc?w=400',
             downloadLocation: 'https://api.unsplash.com/photos/abc123/download',
-            pageDraw: { page: 7, knownPages: 0 },
+            pageDraw: { page: 7, knownPages: 0, sourceKind: 'search', topic: '' },
         }]);
 
         const resolved = await resolveUnsplashImage('https://proxy.example', 'nature', false, 'landscape');
 
-        expect(resolved!.pageDraw).toEqual({ page: 7, knownPages: 0 });
+        expect(resolved!.pageDraw).toEqual({ page: 7, knownPages: 0, sourceKind: 'search', topic: '' });
     });
 
     it('uses the query override in place of the category query', async () => {
