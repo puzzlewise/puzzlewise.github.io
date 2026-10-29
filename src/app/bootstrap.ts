@@ -36,6 +36,8 @@ import { startNewGame, type StartNewGameDeps } from './start-new-game.js';
 import { loadSharedPuzzle, type LoadSharedPuzzleDeps } from './load-shared-puzzle.js';
 import { createShareLinkLoader } from './share-link-loader.js';
 import { runBootSequence } from './boot-sequence.js';
+import { createPuzzleImageLoadTracker } from './puzzle-image-load.js';
+import { reportPuzzleCreditOpened } from './puzzle-credit.js';
 import { openNewGameDialog } from './new-game-flow.js';
 import { createCompletionPresenter } from './completion-presenter.js';
 import { gatherAndZoomToFit, zoomToFitCompletedPuzzle, type ViewportFitDeps } from './viewport-fit.js';
@@ -156,6 +158,8 @@ export function bootstrap(
         });
     };
 
+    const puzzleImageLoad = createPuzzleImageLoadTracker({ photoSettled: () => renderer.photoSettled() });
+
     // Before `session` — see `createOnInstalled` for why the compiler enforces it.
     const rotationUi = createRotationUi({
         container: root,
@@ -182,6 +186,7 @@ export function bootstrap(
         syncRotationUi: RotationUi['syncVisibility'],
     ): (state: GameState) => void {
         return (state) => {
+            puzzleImageLoad.abandon();
             // Drop the outgoing puzzle's cached analytics (#507; the field's
             // contract covers why this can't wipe the incoming game's payload).
             currentGameAnalytics = null;
@@ -249,7 +254,10 @@ export function bootstrap(
         removeAttribution(root);
 
         if (state.attribution) {
-            const el = createAttributionElement(state.attribution);
+            const el = createAttributionElement(
+                state.attribution,
+                (link) => reportPuzzleCreditOpened(link, currentGameAnalytics?.imagePhotoId),
+            );
             root.appendChild(el);
         }
     }
@@ -293,6 +301,7 @@ export function bootstrap(
             }
         },
         onGameAnalytics: (data, state) => {
+            puzzleImageLoad.observe(state, data.source === 'shared' ? 'shared' : 'new', data.imagePhotoId);
             currentGameAnalytics = data;
             currentGameStartedAt = Date.now();
             if (state === savedNewPuzzle) saveGameContext(state.seed, data, currentGameStartedAt);
@@ -364,6 +373,7 @@ export function bootstrap(
             const openDialog = (): void => openNewGameDialog({
                 container: root,
                 start: (gridSize, options) => startNewGame(gridSize, options, startNewGameDeps),
+                currentGame: () => session.current(),
             });
             if (moveSource) moveSource.onNewGame(openDialog);
             else openDialog();
@@ -404,6 +414,7 @@ export function bootstrap(
         start: (gridSize, options) => startNewGame(gridSize, options, startNewGameDeps),
         onResumed: (state) => {
             currentGameAnalytics = loadGameContext(state.seed);
+            puzzleImageLoad.observe(state, 'resume', currentGameAnalytics?.imagePhotoId);
             currentGameResumed = true;
             currentGameStartedAt = loadGameStartedAt(state.seed);
         },

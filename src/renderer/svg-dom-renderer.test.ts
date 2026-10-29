@@ -56,6 +56,51 @@ describe('SvgDomRenderer', () => {
         container.remove();
     });
 
+    describe('photoSettled', () => {
+        it("resolves 'loaded' when the puzzle's photo loads", async () => {
+            renderer.init(container);
+            renderer.renderState(make2x2State());
+            const settled = renderer.photoSettled();
+
+            container.querySelector('image')!.dispatchEvent(new Event('load'));
+
+            await expect(settled).resolves.toBe('loaded');
+        });
+
+        it("resolves 'failed' when the photo errors", async () => {
+            renderer.init(container);
+            renderer.renderState(make2x2State());
+
+            container.querySelector('image')!.dispatchEvent(new Event('error'));
+
+            await expect(renderer.photoSettled()).resolves.toBe('failed');
+        });
+
+        it('keeps the settled result when the same puzzle is rendered again', async () => {
+            renderer.init(container);
+            const state = make2x2State();
+            renderer.renderState(state);
+            container.querySelector('image')!.dispatchEvent(new Event('load'));
+            await renderer.photoSettled();
+
+            renderer.renderState(state);
+
+            await expect(renderer.photoSettled()).resolves.toBe('loaded');
+        });
+
+        it('starts a new settle for a different puzzle', async () => {
+            renderer.init(container);
+            renderer.renderState(make2x2State());
+            container.querySelector('image')!.dispatchEvent(new Event('load'));
+
+            renderer.renderState({ ...make2x2State(), imageUrl: 'other.jpg' });
+            const settled = renderer.photoSettled();
+            container.querySelector('image')!.dispatchEvent(new Event('error'));
+
+            await expect(settled).resolves.toBe('failed');
+        });
+    });
+
     describe('init', () => {
         it('creates a table div inside the container', () => {
             renderer.init(container);

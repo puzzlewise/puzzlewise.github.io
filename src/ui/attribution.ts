@@ -9,6 +9,7 @@ const ATTRIBUTION_CLASS = 'image-attribution';
 
 export function createAttributionElement(
     attribution: ImageAttribution,
+    onLinkOpen?: (link: 'photographer' | 'photo') => void,
 ): HTMLElement {
     const container = document.createElement('div');
     container.className = ATTRIBUTION_CLASS;
@@ -31,6 +32,11 @@ export function createAttributionElement(
     unsplashLink.target = '_blank';
     unsplashLink.rel = 'noopener noreferrer';
     unsplashLink.textContent = 'Unsplash';
+
+    if (onLinkOpen) {
+        photographerLink.addEventListener('click', () => onLinkOpen('photographer'));
+        unsplashLink.addEventListener('click', () => onLinkOpen('photo'));
+    }
 
     container.appendChild(document.createTextNode('Photo by '));
     container.appendChild(photographerLink);

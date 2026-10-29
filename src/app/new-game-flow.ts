@@ -4,7 +4,7 @@
  * counterpart. A dropped write just reverts that setting next time.
  */
 
-import type { GridSize } from '../model/types.js';
+import type { GridSize, Orientation } from '../model/types.js';
 import type { CutStyle } from '../game/cut-styles.js';
 import { loadCutStylePreference, saveCutStylePreference } from '../game/cut-styles.js';
 import {
@@ -32,8 +32,10 @@ import {
     saveImageCategoryPreference,
     loadVibrantPreference,
     saveVibrantPreference,
+    isCustomQuery,
 } from '../game/image-categories.js';
-import { getImageProxyBaseUrl } from '../images/index.js';
+import { getImageProxyBaseUrl, type CandidateFetchResult } from '../images/index.js';
+import { photoIdFromDownloadLocation } from '../images/photo-id.js';
 import { isOfflineStashSupported, stashCount } from '../images/offline-stash.js';
 import { getBaseCutGenerator } from '../puzzle/topology/generator-registry.js';
 import { preloadTracedTabGenerator } from '../puzzle/topology/traced-tab-loader.js';
@@ -44,6 +46,7 @@ import {
 } from '../ui/index.js';
 import { downloadOfflineImagesForCategory } from './download-offline-images.js';
 import { fetchCandidateImages } from './fetch-candidate-images.js';
+import { createNewGameDialogVisit, type BatchTrigger } from './new-game-dialog-visit.js';
 import { orientationForViewport } from './orientation.js';
 import { runWithErrorReport } from './run-with-error-report.js';
 import type { StartNewGameOptions } from './start-new-game.js';
@@ -51,6 +54,8 @@ import type { StartNewGameOptions } from './start-new-game.js';
 export interface OpenNewGameDialogDeps {
     container: HTMLElement;
     start: (gridSize: GridSize, options: StartNewGameOptions) => Promise<void>;
+    /** The puzzle on screen when the dialog opens, for the visit's analytics. */
+    currentGame?: () => { completed: boolean } | undefined;
 }
 
 export function openNewGameDialog(deps: OpenNewGameDialogDeps): void {
@@ -62,6 +67,21 @@ export function openNewGameDialog(deps: OpenNewGameDialogDeps): void {
     const savedImageCategory = loadImageCategoryPreference();
     const savedVibrant = loadVibrantPreference();
     const proxyBaseUrl = getImageProxyBaseUrl();
+    const offlineAvailable = proxyBaseUrl !== undefined && isOfflineStashSupported();
+    const orientation = (): Orientation => orientationForViewport({
+        width: deps.container.clientWidth || window.innerWidth,
+        height: deps.container.clientHeight || window.innerHeight,
+    });
+
+    const current = deps.currentGame?.();
+    const visit = createNewGameDialogVisit({
+        hasPuzzle: current !== undefined,
+        puzzleCompleted: current?.completed ?? false,
+        imageCategory: savedImageCategory,
+        vibrant: savedVibrant,
+        picker: proxyBaseUrl !== undefined,
+        offlineDownload: offlineAvailable,
+    });
 
     createNewGameDialog({
         container: deps.container,
@@ -77,20 +97,44 @@ export function openNewGameDialog(deps: OpenNewGameDialogDeps): void {
         savedVibrant,
         fetchImageCandidates: (() => {
             if (!proxyBaseUrl) return undefined;
-            return (imageCategory: string, vibrant: boolean, queryOverride?: string) =>
-                fetchCandidateImages(
+            return async (
+                imageCategory: string,
+                vibrant: boolean,
+                queryOverride: string | undefined,
+                trigger: BatchTrigger,
+            ): Promise<CandidateFetchResult> => {
+                const batchOrientation = orientation();
+                const settle = visit.batchStarted(trigger, {
+                    imageCategory,
+                    vibrant,
+                    custom: isCustomQuery(queryOverride),
+                    orientation: batchOrientation,
+                });
+                const result = await fetchCandidateImages(
                     proxyBaseUrl,
                     imageCategory,
                     vibrant,
-                    orientationForViewport({
-                        width: deps.container.clientWidth || window.innerWidth,
-                        height: deps.container.clientHeight || window.innerHeight,
-                    }),
+                    batchOrientation,
                     queryOverride,
                 );
+                settle(result);
+                return result;
+            };
         })(),
+        analytics: {
+            optionChanged: (setting, from, to) => visit.optionChanged(setting, from, to),
+            thumbnailLoaded: () => visit.thumbnailLoaded(),
+            thumbnailFailed: (slot, candidate, imageCategory) => visit.thumbnailFailed(
+                slot, photoIdFromDownloadLocation(candidate.downloadLocation) ?? '', imageCategory,
+            ),
+            creditOpened: (candidate) => visit.creditOpened(
+                photoIdFromDownloadLocation(candidate.downloadLocation) ?? '',
+            ),
+            offlineDownloadUsed: () => visit.offlineDownloadUsed(),
+        },
+        onCancel: (values) => visit.closed('cancel', -1, values),
         offlineImages: (() => {
-            if (!proxyBaseUrl || !isOfflineStashSupported()) return undefined;
+            if (!proxyBaseUrl || !offlineAvailable) return undefined;
             return {
                 count: stashCount,
                 download: (
@@ -103,10 +147,7 @@ export function openNewGameDialog(deps: OpenNewGameDialogDeps): void {
                         proxyBaseUrl,
                         imageCategory,
                         vibrant,
-                        orientationForViewport({
-                            width: deps.container.clientWidth || window.innerWidth,
-                            height: deps.container.clientHeight || window.innerHeight,
-                        }),
+                        orientation(),
                         onProgress,
                         queryOverride,
                     ),
@@ -120,6 +161,7 @@ export function openNewGameDialog(deps: OpenNewGameDialogDeps): void {
             preloadTracedTabGenerator().catch(() => {});
         },
         onSelect: ({ sizeId, cutStyleId, composableConfig, fractalConfig, wavyConfig, rotationEnabled, imageChoice, imageCategory, vibrant, queryOverride }) => {
+            visit.closed(imageChoice.kind, imageChoice.kind === 'photo' ? imageChoice.slot : -1, { imageCategory, vibrant });
             saveSizePreference(sizeId);
             saveCutStylePreference(cutStyleId);
             if (composableConfig) {

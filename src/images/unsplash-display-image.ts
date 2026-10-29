@@ -32,6 +32,17 @@ export interface CandidateImage extends DisplayImage {
     description?: string;
 }
 
+export type CandidateCause = 'none' | 'http-error' | 'blocked' | 'empty-page' | 'threw';
+
+export interface CandidateFetchResult {
+    candidates: CandidateImage[];
+    /** Why no network photos came back; `'none'` when they did. */
+    cause: CandidateCause;
+    source: 'unsplash' | 'stash' | 'none';
+    /** The page requested from Unsplash, also when it failed; absent when none was. */
+    draw?: PageDraw;
+}
+
 export const CANDIDATE_COUNT = 4;
 
 /** Width the Unsplash "regular" URL scales images to. */

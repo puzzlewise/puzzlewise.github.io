@@ -1,13 +1,14 @@
-/**
- * Returns `null` when the fetch fails, yields nothing, and the offline stash
- * is empty — the picker shows its inline error state. An error-status answer
- * is tracked one layer down as `image-fetch-http-error`; the thrown path
- * caught here stays untracked.
- */
-
 import { diagnostics } from '../diagnostics.js';
 import { track } from '../analytics/index.js';
-import { fetchRandomPhotos, CANDIDATE_COUNT, toDisplayImage, type CandidateImage } from '../images/index.js';
+import {
+    fetchRandomPhotos,
+    CANDIDATE_COUNT,
+    toDisplayImage,
+    type CandidateCause,
+    type CandidateFetchResult,
+    type CandidateImage,
+    type PageDraw,
+} from '../images/index.js';
 import { stashCandidates } from '../images/offline-stash.js';
 import { findImageCategory, buildImageQuery, resolveQueryOverride, isCustomQuery } from '../game/image-categories.js';
 import type { Orientation } from '../model/types.js';
@@ -16,20 +17,22 @@ import type { Orientation } from '../model/types.js';
 export const CANDIDATE_IMAGE_COUNT = CANDIDATE_COUNT;
 
 async function candidatesFromStash(
-    cause: 'fetch-failed' | 'no-candidates',
+    networkCause: CandidateCause,
     imageCategory: string,
     vibrant: boolean,
     orientation: Orientation,
-): Promise<CandidateImage[] | null> {
+): Promise<CandidateFetchResult> {
     const stash = await stashCandidates(orientation, CANDIDATE_IMAGE_COUNT);
     track('image-stash-fallback', {
         imageCategory,
         orientation,
         vibrant,
         hit: stash.length > 0,
-        cause,
+        cause: networkCause === 'threw' ? 'fetch-failed' : 'no-candidates',
     });
-    return stash.length > 0 ? stash : null;
+    return stash.length > 0
+        ? { candidates: stash, cause: networkCause, source: 'stash' }
+        : { candidates: [], cause: networkCause, source: 'none' };
 }
 
 export async function fetchCandidateImages(
@@ -39,7 +42,10 @@ export async function fetchCandidateImages(
     orientation: Orientation,
     queryOverride?: string,
     fetchFn: typeof fetch = fetch,
-): Promise<CandidateImage[] | null> {
+): Promise<CandidateFetchResult> {
+    let draw: PageDraw | undefined;
+    const withDraw = (result: CandidateFetchResult): CandidateFetchResult =>
+        draw === undefined ? result : { ...result, draw };
     try {
         const category = findImageCategory(imageCategory);
         const query = buildImageQuery(resolveQueryOverride(category.query, queryOverride), vibrant);
@@ -50,13 +56,17 @@ export async function fetchCandidateImages(
             query,
             orientation,
             { caller: 'picker', imageCategory, vibrant, custom: isCustomQuery(queryOverride) },
+            { onDraw: (d) => { draw = d; } },
         );
 
         if (!results || results === 'blocked' || results.length === 0) {
-            return await candidatesFromStash('no-candidates', imageCategory, vibrant, orientation);
+            const networkCause: CandidateCause = results === undefined
+                ? 'http-error'
+                : results === 'blocked' ? 'blocked' : 'empty-page';
+            return withDraw(await candidatesFromStash(networkCause, imageCategory, vibrant, orientation));
         }
 
-        return results.map((result) => {
+        const candidates = results.map((result) => {
             const candidate: CandidateImage = {
                 ...toDisplayImage(result),
                 thumbUrl: result.thumbUrl,
@@ -69,8 +79,9 @@ export async function fetchCandidateImages(
             }
             return candidate;
         });
+        return withDraw({ candidates, cause: 'none', source: 'unsplash' });
     } catch (error) {
         diagnostics.warn('Failed to fetch candidate images:', error);
-        return await candidatesFromStash('fetch-failed', imageCategory, vibrant, orientation);
+        return withDraw(await candidatesFromStash('threw', imageCategory, vibrant, orientation));
     }
 }

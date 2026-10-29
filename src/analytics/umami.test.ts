@@ -326,6 +326,76 @@ describe('track', () => {
         });
     });
 
+    it('forwards new-game-dialog-opened with the typed payload', () => {
+        const umamiTrack = vi.fn();
+        (window as unknown as { umami: { track: typeof umamiTrack } }).umami = { track: umamiTrack };
+        const data = { hasPuzzle: true, puzzleCompleted: false, imageCategory: 'face', vibrant: false, picker: true, offlineDownload: true } as const;
+
+        track('new-game-dialog-opened', data);
+
+        expect(umamiTrack).toHaveBeenCalledWith('new-game-dialog-opened', data);
+    });
+
+    it('forwards image-candidates-loaded with the typed payload', () => {
+        const umamiTrack = vi.fn();
+        (window as unknown as { umami: { track: typeof umamiTrack } }).umami = { track: umamiTrack };
+        const data = { trigger: 'open', outcome: 'shown', cause: 'none', source: 'unsplash', count: 4, ms: 300, imageCategory: 'face', vibrant: false, custom: false, orientation: 'portrait', imagePage: 12, imagePagesKnown: 166, sourceKind: 'topic', topic: 'film', photoIds: 'a,b,c,d' } as const;
+
+        track('image-candidates-loaded', data);
+
+        expect(umamiTrack).toHaveBeenCalledWith('image-candidates-loaded', data);
+    });
+
+    it('forwards image-option-changed with the typed payload', () => {
+        const umamiTrack = vi.fn();
+        (window as unknown as { umami: { track: typeof umamiTrack } }).umami = { track: umamiTrack };
+        const data = { setting: 'vibrant', from: 'false', to: 'true' } as const;
+
+        track('image-option-changed', data);
+
+        expect(umamiTrack).toHaveBeenCalledWith('image-option-changed', data);
+    });
+
+    it('forwards image-thumbnail-failed with the typed payload', () => {
+        const umamiTrack = vi.fn();
+        (window as unknown as { umami: { track: typeof umamiTrack } }).umami = { track: umamiTrack };
+        const data = { slot: 1, photoId: 'b', imageCategory: 'face' } as const;
+
+        track('image-thumbnail-failed', data);
+
+        expect(umamiTrack).toHaveBeenCalledWith('image-thumbnail-failed', data);
+    });
+
+    it('forwards new-game-dialog-closed with the typed payload', () => {
+        const umamiTrack = vi.fn();
+        (window as unknown as { umami: { track: typeof umamiTrack } }).umami = { track: umamiTrack };
+        const data = { outcome: 'cancel', openMs: 900, firstThumbnailsMs: -1, firstThumbnailLoadedMs: -1, pickedSlot: -1, refreshes: 0, optionChanges: 0, batches: 1, thumbnailsOffered: 0, thumbnailsLoaded: 0, thumbnailsFailed: 0, offlineDownloadUsed: false, imageCategory: 'face', vibrant: false } as const;
+
+        track('new-game-dialog-closed', data);
+
+        expect(umamiTrack).toHaveBeenCalledWith('new-game-dialog-closed', data);
+    });
+
+    it('forwards photo-credit-opened with the typed payload', () => {
+        const umamiTrack = vi.fn();
+        (window as unknown as { umami: { track: typeof umamiTrack } }).umami = { track: umamiTrack };
+        const data = { where: 'puzzle', link: 'photo', photoId: 'abc123' } as const;
+
+        track('photo-credit-opened', data);
+
+        expect(umamiTrack).toHaveBeenCalledWith('photo-credit-opened', data);
+    });
+
+    it('forwards puzzle-image-loaded with the typed payload', () => {
+        const umamiTrack = vi.fn();
+        (window as unknown as { umami: { track: typeof umamiTrack } }).umami = { track: umamiTrack };
+        const data = { outcome: 'loaded', ms: 420, trigger: 'resume', imageSource: 'unsplash', imagePhotoId: 'abc123' } as const;
+
+        track('puzzle-image-loaded', data);
+
+        expect(umamiTrack).toHaveBeenCalledWith('puzzle-image-loaded', data);
+    });
+
     it('forwards image-page-counts-unsaved with the typed payload', () => {
         const umamiTrack = vi.fn();
         (window as unknown as { umami: { track: typeof umamiTrack } }).umami = { track: umamiTrack };

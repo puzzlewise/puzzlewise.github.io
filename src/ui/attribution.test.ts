@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import type { ImageAttribution } from '../model/types.js';
 import {
     createAttributionElement,
@@ -116,5 +116,27 @@ describe('formatAttributionText', () => {
         });
 
         expect(text).toBe('Photo by José García-López on Unsplash');
+    });
+});
+
+describe('createAttributionElement link taps', () => {
+    const attribution: ImageAttribution = {
+        photographerName: 'Ada',
+        photographerUrl: 'https://unsplash.com/@ada',
+        photoUrl: 'https://unsplash.com/photos/abc123',
+    };
+
+    it.each([
+        [0, 'photographer'],
+        [1, 'photo'],
+    ] as const)('reports link %i as %s without preventing navigation', (index, link) => {
+        const onLinkOpen = vi.fn();
+        const el = createAttributionElement(attribution, onLinkOpen);
+        const event = new MouseEvent('click', { bubbles: true, cancelable: true });
+
+        el.querySelectorAll('a')[index].dispatchEvent(event);
+
+        expect(onLinkOpen).toHaveBeenCalledWith(link);
+        expect(event.defaultPrevented).toBe(false);
     });
 });

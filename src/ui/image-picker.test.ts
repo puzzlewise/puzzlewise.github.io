@@ -4,7 +4,13 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createImagePicker } from './image-picker.js';
-import type { CandidateImage } from '../images/index.js';
+import type { CandidateFetchResult, CandidateImage } from '../images/index.js';
+
+function ok(candidates: CandidateImage[]): CandidateFetchResult {
+    return { candidates, cause: 'none', source: 'unsplash' };
+}
+
+const FAILED: CandidateFetchResult = { candidates: [], cause: 'http-error', source: 'none' };
 
 function makeCandidate(n: number): CandidateImage {
     return {
@@ -39,9 +45,71 @@ describe('createImagePicker', () => {
         container.remove();
     });
 
+    it("passes 'open' on the first load and 'refresh' for ↻", async () => {
+        const fetchCandidates = vi.fn().mockResolvedValue(ok([makeCandidate(1)]));
+        const picker = createImagePicker({ fetchCandidates, onPick: vi.fn() });
+        container.appendChild(picker.element);
+        await flush();
+
+        container.querySelector<HTMLButtonElement>('[data-testid="image-picker-refresh"]')!.click();
+
+        expect(fetchCandidates.mock.calls.map(([trigger]) => trigger)).toEqual(['open', 'refresh']);
+    });
+
+    it('reports the picked tile slot', async () => {
+        const onPick = vi.fn();
+        const candidates = [1, 2, 3].map(makeCandidate);
+        const picker = createImagePicker({ fetchCandidates: vi.fn().mockResolvedValue(ok(candidates)), onPick });
+        container.appendChild(picker.element);
+        await flush();
+
+        container.querySelectorAll<HTMLButtonElement>('[data-testid="image-picker-tile"]')[2].click();
+
+        expect(onPick).toHaveBeenCalledWith({ kind: 'photo', photo: candidates[2], slot: 2 });
+    });
+
+    it('reports thumbnail loads and errors by slot', async () => {
+        const onThumbnailLoad = vi.fn();
+        const onThumbnailError = vi.fn();
+        const candidates = [1, 2].map(makeCandidate);
+        const picker = createImagePicker({
+            fetchCandidates: vi.fn().mockResolvedValue(ok(candidates)),
+            onPick: vi.fn(),
+            onThumbnailLoad,
+            onThumbnailError,
+        });
+        container.appendChild(picker.element);
+        await flush();
+
+        const thumbs = container.querySelectorAll<HTMLImageElement>('.image-picker-thumb');
+        thumbs[0].dispatchEvent(new Event('load'));
+        thumbs[1].dispatchEvent(new Event('error'));
+
+        expect(onThumbnailLoad).toHaveBeenCalledWith(0);
+        expect(onThumbnailError).toHaveBeenCalledWith(1, candidates[1]);
+    });
+
+    it('reports a credit tap without preventing navigation', async () => {
+        const onCreditOpen = vi.fn();
+        const candidates = [makeCandidate(1)];
+        const picker = createImagePicker({
+            fetchCandidates: vi.fn().mockResolvedValue(ok(candidates)),
+            onPick: vi.fn(),
+            onCreditOpen,
+        });
+        container.appendChild(picker.element);
+        await flush();
+
+        const event = new MouseEvent('click', { bubbles: true, cancelable: true });
+        container.querySelector<HTMLAnchorElement>('[data-testid="image-picker-credit"]')!.dispatchEvent(event);
+
+        expect(onCreditOpen).toHaveBeenCalledWith(candidates[0]);
+        expect(event.defaultPrevented).toBe(false);
+    });
+
     it('renders heading, four tiles, refresh, and both action buttons', () => {
         const picker = createImagePicker({
-            fetchCandidates: vi.fn().mockResolvedValue([]),
+            fetchCandidates: vi.fn().mockResolvedValue(ok([])),
             onPick: vi.fn(),
         });
         container.appendChild(picker.element);
@@ -70,7 +138,7 @@ describe('createImagePicker', () => {
     it('renders thumbnails and enables tiles once candidates arrive', async () => {
         const candidates = [1, 2, 3, 4].map(makeCandidate);
         const picker = createImagePicker({
-            fetchCandidates: vi.fn().mockResolvedValue(candidates),
+            fetchCandidates: vi.fn().mockResolvedValue(ok(candidates)),
             onPick: vi.fn(),
         });
         container.appendChild(picker.element);
@@ -86,7 +154,7 @@ describe('createImagePicker', () => {
 
     it('hides surplus tiles when fewer candidates than tiles arrive', async () => {
         const picker = createImagePicker({
-            fetchCandidates: vi.fn().mockResolvedValue([makeCandidate(1), makeCandidate(2)]),
+            fetchCandidates: vi.fn().mockResolvedValue(ok([makeCandidate(1), makeCandidate(2)])),
             onPick: vi.fn(),
         });
         container.appendChild(picker.element);
@@ -103,7 +171,7 @@ describe('createImagePicker', () => {
         const onPick = vi.fn();
         const candidates = [1, 2, 3, 4].map(makeCandidate);
         const picker = createImagePicker({
-            fetchCandidates: vi.fn().mockResolvedValue(candidates),
+            fetchCandidates: vi.fn().mockResolvedValue(ok(candidates)),
             onPick,
         });
         container.appendChild(picker.element);
@@ -111,7 +179,7 @@ describe('createImagePicker', () => {
 
         container.querySelectorAll<HTMLButtonElement>('[data-testid="image-picker-tile"]')[2].click();
 
-        expect(onPick).toHaveBeenCalledWith({ kind: 'photo', photo: candidates[2] });
+        expect(onPick).toHaveBeenCalledWith({ kind: 'photo', photo: candidates[2], slot: 2 });
     });
 
     it('reports surprise and blank picks without any fetch dependency', () => {
@@ -129,10 +197,10 @@ describe('createImagePicker', () => {
         expect(onPick).toHaveBeenCalledWith({ kind: 'blank' });
     });
 
-    it('shows the error message when the fetch resolves null and retries on refresh', async () => {
+    it('shows the error message when the fetch returns no candidates and retries on refresh', async () => {
         const fetchCandidates = vi.fn()
-            .mockResolvedValueOnce(null)
-            .mockResolvedValueOnce([1, 2, 3, 4].map(makeCandidate));
+            .mockResolvedValueOnce(FAILED)
+            .mockResolvedValueOnce(ok([1, 2, 3, 4].map(makeCandidate)));
         const picker = createImagePicker({ fetchCandidates, onPick: vi.fn() });
         container.appendChild(picker.element);
         await flush();
@@ -159,12 +227,12 @@ describe('createImagePicker', () => {
     });
 
     it('ignores a stale response that resolves after a newer refresh', async () => {
-        let resolveFirst!: (v: CandidateImage[] | null) => void;
-        const first = new Promise<CandidateImage[] | null>((r) => { resolveFirst = r; });
+        let resolveFirst!: (v: CandidateFetchResult) => void;
+        const first = new Promise<CandidateFetchResult>((r) => { resolveFirst = r; });
         const second = [1, 2, 3, 4].map(makeCandidate);
         const fetchCandidates = vi.fn()
             .mockReturnValueOnce(first)
-            .mockResolvedValueOnce(second);
+            .mockResolvedValueOnce(ok(second));
 
         const picker = createImagePicker({ fetchCandidates, onPick: vi.fn() });
         container.appendChild(picker.element);
@@ -175,7 +243,7 @@ describe('createImagePicker', () => {
 
         // The stale first fetch finally resolves with different (old) data —
         // it must not clobber the newer result.
-        resolveFirst([makeCandidate(9)]);
+        resolveFirst(ok([makeCandidate(9)]));
         await flush();
 
         const imgs = container.querySelectorAll<HTMLImageElement>('.image-picker-thumb');
@@ -195,7 +263,7 @@ describe('createImagePicker', () => {
 
     it('marks the error message as an aria-live region', () => {
         const picker = createImagePicker({
-            fetchCandidates: vi.fn().mockResolvedValue([]),
+            fetchCandidates: vi.fn().mockResolvedValue(ok([])),
             onPick: vi.fn(),
         });
         container.appendChild(picker.element);
@@ -214,7 +282,7 @@ describe('createImagePicker', () => {
         it('shows a linked credit for each candidate once loaded', async () => {
             const candidates = [1, 2, 3, 4].map(makeCandidate);
             const picker = createImagePicker({
-                fetchCandidates: vi.fn().mockResolvedValue(candidates),
+                fetchCandidates: vi.fn().mockResolvedValue(ok(candidates)),
                 onPick: vi.fn(),
             });
             container.appendChild(picker.element);
@@ -236,7 +304,7 @@ describe('createImagePicker', () => {
             const onPick = vi.fn();
             const candidates = [1, 2, 3, 4].map(makeCandidate);
             const picker = createImagePicker({
-                fetchCandidates: vi.fn().mockResolvedValue(candidates),
+                fetchCandidates: vi.fn().mockResolvedValue(ok(candidates)),
                 onPick,
             });
             container.appendChild(picker.element);
@@ -257,7 +325,7 @@ describe('createImagePicker', () => {
             const candidate = makeCandidate(1);
             candidate.attribution.photographerUrl = 'javascript:alert(1)';
             const picker = createImagePicker({
-                fetchCandidates: vi.fn().mockResolvedValue([candidate]),
+                fetchCandidates: vi.fn().mockResolvedValue(ok([candidate])),
                 onPick: vi.fn(),
             });
             container.appendChild(picker.element);

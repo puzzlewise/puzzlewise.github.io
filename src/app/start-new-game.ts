@@ -279,6 +279,7 @@ export async function startNewGame(
             vibrant,
             pickedImage,
             pageDraw,
+            downloadLocation,
             chunkDegraded,
             bootFallback,
             generation,

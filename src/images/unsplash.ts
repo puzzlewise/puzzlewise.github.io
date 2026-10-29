@@ -59,6 +59,9 @@ export interface UnsplashPhoto {
 export interface PageDraw {
     page: number;
     knownPages: number;
+    sourceKind: 'search' | 'topic';
+    /** The topic slug for topic draws, `''` for searches. */
+    topic: string;
 }
 
 export interface UnsplashImageResult {
@@ -175,6 +178,11 @@ export interface PhotoRequestContext {
 export interface FetchRandomPhotosOptions {
     random?: () => number;
     signal?: AbortSignal;
+    /**
+     * Called with each page about to be requested; the last call is the page
+     * behind the outcome, whatever it is (including an error or empty page).
+     */
+    onDraw?: (draw: PageDraw) => void;
 }
 
 /**
@@ -197,13 +205,21 @@ export async function fetchRandomPhotos(
     context: PhotoRequestContext,
     options: FetchRandomPhotosOptions = {},
 ): Promise<UnsplashImageResult[] | 'blocked' | undefined> {
-    const { random = Math.random, signal } = options;
+    const { random = Math.random, signal, onDraw } = options;
     const source = pickPhotoSource(query, random);
     const key = pageCacheKey(source, orientation);
     const known = getPageCount(key);
     const page = known === undefined ? 1 : 1 + Math.floor(random() * known);
 
+    const drawFor = (pageNumber: number): PageDraw => ({
+        page: pageNumber,
+        knownPages: known ?? 0,
+        sourceKind: source.kind,
+        topic: source.kind === 'topic' ? source.slug : '',
+    });
+
     const fetchPage = async (pageNumber: number): Promise<ParsedPage | undefined> => {
+        onDraw?.(drawFor(pageNumber));
         const response = await fetchFn(buildPageUrl(proxyBaseUrl, source, orientation, pageNumber), { signal });
         if (!response.ok) {
             reportProxyHttpError(response, context.caller === 'surprise' ? 'single' : 'batch', source);
@@ -266,7 +282,7 @@ export async function fetchRandomPhotos(
     const usable = parsed.filter((photo) => !isBlockedPhotographerUrl(photo.photographerUrl));
     if (parsed.length > 0 && usable.length === 0) return 'blocked';
 
-    const pageDraw: PageDraw = { page: servedPage, knownPages: known ?? 0 };
+    const pageDraw = drawFor(servedPage);
     return shuffled(usable, random)
         .slice(0, count)
         .map((photo) => ({ ...photo, pageDraw }));

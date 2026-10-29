@@ -46,6 +46,17 @@ import { makeSavedGameState } from '../test-helpers/fixtures.js';
 import { downloadOfflineImagesForCategory } from './download-offline-images.js';
 import { fetchCandidateImages } from './fetch-candidate-images.js';
 import { openNewGameDialog } from './new-game-flow.js';
+import type { CandidateImage } from '../images/index.js';
+
+function makeCandidate(): CandidateImage {
+    return {
+        imageUrl: 'https://images.unsplash.com/photo-abc?w=1080',
+        imageSize: { width: 1080, height: 720 },
+        attribution: { photographerName: 'A', photographerUrl: 'https://unsplash.com/@a', photoUrl: 'https://unsplash.com/photos/abc123' },
+        downloadLocation: 'https://api.unsplash.com/photos/abc123/download',
+        thumbUrl: 'https://images.unsplash.com/photo-abc?w=400',
+    };
+}
 
 describe('openNewGameDialog', () => {
     let container: HTMLElement;
@@ -237,7 +248,7 @@ describe('openNewGameDialog', () => {
             downloadLocation: 'https://z',
             thumbUrl: 'https://thumb',
         };
-        selectWith({ imageChoice: { kind: 'photo', photo } });
+        selectWith({ imageChoice: { kind: 'photo', photo, slot: 0 } });
         expect(start.mock.calls[0][1].pickedImage).toBe(photo);
     });
 
@@ -279,7 +290,7 @@ describe('openNewGameDialog', () => {
         await vi.waitFor(() => expect(start).toHaveBeenCalled());
 
         expect(showToast).not.toHaveBeenCalled();
-        expect(umamiTrack).not.toHaveBeenCalled();
+        expect(umamiTrack).not.toHaveBeenCalledWith('new-game-failed', expect.anything());
     });
 
     it('toasts and reports new-game-failed, attributed to the failing cut style, when the start rejects', async () => {
@@ -348,6 +359,74 @@ describe('openNewGameDialog', () => {
         });
     });
 
+    describe('dialog visit analytics', () => {
+        afterEach(() => {
+            vi.unstubAllEnvs();
+        });
+
+        function events(name: string): unknown[] {
+            return umamiTrack.mock.calls.filter(([n]) => n === name).map(([, d]) => d);
+        }
+
+        it('opens a visit with the current game state', () => {
+            openNewGameDialog({ container, start, currentGame: () => ({ completed: true }) });
+
+            expect(events('new-game-dialog-opened')[0]).toMatchObject({ hasPuzzle: true, puzzleCompleted: true });
+        });
+
+        it('opens a visit with no puzzle when none is installed', () => {
+            open();
+
+            expect(events('new-game-dialog-opened')[0]).toMatchObject({ hasPuzzle: false, puzzleCompleted: false });
+        });
+
+        it('closes the visit with the pick', () => {
+            const opts = open();
+            opts.onSelect({
+                sizeId: '48',
+                cutStyleId: 'classic',
+                rotationEnabled: false,
+                imageChoice: { kind: 'photo', photo: makeCandidate(), slot: 1 },
+                imageCategory: 'nature',
+                vibrant: false,
+            });
+
+            expect(events('new-game-dialog-closed')[0]).toMatchObject({ outcome: 'photo', pickedSlot: 1 });
+        });
+
+        it('closes the visit on cancel', () => {
+            const opts = open();
+            opts.onCancel!({ imageCategory: 'face', vibrant: true });
+
+            expect(events('new-game-dialog-closed')[0]).toMatchObject({
+                outcome: 'cancel',
+                pickedSlot: -1,
+                imageCategory: 'face',
+                vibrant: true,
+            });
+        });
+
+        it('reports each thumbnail batch', async () => {
+            vi.stubEnv('VITE_IMAGE_PROXY_URL', 'https://proxy.example');
+            vi.mocked(fetchCandidateImages).mockResolvedValue({ candidates: [], cause: 'http-error', source: 'none' });
+
+            await open().fetchImageCandidates!('nature', false, undefined, 'open');
+
+            expect(events('image-candidates-loaded')[0]).toMatchObject({
+                trigger: 'open',
+                outcome: 'error',
+                cause: 'http-error',
+                imageCategory: 'nature',
+            });
+        });
+
+        it('reports thumbnail failures with the photo id', () => {
+            open().analytics!.thumbnailFailed(2, makeCandidate(), 'nature');
+
+            expect(events('image-thumbnail-failed')[0]).toEqual({ slot: 2, photoId: 'abc123', imageCategory: 'nature' });
+        });
+    });
+
     describe('candidate fetch wiring', () => {
         afterEach(() => {
             vi.unstubAllEnvs();
@@ -355,11 +434,11 @@ describe('openNewGameDialog', () => {
 
         it('threads the query override into the candidate fetch', async () => {
             vi.stubEnv('VITE_IMAGE_PROXY_URL', 'https://proxy.example');
-            vi.mocked(fetchCandidateImages).mockResolvedValue(null);
+            vi.mocked(fetchCandidateImages).mockResolvedValue({ candidates: [], cause: 'http-error', source: 'none' });
 
             const opts = open();
 
-            await opts.fetchImageCandidates!('nature', true, 'red bicycles');
+            await opts.fetchImageCandidates!('nature', true, 'red bicycles', 'open');
             expect(vi.mocked(fetchCandidateImages)).toHaveBeenCalledWith(
                 'https://proxy.example', 'nature', true, expect.any(String), 'red bicycles',
             );

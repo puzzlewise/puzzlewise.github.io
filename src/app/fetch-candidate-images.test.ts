@@ -48,10 +48,12 @@ describe('fetchCandidateImages', () => {
     it('maps results into candidates with 1080-scaled display size', async () => {
         vi.mocked(fetchRandomPhotos).mockResolvedValue([makeResult(1), makeResult(2)]);
 
-        const candidates = await fetchCandidateImages('https://proxy.example', 'nature', false, 'landscape');
+        const { candidates, cause, source } = await fetchCandidateImages('https://proxy.example', 'nature', false, 'landscape');
 
         expect(candidates).toHaveLength(2);
-        expect(candidates![0]).toEqual({
+        expect(cause).toBe('none');
+        expect(source).toBe('unsplash');
+        expect(candidates[0]).toEqual({
             imageUrl: 'https://images.unsplash.com/photo-1?w=1080',
             thumbUrl: 'https://images.unsplash.com/photo-1?w=400',
             imageSize: { width: 1080, height: Math.round(1080 * (2667 / 4000)) },
@@ -66,11 +68,11 @@ describe('fetchCandidateImages', () => {
     });
 
     it('keeps the page draw on each candidate', async () => {
-        vi.mocked(fetchRandomPhotos).mockResolvedValue([{ ...makeResult(1), pageDraw: { page: 12, knownPages: 166 } }]);
+        vi.mocked(fetchRandomPhotos).mockResolvedValue([{ ...makeResult(1), pageDraw: { page: 12, knownPages: 166, sourceKind: 'search', topic: '' } }]);
 
-        const candidates = await fetchCandidateImages('https://proxy.example', 'nature', false, 'landscape');
+        const { candidates } = await fetchCandidateImages('https://proxy.example', 'nature', false, 'landscape');
 
-        expect(candidates![0].pageDraw).toEqual({ page: 12, knownPages: 166 });
+        expect(candidates[0].pageDraw).toEqual({ page: 12, knownPages: 166, sourceKind: 'search', topic: '' });
     });
 
     it('passes the category query, count, and orientation through', async () => {
@@ -85,6 +87,7 @@ describe('fetchCandidateImages', () => {
             'nature vibrant colorful',
             'portrait',
             { caller: 'picker', imageCategory: 'nature', vibrant: true, custom: false },
+            { onDraw: expect.any(Function) },
         );
     });
 
@@ -100,6 +103,7 @@ describe('fetchCandidateImages', () => {
             'red bicycles',
             'landscape',
             { caller: 'picker', imageCategory: 'nature', vibrant: false, custom: true },
+            { onDraw: expect.any(Function) },
         );
     });
 
@@ -115,6 +119,7 @@ describe('fetchCandidateImages', () => {
             'red bicycles vibrant colorful',
             'portrait',
             { caller: 'picker', imageCategory: 'nature', vibrant: true, custom: true },
+            { onDraw: expect.any(Function) },
         );
     });
 
@@ -130,32 +135,48 @@ describe('fetchCandidateImages', () => {
             'nature',
             'landscape',
             { caller: 'picker', imageCategory: 'nature', vibrant: false, custom: false },
+            { onDraw: expect.any(Function) },
         );
     });
 
-    it('returns null when the fetch yields nothing', async () => {
+    it('carries the draw on a failed fetch', async () => {
+        const draw = { page: 7, knownPages: 166, sourceKind: 'topic', topic: 'film' } as const;
+        vi.mocked(fetchRandomPhotos).mockImplementation(async (...args) => {
+            args[6]?.onDraw?.(draw);
+            return undefined;
+        });
+
+        expect(await fetchCandidateImages('https://proxy.example', 'any', false, 'landscape'))
+            .toEqual({ candidates: [], cause: 'http-error', source: 'none', draw });
+    });
+
+    it('reports an http-error cause when the fetch yields nothing', async () => {
         vi.mocked(fetchRandomPhotos).mockResolvedValue(undefined);
 
-        expect(await fetchCandidateImages('https://proxy.example', 'any', false, 'landscape')).toBeNull();
+        expect(await fetchCandidateImages('https://proxy.example', 'any', false, 'landscape'))
+            .toEqual({ candidates: [], cause: 'http-error', source: 'none' });
     });
 
-    it('returns null when the fetch returns an empty array', async () => {
+    it('reports an empty-page cause when the fetch returns an empty array', async () => {
         vi.mocked(fetchRandomPhotos).mockResolvedValue([]);
 
-        expect(await fetchCandidateImages('https://proxy.example', 'any', false, 'landscape')).toBeNull();
+        expect(await fetchCandidateImages('https://proxy.example', 'any', false, 'landscape'))
+            .toEqual({ candidates: [], cause: 'empty-page', source: 'none' });
     });
 
-    it("returns null when the page's photos were all blocked", async () => {
+    it("reports a blocked cause when the page's photos were all blocked", async () => {
         vi.mocked(fetchRandomPhotos).mockResolvedValue('blocked');
 
-        expect(await fetchCandidateImages('https://proxy.example', 'any', false, 'landscape')).toBeNull();
+        expect(await fetchCandidateImages('https://proxy.example', 'any', false, 'landscape'))
+            .toEqual({ candidates: [], cause: 'blocked', source: 'none' });
     });
 
-    it('returns null and warns when the fetch throws', async () => {
+    it('reports a threw cause and warns when the fetch throws', async () => {
         vi.mocked(fetchRandomPhotos).mockRejectedValue(new Error('network down'));
 
         const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-        expect(await fetchCandidateImages('https://proxy.example', 'any', false, 'landscape')).toBeNull();
+        expect(await fetchCandidateImages('https://proxy.example', 'any', false, 'landscape'))
+            .toEqual({ candidates: [], cause: 'threw', source: 'none' });
         expect(warnSpy).toHaveBeenCalled();
         warnSpy.mockRestore();
     });
@@ -178,9 +199,9 @@ describe('fetchCandidateImages', () => {
         vi.mocked(stashCandidates).mockResolvedValue([stashEntry]);
         vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-        const candidates = await fetchCandidateImages('https://proxy.example', 'nature', true, 'landscape');
+        const result = await fetchCandidateImages('https://proxy.example', 'nature', true, 'landscape');
 
-        expect(candidates).toEqual([stashEntry]);
+        expect(result).toEqual({ candidates: [stashEntry], cause: 'threw', source: 'stash' });
         expect(vi.mocked(stashCandidates)).toHaveBeenCalledWith('landscape', CANDIDATE_IMAGE_COUNT);
         expect(umamiTrack).toHaveBeenCalledWith('image-stash-fallback', {
             imageCategory: 'nature',
@@ -196,13 +217,14 @@ describe('fetchCandidateImages', () => {
         vi.mocked(stashCandidates).mockResolvedValue([stashEntry]);
 
         expect(await fetchCandidateImages('https://proxy.example', 'any', false, 'landscape'))
-            .toEqual([stashEntry]);
+            .toEqual({ candidates: [stashEntry], cause: 'http-error', source: 'stash' });
     });
 
     it('reports a stash miss when the fetch fails and the stash is empty', async () => {
         vi.mocked(fetchRandomPhotos).mockResolvedValue(undefined);
 
-        expect(await fetchCandidateImages('https://proxy.example', 'any', false, 'portrait')).toBeNull();
+        expect(await fetchCandidateImages('https://proxy.example', 'any', false, 'portrait'))
+            .toEqual({ candidates: [], cause: 'http-error', source: 'none' });
         expect(umamiTrack).toHaveBeenCalledWith('image-stash-fallback', {
             imageCategory: 'any',
             orientation: 'portrait',

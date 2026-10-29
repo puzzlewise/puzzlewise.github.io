@@ -37,6 +37,27 @@ export function applyGroupTransform(
         `translate(${position.x}px, ${position.y}px) rotate(${rotation}deg)`;
 }
 
+interface PhotoSettle {
+    promise: Promise<'loaded' | 'failed'>;
+    watch(image: SVGImageElement): void;
+}
+
+/** Every piece's `<image>` shares one URL, so the first one stands for all. */
+function createPhotoSettle(): PhotoSettle {
+    let resolve!: (outcome: 'loaded' | 'failed') => void;
+    const promise = new Promise<'loaded' | 'failed'>((r) => { resolve = r; });
+    let watching = false;
+    return {
+        promise,
+        watch(image) {
+            if (watching) return;
+            watching = true;
+            image.addEventListener('load', () => resolve('loaded'), { once: true });
+            image.addEventListener('error', () => resolve('failed'), { once: true });
+        },
+    };
+}
+
 export class SvgDomRenderer implements Renderer {
     private tableEl: HTMLElement | null = null;
     private groupElements = new Map<number, HTMLElement>();
@@ -45,6 +66,7 @@ export class SvgDomRenderer implements Renderer {
     private pieceBaseWidth = 0;
     private pieceBaseHeight = 0;
     private currentImageUrl: string | null = '';
+    private photoSettle = createPhotoSettle();
     private currentPieceCount = -1;
     private currentShapeFingerprint = '';
 
@@ -73,6 +95,7 @@ export class SvgDomRenderer implements Renderer {
             pieceCount !== this.currentPieceCount ||
             shapeFingerprint !== this.currentShapeFingerprint) {
             this.clearAllElements();
+            this.photoSettle = createPhotoSettle();
             this.currentImageUrl = gameState.imageUrl;
             this.currentPieceCount = pieceCount;
             this.currentShapeFingerprint = shapeFingerprint;
@@ -191,6 +214,10 @@ export class SvgDomRenderer implements Renderer {
         // nothing there.
         if (typeof document.elementFromPoint !== 'function') return null;
         return this.pieceIdFromTarget(document.elementFromPoint(point.x, point.y));
+    }
+
+    photoSettled(): Promise<'loaded' | 'failed'> {
+        return this.photoSettle.promise;
     }
 
     destroy(): void {
@@ -315,6 +342,7 @@ export class SvgDomRenderer implements Renderer {
             image.setAttribute('clip-path', `url(#clip-piece-${piece.id})`);
             image.setAttribute('draggable', 'false');
             image.setAttribute('pointer-events', 'none');
+            this.photoSettle.watch(image);
             svg.appendChild(image);
         }
 

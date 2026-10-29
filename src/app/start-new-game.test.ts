@@ -358,9 +358,23 @@ describe('startNewGame', () => {
         );
     });
 
+    it("reports the picked photo's id on new-game-started", async () => {
+        vi.mocked(getImageProxyBaseUrl).mockReturnValue('https://proxy.example');
+
+        await startNewGame(
+            { cols: 2, rows: 2 },
+            noTracedTabsOptions({ imageSource: undefined, pickedImage: makeCandidateImage() }),
+            deps,
+        );
+
+        expect(umamiTrack).toHaveBeenCalledWith('new-game-started', expect.objectContaining({
+            imagePhotoId: 'abc123',
+        }));
+    });
+
     it("reports a picked photo's page draw on new-game-started", async () => {
         vi.mocked(getImageProxyBaseUrl).mockReturnValue('https://proxy.example');
-        const picked = { ...makeCandidateImage(), pageDraw: { page: 9, knownPages: 166 } };
+        const picked = { ...makeCandidateImage(), pageDraw: { page: 9, knownPages: 166, sourceKind: 'search' as const, topic: '' } };
 
         await startNewGame(
             { cols: 2, rows: 2 },
@@ -378,7 +392,7 @@ describe('startNewGame', () => {
         vi.mocked(getImageProxyBaseUrl).mockReturnValue('https://proxy.example');
         vi.mocked(resolveUnsplashImage).mockResolvedValue({
             ...makeCandidateImage(),
-            pageDraw: { page: 3, knownPages: 0 },
+            pageDraw: { page: 3, knownPages: 0, sourceKind: 'search', topic: '' },
         });
 
         await startNewGame({ cols: 2, rows: 2 }, noTracedTabsOptions({ imageSource: undefined }), deps);

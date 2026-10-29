@@ -40,6 +40,7 @@ const FIELD_TYPES: { [K in keyof NewGameData]-?: TagOf<NewGameData[K]> } = {
     imagePicked: 'boolean',
     imagePage: 'number',
     imagePagesKnown: 'number',
+    imagePhotoId: 'string',
     includesProgress: 'boolean',
     recipientHadSavedState: 'boolean',
     sharedColor: 'string',

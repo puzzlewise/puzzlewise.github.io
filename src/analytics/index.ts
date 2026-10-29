@@ -19,6 +19,7 @@ export type {
     SharedLoadFailedData,
     ImageFetchFailedData,
     ImageFetchHttpErrorData,
+    ImageCandidatesLoadedData,
     NewGameFailedData,
     PieceCountMismatchData,
     ShareFailedData,

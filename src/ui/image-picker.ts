@@ -4,10 +4,10 @@
  */
 
 import { isSafeHttpUrl } from '../sharing/safe-url.js';
-import { CANDIDATE_COUNT, type CandidateImage } from '../images/index.js';
+import { CANDIDATE_COUNT, type CandidateFetchResult, type CandidateImage } from '../images/index.js';
 
 export type NewGameImageChoice =
-    | { kind: 'photo'; photo: CandidateImage }
+    | { kind: 'photo'; photo: CandidateImage; slot: number }
     | { kind: 'surprise' }
     | { kind: 'blank' };
 
@@ -16,13 +16,18 @@ export interface ImagePickerOptions {
      * Absent when no image proxy is configured — the grid and refresh button
      * are then hidden, leaving only Surprise me / Blank puzzle.
      */
-    fetchCandidates?: () => Promise<CandidateImage[] | null>;
+    fetchCandidates?: (trigger: CandidateTrigger) => Promise<CandidateFetchResult>;
     onPick: (choice: NewGameImageChoice) => void;
+    onThumbnailLoad?: (slot: number) => void;
+    onThumbnailError?: (slot: number, candidate: CandidateImage) => void;
+    onCreditOpen?: (candidate: CandidateImage) => void;
 }
+
+export type CandidateTrigger = 'open' | 'refresh' | 'options';
 
 export interface ImagePicker {
     element: HTMLElement;
-    refresh(): void;
+    refresh(trigger: 'refresh' | 'options'): void;
 }
 
 export function createImagePicker(options: ImagePickerOptions): ImagePicker {
@@ -44,7 +49,7 @@ export function createImagePicker(options: ImagePickerOptions): ImagePicker {
     refreshButton.title = 'Show different images';
     refreshButton.setAttribute('aria-label', 'Show different images');
     refreshButton.textContent = '↻';
-    refreshButton.addEventListener('click', () => refresh());
+    refreshButton.addEventListener('click', () => refresh('refresh'));
     header.appendChild(refreshButton);
 
     section.appendChild(header);
@@ -155,13 +160,15 @@ export function createImagePicker(options: ImagePickerOptions): ImagePicker {
             img.src = candidate.thumbUrl;
             img.alt = candidate.description ?? 'Puzzle image';
             img.draggable = false;
+            img.addEventListener('load', () => options.onThumbnailLoad?.(i));
+            img.addEventListener('error', () => options.onThumbnailError?.(i, candidate));
             tile.appendChild(img);
 
             // Property assignment (not addEventListener) so each refresh replaces
             // the previous handler — tiles are reused, so listeners would
             // otherwise accumulate and fire onPick once per stale candidate too.
             // eslint-disable-next-line unicorn/prefer-add-event-listener
-            tile.onclick = () => options.onPick({ kind: 'photo', photo: candidate });
+            tile.onclick = () => options.onPick({ kind: 'photo', photo: candidate, slot: i });
 
             // The photographer URL already carries the utm_source=puzzle referral
             // params from the API layer — don't append. Defense-in-depth parity
@@ -175,6 +182,8 @@ export function createImagePicker(options: ImagePickerOptions): ImagePicker {
             }
             credit.textContent = candidate.attribution.photographerName;
             credit.title = candidate.attribution.photographerName;
+            // eslint-disable-next-line unicorn/prefer-add-event-listener
+            credit.onclick = () => options.onCreditOpen?.(candidate);
         }
     }
 
@@ -188,16 +197,16 @@ export function createImagePicker(options: ImagePickerOptions): ImagePicker {
         }
     }
 
-    function refresh(): void {
+    function refresh(trigger: CandidateTrigger): void {
         const fetchCandidates = options.fetchCandidates;
         if (!fetchCandidates) return;
 
         const token = ++fetchToken;
         setLoading();
-        fetchCandidates().then(
-            (candidates) => {
+        fetchCandidates(trigger).then(
+            ({ candidates }) => {
                 if (token !== fetchToken) return;
-                if (!candidates || candidates.length === 0) {
+                if (candidates.length === 0) {
                     showError();
                     return;
                 }
@@ -210,7 +219,7 @@ export function createImagePicker(options: ImagePickerOptions): ImagePicker {
     }
 
     if (options.fetchCandidates) {
-        refresh();
+        refresh('open');
     } else {
         grid.hidden = true;
         refreshButton.hidden = true;
