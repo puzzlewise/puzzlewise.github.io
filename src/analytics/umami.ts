@@ -1693,8 +1693,9 @@ export interface ShareLinkRescueResultData {
 export type MoveTrigger = 'banner' | 'new-game';
 
 /**
- * Move events come only from a build with `VITE_MOVED_TO` set — the legacy
- * adrianschmidt.github.io deploy steering players to puzzlewise.github.io.
+ * Move events come only from the frozen legacy build (tag `legacy-frozen`)
+ * served at adrianschmidt.github.io/puzzle/, which steers players to
+ * puzzlewise.github.io.
  * `ios-standalone` is an installed iOS home-screen app: it is shown
  * instructions instead of the handoff and never sends `move-started`.
  */

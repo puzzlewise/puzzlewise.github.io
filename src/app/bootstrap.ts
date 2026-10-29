@@ -51,8 +51,6 @@ import { installToolbar } from './install-toolbar.js';
 import { installDevHooks, solvePuzzle } from './dev-hooks.js';
 import { installGeometryTokenInvalidation } from '../persistence/index.js';
 import { initPwaUpdates } from '../pwa/register.js';
-import { movedToUrl } from '../move/move-config.js';
-import { createMoveSource, redirectShareLink } from '../move/move-source.js';
 import { isReceiveMode, runMoveReceiver } from '../move/move-receiver.js';
 
 /**
@@ -69,9 +67,6 @@ export function bootstrap(
         void runMoveReceiver({ container: root });
         return;
     }
-
-    const movedTo = movedToUrl();
-    if (movedTo !== undefined && redirectShareLink(movedTo)) return;
 
     // Distrust the persisted geometry-ownership token once another tab touches
     // the geometry, or on bfcache restore that missed those events. Ahead of
@@ -345,14 +340,6 @@ export function bootstrap(
         solve,
     });
 
-    const moveSource = movedTo === undefined
-        ? undefined
-        : createMoveSource({
-            container: root,
-            targetUrl: movedTo,
-            flushSave: () => saveCoordinator.flush(),
-        });
-
     /**
      * `installToolbar` invokes `installBackgroundColorControl` between the
      * deselect and Info buttons and hands the handle back. The installer is
@@ -369,15 +356,11 @@ export function bootstrap(
         selectionManager,
         fitView: startNewGameDeps.fitView,
         save: (state) => saveCoordinator.autoSave(state),
-        onNewGame: () => {
-            const openDialog = (): void => openNewGameDialog({
-                container: root,
-                start: (gridSize, options) => startNewGame(gridSize, options, startNewGameDeps),
-                currentGame: () => session.current(),
-            });
-            if (moveSource) moveSource.onNewGame(openDialog);
-            else openDialog();
-        },
+        onNewGame: () => openNewGameDialog({
+            container: root,
+            start: (gridSize, options) => startNewGame(gridSize, options, startNewGameDeps),
+            currentGame: () => session.current(),
+        }),
         installBackgroundColorControl: () => installBackgroundColor({ container: root }),
         solve,
     });
@@ -425,9 +408,6 @@ export function bootstrap(
     // `shareLinks.tryLoad` doesn't fire hashchange, so no loop risk. Registered
     // after boot is kicked off (boot runs synchronously to its first await).
     window.addEventListener('hashchange', () => {
-        if (movedTo !== undefined && redirectShareLink(movedTo)) return;
         void shareLinks.tryLoad();
     });
-
-    moveSource?.showBanner();
 }

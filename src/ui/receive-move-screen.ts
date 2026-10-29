@@ -4,7 +4,7 @@ export interface ReceiveMoveScreen {
     showMessage(text: string, onContinue: () => void): void;
 }
 
-export function moveButton(label: string, primary = false): HTMLButtonElement {
+function moveButton(label: string, primary = false): HTMLButtonElement {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = primary ? 'move-btn move-btn--primary' : 'move-btn';

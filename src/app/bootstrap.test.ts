@@ -117,11 +117,6 @@ vi.mock('../move/move-receiver.js', async (importOriginal) => {
     return { ...actual, runMoveReceiver: vi.fn(async () => 'done' as const) };
 });
 
-vi.mock('../move/move-source.js', async (importOriginal) => {
-    const actual = await importOriginal<typeof import('../move/move-source.js')>();
-    return { ...actual, redirectShareLink: vi.fn(actual.redirectShareLink) };
-});
-
 import { installGlobalHandlers } from './global-handlers.js';
 import { runBootSequence } from './boot-sequence.js';
 import { startNewGame, type StartNewGameDeps } from './start-new-game.js';
@@ -137,7 +132,6 @@ import { installToolbar } from './install-toolbar.js';
 import { installDevHooks } from './dev-hooks.js';
 import { track } from '../analytics/index.js';
 import { runMoveReceiver } from '../move/move-receiver.js';
-import { redirectShareLink } from '../move/move-source.js';
 import type { NewGameData, PuzzleCompletedData } from '../analytics/index.js';
 // From the module, not the barrel: the token key is deliberately not part of
 // the persistence layer's public surface.
@@ -711,7 +705,6 @@ describe('bootstrap', () => {
 
     describe('moving to the new site', () => {
         afterEach(() => {
-            vi.unstubAllEnvs();
             Reflect.deleteProperty(window, 'opener');
             history.replaceState(null, '', '/');
         });
@@ -733,48 +726,6 @@ describe('bootstrap', () => {
             expect(runMoveReceiver).not.toHaveBeenCalled();
             expect(runBootSequence).toHaveBeenCalled();
             expect(location.search).toBe('');
-        });
-
-        it('shows no banner and opens the new-game dialog directly without VITE_MOVED_TO', () => {
-            bootstrap(root);
-            expect(root.querySelector('.move-banner')).toBeNull();
-            vi.mocked(installToolbar).mock.calls[0][0].onNewGame();
-            expect(openNewGameDialog).toHaveBeenCalledTimes(1);
-        });
-
-        it('with VITE_MOVED_TO, shows the banner and puts the move dialog in front of New puzzle', () => {
-            vi.stubEnv('VITE_MOVED_TO', 'https://puzzlewise.github.io/');
-            bootstrap(root);
-
-            expect(root.querySelector('.move-banner')).not.toBeNull();
-            vi.mocked(installToolbar).mock.calls[0][0].onNewGame();
-            expect(openNewGameDialog).not.toHaveBeenCalled();
-
-            const startHere = [...root.querySelectorAll<HTMLButtonElement>('.move-btn')]
-                .find((b) => b.textContent === 'Start a new puzzle here anyway')!;
-            startHere.click();
-            expect(openNewGameDialog).toHaveBeenCalledTimes(1);
-        });
-
-        it('with VITE_MOVED_TO, a share link redirects before anything boots', () => {
-            vi.stubEnv('VITE_MOVED_TO', 'https://puzzlewise.github.io/');
-            vi.mocked(redirectShareLink).mockReturnValueOnce(true);
-
-            bootstrap(root);
-
-            expect(redirectShareLink).toHaveBeenCalledWith('https://puzzlewise.github.io/');
-            expect(createGameSession).not.toHaveBeenCalled();
-            expect(runBootSequence).not.toHaveBeenCalled();
-        });
-
-        it('with VITE_MOVED_TO, a pasted share link redirects instead of loading', () => {
-            vi.stubEnv('VITE_MOVED_TO', 'https://puzzlewise.github.io/');
-            bootstrap(root);
-            vi.mocked(redirectShareLink).mockReturnValueOnce(true);
-
-            window.dispatchEvent(new HashChangeEvent('hashchange'));
-
-            expect(createdShareLinks().tryLoad).not.toHaveBeenCalled();
         });
     });
 

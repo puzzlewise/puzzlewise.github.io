@@ -42,7 +42,6 @@ describe('showCompletionOverlay', () => {
 
     afterEach(() => {
         vi.unstubAllGlobals();
-        vi.unstubAllEnvs();
         delete window.umami;
     });
 
@@ -165,17 +164,6 @@ describe('showCompletionOverlay', () => {
                 reason: 'copy failed at <url>',
             });
         });
-    });
-
-    it('builds the share URL on the new site when VITE_MOVED_TO is set', () => {
-        vi.stubEnv('VITE_MOVED_TO', 'https://puzzlewise.github.io/');
-        const shareSpy = vi.fn().mockResolvedValue(undefined);
-        vi.stubGlobal('navigator', { share: shareSpy });
-
-        showCompletionOverlay({ container, state: makeState() });
-        container.querySelector<HTMLButtonElement>('.completion-share-btn')!.click();
-
-        expect(shareSpy.mock.calls[0][0].url).toMatch(/^https:\/\/puzzlewise\.github\.io\/#p=/);
     });
 
     it('share-button click invokes navigator.share with a share URL and does not dismiss', () => {

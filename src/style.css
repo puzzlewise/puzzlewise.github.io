@@ -1631,8 +1631,7 @@ details.info-section[open] > .info-section-summary {
   border-color: rgba(255, 255, 255, 0.35);
 }
 
-.corrupt-save-btn:disabled,
-.move-btn:disabled {
+.corrupt-save-btn:disabled {
   opacity: 0.6;
   cursor: default;
 }
@@ -1648,52 +1647,6 @@ details.info-section[open] > .info-section-summary {
 .move-btn--primary:hover {
   background: color-mix(in srgb, var(--ui-accent) 32%, transparent);
   border-color: color-mix(in srgb, var(--ui-accent) 60%, transparent);
-}
-
-.move-status {
-  font-size: 0.875rem;
-  line-height: 1.5;
-  margin: 0 0 20px;
-}
-
-.move-status:empty {
-  display: none;
-}
-
-.move-banner {
-  position: fixed;
-  bottom: 96px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  align-items: center;
-  width: max-content;
-  max-width: calc(100vw - 32px);
-  background: var(--ui-toast-bg);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 12px;
-  z-index: 10001;
-  animation: app-toast-in 180ms ease-out;
-}
-
-.move-banner-open,
-.move-banner-close {
-  background: none;
-  border: none;
-  color: #fff;
-  font: inherit;
-  font-size: 14px;
-  cursor: pointer;
-  padding: 12px 16px;
-}
-
-.move-banner-close {
-  padding: 12px 14px 12px 4px;
-  font-size: 18px;
-  line-height: 1;
-  opacity: 0.7;
 }
 
 .share-section .share-primary-btn {

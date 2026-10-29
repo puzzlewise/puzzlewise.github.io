@@ -187,17 +187,3 @@ describe('overlay stacking', () => {
         expect(completion).toBeGreaterThanOrEqual(pxValue('.size-picker-overlay', 'z-index'));
     });
 });
-
-describe('move banner', () => {
-    it('sizes to its text rather than the half-width a centered fixed box shrinks to', () => {
-        expect(declarationsFor(styleCss, '.move-banner')).toMatch(/width:\s*max-content/);
-    });
-
-    it('sits above the toast lane so a two-line phone toast does not overlap it', () => {
-        expect(pxValue('.move-banner', 'bottom')).toBeGreaterThanOrEqual(pxValue('.app-toast', 'bottom') + 64);
-    });
-
-    it('sits under toasts so a taller toast covers it rather than hiding behind it', () => {
-        expect(pxValue('.move-banner', 'z-index')).toBeLessThan(pxValue('.app-toast', 'z-index'));
-    });
-});
