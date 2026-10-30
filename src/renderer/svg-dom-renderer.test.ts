@@ -2,8 +2,8 @@
  * @vitest-environment jsdom
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { SvgDomRenderer } from './svg-dom-renderer.js';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { SvgDomRenderer, RELAYER_IDLE_MS } from './svg-dom-renderer.js';
 import { VIEWPORT_TRANSITION_MS } from './types.js';
 import type { GameState, PieceGroup } from '../model/types.js';
 import { makeGameState, makeRectPiece } from '../test-helpers/fixtures.js';
@@ -516,6 +516,109 @@ describe('SvgDomRenderer', () => {
             renderer.renderState(state);
 
             renderer.setGroupDragging(999, true);
+        });
+
+        it('leaves will-change to the CSS, so the relayer rule can override it (#680)', () => {
+            renderer.init(container);
+            renderer.renderState(make2x2State());
+
+            const groupEl = container.querySelector<HTMLElement>('[data-group-id="0"]')!;
+            expect(groupEl.style.willChange).toBe('');
+        });
+    });
+
+    describe('relayer after zooming out', () => {
+        let frames: FrameRequestCallback[];
+        let table: HTMLElement;
+
+        beforeEach(() => {
+            vi.useFakeTimers();
+            frames = [];
+            vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => frames.push(cb));
+            renderer.init(container);
+            table = container.querySelector<HTMLElement>('[data-puzzle-table]')!;
+            renderer.setViewportTransform(2, 0, 0);
+        });
+
+        afterEach(() => {
+            vi.unstubAllGlobals();
+            vi.useRealTimers();
+        });
+
+        function runFrame(): void {
+            const pending = frames;
+            frames = [];
+            for (const cb of pending) cb(0);
+        }
+
+        it('drops the group layers for one frame once a zoom-out settles', () => {
+            renderer.setViewportTransform(1, 0, 0);
+            vi.advanceTimersByTime(RELAYER_IDLE_MS - 1);
+            expect(table.classList.contains('relayer')).toBe(false);
+
+            vi.advanceTimersByTime(1);
+            expect(table.classList.contains('relayer')).toBe(true);
+
+            runFrame();
+            expect(table.classList.contains('relayer')).toBe(true);
+            runFrame();
+            expect(table.classList.contains('relayer')).toBe(false);
+        });
+
+        it('waits until the zoom has been still for the idle time', () => {
+            renderer.setViewportTransform(1.5, 0, 0);
+            vi.advanceTimersByTime(RELAYER_IDLE_MS - 1);
+            renderer.setViewportTransform(1, 0, 0);
+            vi.advanceTimersByTime(RELAYER_IDLE_MS - 1);
+            expect(table.classList.contains('relayer')).toBe(false);
+
+            vi.advanceTimersByTime(1);
+            expect(table.classList.contains('relayer')).toBe(true);
+        });
+
+        it('compares against the highest zoom since the last relayer', () => {
+            renderer.setViewportTransform(4, 0, 0);
+            renderer.setViewportTransform(3, 0, 0);
+            vi.advanceTimersByTime(RELAYER_IDLE_MS);
+
+            expect(table.classList.contains('relayer')).toBe(true);
+        });
+
+        it('does not relayer after zooming in or panning', () => {
+            renderer.setViewportTransform(3, 0, 0);
+            renderer.setViewportTransform(3, 50, 20);
+            vi.advanceTimersByTime(RELAYER_IDLE_MS);
+
+            expect(table.classList.contains('relayer')).toBe(false);
+        });
+
+        it('does not relayer again until the zoom drops below the last relayer scale', () => {
+            renderer.setViewportTransform(1, 0, 0);
+            vi.advanceTimersByTime(RELAYER_IDLE_MS);
+            runFrame();
+            runFrame();
+
+            renderer.setViewportTransform(1, 30, 0);
+            vi.advanceTimersByTime(RELAYER_IDLE_MS);
+
+            expect(table.classList.contains('relayer')).toBe(false);
+        });
+
+        it('defers a relayer during an animated viewport transition until it ends', () => {
+            renderer.enableViewportTransition();
+            renderer.setViewportTransform(1, 0, 0);
+            vi.advanceTimersByTime(RELAYER_IDLE_MS);
+            expect(table.classList.contains('relayer')).toBe(false);
+
+            renderer.disableViewportTransition();
+            expect(table.classList.contains('relayer')).toBe(true);
+        });
+
+        it('cancels a pending relayer on destroy', () => {
+            renderer.setViewportTransform(1, 0, 0);
+            renderer.destroy();
+
+            expect(vi.getTimerCount()).toBe(0);
         });
     });
 

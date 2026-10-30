@@ -143,6 +143,20 @@ describe('selection glow CSS', () => {
     });
 });
 
+describe('group layer promotion CSS', () => {
+    it('promotes every group to its own layer', () => {
+        expect(declarationsFor(styleCss, '[data-group-id]')).toMatch(
+            /will-change:\s*transform/,
+        );
+    });
+
+    it('drops the group layers while the table is relayering (#680)', () => {
+        expect(declarationsFor(styleCss, '[data-puzzle-table].relayer [data-group-id]')).toMatch(
+            /will-change:\s*auto/,
+        );
+    });
+});
+
 describe('blank-piece CSS', () => {
     it('paints blank pieces from the --piece-blank-fill variable', () => {
         expect(declarationsFor(styleCss, '[data-piece-blank]')).toMatch(

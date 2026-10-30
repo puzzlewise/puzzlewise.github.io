@@ -37,6 +37,14 @@ export function applyGroupTransform(
         `translate(${position.x}px, ${position.y}px) rotate(${rotation}deg)`;
 }
 
+/**
+ * On phones, `will-change: transform` group layers kept their zoomed-in scale
+ * after zooming out, ran out of GPU memory and stopped rendering (#680).
+ * Dropping the hint for one frame once a zoom-out has been still this long
+ * rebuilds them at the current scale.
+ */
+export const RELAYER_IDLE_MS = 200;
+
 interface PhotoSettle {
     promise: Promise<'loaded' | 'failed'>;
     watch(image: SVGImageElement): void;
@@ -69,6 +77,11 @@ export class SvgDomRenderer implements Renderer {
     private photoSettle = createPhotoSettle();
     private currentPieceCount = -1;
     private currentShapeFingerprint = '';
+    private viewportScale: number | null = null;
+    private maxScaleSinceRelayer = 0;
+    private relayerTimer: ReturnType<typeof setTimeout> | null = null;
+    private transitionActive = false;
+    private relayerAfterTransition = false;
 
     init(container: HTMLElement): void {
         const table = document.createElement('div');
@@ -151,16 +164,43 @@ export class SvgDomRenderer implements Renderer {
 
         this.tableEl.style.transform =
             `translate(${offsetX}px, ${offsetY}px) scale(${scale})`;
+
+        if (scale === this.viewportScale) return;
+        this.viewportScale = scale;
+        this.maxScaleSinceRelayer = Math.max(this.maxScaleSinceRelayer, scale);
+        if (this.relayerTimer !== null) clearTimeout(this.relayerTimer);
+        this.relayerTimer = setTimeout(() => {
+            this.relayerTimer = null;
+            if (this.transitionActive) this.relayerAfterTransition = true;
+            else this.relayerIfZoomedOut();
+        }, RELAYER_IDLE_MS);
     }
 
     enableViewportTransition(): void {
         if (!this.tableEl) return;
         this.tableEl.style.transition = VIEWPORT_TRANSITION;
+        this.transitionActive = true;
     }
 
     disableViewportTransition(): void {
         if (!this.tableEl) return;
         this.tableEl.style.transition = '';
+        this.transitionActive = false;
+        if (this.relayerAfterTransition) {
+            this.relayerAfterTransition = false;
+            this.relayerIfZoomedOut();
+        }
+    }
+
+    private relayerIfZoomedOut(): void {
+        const table = this.tableEl;
+        const scale = this.viewportScale;
+        if (!table || scale === null || scale >= this.maxScaleSinceRelayer) return;
+        this.maxScaleSinceRelayer = scale;
+        table.classList.add('relayer');
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => table.classList.remove('relayer'));
+        });
     }
 
     setGroupDragging(groupId: number, dragging: boolean): void {
@@ -221,6 +261,10 @@ export class SvgDomRenderer implements Renderer {
     }
 
     destroy(): void {
+        if (this.relayerTimer !== null) clearTimeout(this.relayerTimer);
+        this.relayerTimer = null;
+        this.relayerAfterTransition = false;
+
         if (this.tableEl) {
             this.tableEl.remove();
             this.tableEl = null;
@@ -254,7 +298,6 @@ export class SvgDomRenderer implements Renderer {
             groupEl.style.position = 'absolute';
             groupEl.style.top = '0';
             groupEl.style.left = '0';
-            groupEl.style.willChange = 'transform';
             this.tableEl!.appendChild(groupEl);
             this.groupElements.set(group.id, groupEl);
         }
