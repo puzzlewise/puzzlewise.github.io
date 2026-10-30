@@ -363,6 +363,12 @@ html, body {
 /* Piece/group edge — value driven by the Piece outline setting. */
 [data-group-id] {
   filter: var(--piece-edge-filter, drop-shadow(0 0 4px rgba(0, 0, 0, 0.35)));
+  will-change: transform;
+}
+
+/* Set for one frame by the renderer after a zoom-out (#680). */
+[data-puzzle-table].relayer [data-group-id] {
+  will-change: auto;
 }
 
 [data-piece-blank] {
