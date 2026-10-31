@@ -398,13 +398,6 @@ function allocateEdgeIds(pieceSubPaths: Op[][][]): {
 }
 
 /**
- * The `shape` string is built inline here rather than by shared
- * `model/build-shape.ts`. The save path depends on the two agreeing:
- * `serializePiece` omits `shape` from the v12 blob only for pieces where the
- * shared builder reproduces this string byte-for-byte, and
- * `game/init-geometry-precision.test.ts` pins how many pieces per style must
- * still store one.
- *
  * Returns null when the piece has no sub-paths (fully trimmed in non-borderless).
  */
 function buildPiece(

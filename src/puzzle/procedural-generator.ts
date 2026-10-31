@@ -525,14 +525,6 @@ function buildFlatEdgePath(end: Point): string {
     return `L ${end.x} ${end.y}`;
 }
 
-/**
- * Deliberately not `model/build-shape.ts`: that starts a fresh subpath where
- * consecutive edges don't chain; this always emits a single `M …/Z`. The save
- * path depends on the two agreeing — `serializePiece` omits `shape` from the v12
- * blob only where the shared builder reproduces this byte-for-byte. Changing what
- * this emits alters rendered geometry on existing share links and moves pieces
- * out of the dedup, which `game/init-geometry-precision.test.ts` pins per style.
- */
 function buildShape(edges: Edge[]): string {
     if (edges.length === 0) return '';
 
