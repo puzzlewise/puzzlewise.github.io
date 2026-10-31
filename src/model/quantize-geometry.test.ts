@@ -40,6 +40,17 @@ describe('quantizePieceGeometry', () => {
         expect(piece.edges[0].end).toEqual({ x: 10.12, y: 20.35 });
     });
 
+    it('rounds edge endpoints in image space, then shifts them by the rounded offset', () => {
+        const edge = makeEdge({ start: { x: 0.007, y: 10.004 }, end: { x: 5.006, y: 0 } });
+
+        const [piece] = quantizePieceGeometry([
+            makePiece({ edges: [edge], imageOffset: { x: 0.004, y: -0.004 } }),
+        ]);
+
+        expect(piece.edges[0].start).toEqual({ x: 0, y: 10.01 });
+        expect(piece.edges[0].end).toEqual({ x: 5, y: 0 });
+    });
+
     it('rounds every curve point to 2 decimals', () => {
         const edge = makeEdge({
             curvePoints: [
