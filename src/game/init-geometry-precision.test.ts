@@ -141,17 +141,19 @@ describe('generated geometry precision', () => {
 
 /**
  * Size guard for the persisted geometry blob (#487/#493, v12 derived-data
- * removal). v12 dropped `curvePoints` and omits rebuildable `piece.shape`,
- * taking the largest blob to ~1.15 MiB — well under the ~4.75 MiB localStorage
- * ceiling (#399). So this no longer polices "fits the quota" but "the dedup
- * keeps working": a failure means the blob grew back, don't just raise the number.
+ * removal; #690, v14 mate-path dedup). v12 dropped `curvePoints` and omits
+ * rebuildable `piece.shape`, taking the largest blob to ~1.15 MiB; v14 also
+ * omits rebuildable mate paths, taking it to ~650k chars — well under the
+ * ~4.75 MiB localStorage ceiling (#399). So this no longer polices "fits the
+ * quota" but "the dedup keeps working": a failure means the blob grew back,
+ * don't just raise the number.
  *
  * Measured in UTF-16 code units (`String.length`, the unit localStorage meters).
  * Wavy at 16×12 on a 1080×720 image is the largest production blob. Mildly
- * seed-dependent (~2.7% spread over seeds 1/42/4242/999999); the guard sits
- * ~16% above the measured max.
+ * seed-dependent (634,204–650,117, ~2.5% spread over seeds 1/42/4242/999999);
+ * the guard sits ~16% above the measured max, rounded up to the next 50,000.
  */
-const SIZE_GUARD_CHARS = 1_400_000;
+const SIZE_GUARD_CHARS = 800_000;
 
 describe('persisted geometry size', () => {
     it(

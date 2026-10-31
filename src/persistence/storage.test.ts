@@ -900,6 +900,19 @@ describe('unreadable save carries the raw blobs for download', () => {
         expect(outcome.raw.progress).toBeNull();
     });
 
+    it('reports parse-error for a v14 geometry blob with an edge path missing', () => {
+        const state = makeGameState({ seed: 14 });
+        const blob = JSON.parse(JSON.stringify(serializeStatic(state)));
+        delete blob.pieces[0].edges[0].path;
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(blob));
+        localStorage.setItem(PROGRESS_KEY, JSON.stringify(serializeProgress(state, [])));
+
+        const outcome = loadSavedGame();
+        expect(outcome.status).toBe('unreadable');
+        if (outcome.status !== 'unreadable') throw new Error('expected unreadable');
+        expect(outcome.reason).toBe('parse-error');
+    });
+
     it('still captures the progress blob when the geometry itself is corrupt', () => {
         // A corrupt geometry blob throws on parse before the progress key would
         // otherwise be decoded; the raw snapshot must still include progress so
