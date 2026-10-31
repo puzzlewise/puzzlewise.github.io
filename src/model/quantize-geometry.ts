@@ -7,9 +7,7 @@
  *
  * Runs before sealing (`model/seal-geometry.ts`), so the `bounds` sealing
  * derives from curve samples inherit this precision; the other order would put
- * full-precision numbers back into the blob. Path strings (`piece.shape`,
- * `edge.path`) are left byte-identical — already `toFixed(2)` from `fmt` —
- * which keeps existing share links reproducing the same rendered geometry.
+ * full-precision numbers back into the blob.
  */
 
 import type { GeneratedEdge, GeneratedPiece, Point } from './types.js';
@@ -42,11 +40,22 @@ function quantizePoint(point: Point): Point {
     return { x: quantize(point.x), y: quantize(point.y) };
 }
 
-function quantizeEdge(edge: GeneratedEdge): GeneratedEdge {
+/**
+ * Rounded in image space, not the local frame: both sides of a cut then share
+ * one 2-decimal image point, so mates' endpoints agree exactly across frames.
+ */
+function quantizeVertex(point: Point, rawOffset: Point, offset: Point): Point {
+    return {
+        x: quantize(quantize(point.x - rawOffset.x) + offset.x),
+        y: quantize(quantize(point.y - rawOffset.y) + offset.y),
+    };
+}
+
+function quantizeEdge(edge: GeneratedEdge, rawOffset: Point, offset: Point): GeneratedEdge {
     const quantized: GeneratedEdge = {
         ...edge,
-        start: quantizePoint(edge.start),
-        end: quantizePoint(edge.end),
+        start: quantizeVertex(edge.start, rawOffset, offset),
+        end: quantizeVertex(edge.end, rawOffset, offset),
     };
     if (edge.curvePoints) {
         quantized.curvePoints = edge.curvePoints.map(quantizePoint);
@@ -56,9 +65,12 @@ function quantizeEdge(edge: GeneratedEdge): GeneratedEdge {
 
 /** Pure: inputs are left untouched (pieces are treated as immutable). */
 export function quantizePieceGeometry(pieces: GeneratedPiece[]): GeneratedPiece[] {
-    return pieces.map((piece) => ({
-        ...piece,
-        edges: piece.edges.map(quantizeEdge),
-        imageOffset: quantizePoint(piece.imageOffset),
-    }));
+    return pieces.map((piece) => {
+        const imageOffset = quantizePoint(piece.imageOffset);
+        return {
+            ...piece,
+            edges: piece.edges.map((edge) => quantizeEdge(edge, piece.imageOffset, imageOffset)),
+            imageOffset,
+        };
+    });
 }

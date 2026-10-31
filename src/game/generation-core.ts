@@ -1,9 +1,8 @@
 /**
- * The pure generate phase of a new game: strategy dispatch, piece generation,
- * quantize, seal. Extracted from `init.ts` so the worker and the synchronous
- * main-thread fallback run byte-identical code — the seeded-PRNG call-order
- * contract (share links/saves replay from the seed alone) has one implementation
- * regardless of thread.
+ * The pure generate phase of a new game. Extracted from `init.ts` so the worker
+ * and the synchronous main-thread fallback run byte-identical code — the
+ * seeded-PRNG call-order contract (share links/saves replay from the seed
+ * alone) has one implementation regardless of thread.
  *
  * Request and result are structured-cloneable; the result crosses `postMessage`
  * on the worker path. Quantize + seal run here, inside the worker, deliberately:
@@ -17,6 +16,7 @@ import type { AutoGroup } from '../puzzle/topology/auto-group.js';
 import type { PieceCountMismatch } from '../puzzle/topology/generator.js';
 import type { TabDebugReport } from '../puzzle/topology/tab-debug.js';
 import { TabDebugSession } from '../puzzle/topology/tab-debug.js';
+import { alignMatePaths } from '../model/align-mates.js';
 import { quantizePieceGeometry } from '../model/quantize-geometry.js';
 import { sealPieceGeometry } from '../model/seal-geometry.js';
 import type { CutStyle } from './cut-styles.js';
@@ -75,7 +75,7 @@ export function runGeneration(request: GenerationRequest): GenerationResult {
     const { pieces: rawPieces, autoGroups, tabDebugReport, pieceCountMismatch } =
         strategy.generatePieces(generationGrid, puzzleSize, request.seed, ctx);
 
-    const pieces = sealPieceGeometry(quantizePieceGeometry(rawPieces));
+    const pieces = sealPieceGeometry(alignMatePaths(quantizePieceGeometry(rawPieces)));
 
     return { pieces, puzzleSize, autoGroups, tabDebugReport, pieceCountMismatch };
 }
