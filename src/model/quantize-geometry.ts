@@ -32,7 +32,7 @@ const FACTOR = 10 ** GEOMETRY_PRECISION_DECIMALS;
  * inputs pass through unchanged, since this pass rounds coordinates, it does not
  * police them.
  */
-function quantize(value: number): number {
+export function quantize(value: number): number {
     const rounded = Math.round(value * FACTOR) / FACTOR;
     if (!Number.isFinite(rounded)) return value;
     return rounded === 0 ? 0 : rounded;
