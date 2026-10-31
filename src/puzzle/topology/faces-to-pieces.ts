@@ -137,7 +137,7 @@ function halfEdgeToEdgeDef(
             end,
             mateEdgeId: -1,
             matePieceId: -1,
-            curvePoints: extractCurvePoints(he, bbox),
+            curvePoints: extractCurvePoints(he, bbox, start, end),
         };
     }
 
@@ -157,21 +157,26 @@ function halfEdgeToEdgeDef(
         matePieceId,
         sharedEdgeKey,
         isFirstSide,
-        curvePoints: extractCurvePoints(he, bbox),
+        curvePoints: extractCurvePoints(he, bbox, start, end),
     };
 }
 
 /** Piece-local coordinates; undefined for straight edges (saves space). */
-function extractCurvePoints(he: HalfEdge, bbox: BBox): Point[] | undefined {
+function extractCurvePoints(he: HalfEdge, bbox: BBox, start: Point, end: Point): Point[] | undefined {
     const pts = he.curve.sample(8);
     if (isEssentiallyStraight(pts)) {
         return undefined;
     }
 
-    return pts.map(p => ({
+    // Vertex merging (VERTEX_MERGE_TOLERANCE) leaves the curve's own ends up to
+    // ~1 px off the shared vertex, so the vertices are authoritative.
+    const local = pts.map(p => ({
         x: p.x - bbox.minX,
         y: p.y - bbox.minY,
     }));
+    local[0] = { ...start };
+    local[local.length - 1] = { ...end };
+    return local;
 }
 
 function isEssentiallyStraight(pts: Point[], tolerance = 0.5): boolean {
