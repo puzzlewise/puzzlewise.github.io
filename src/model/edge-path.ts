@@ -19,7 +19,6 @@ function isFlag(n: number): n is 0 | 1 {
     return n === 0 || n === 1;
 }
 
-/** Null on any unrecognized token, wrong argument count, or an empty path. */
 export function parseEdgePath(path: string): PathSegment[] | null {
     const tokens = path.split(/[\s,]+/).filter((t) => t !== '');
     const segments: PathSegment[] = [];
