@@ -10,6 +10,8 @@ vi.mock('../puzzle/composable-generator.js', async (importActual) => {
 import { generateComposablePuzzle } from '../puzzle/composable-generator.js';
 import { getCutStyleStrategy } from './cut-style-strategies.js';
 import { createNewGame } from './init.js';
+import { alignMatePaths } from '../model/align-mates.js';
+import { quantizePieceGeometry } from '../model/quantize-geometry.js';
 import { generateProceduralPuzzle } from '../puzzle/procedural-generator.js';
 import { registerTabGenerator } from '../puzzle/topology/generator-registry.js';
 import { tracedTabGenerator } from '../puzzle/topology/traced-tab-generator.js';
@@ -94,7 +96,9 @@ describe('classicStrategy', () => {
             seed: 4242,
         });
         expect(state.classicConfig).toBeUndefined();
-        const legacy = generateProceduralPuzzle(grid.cols, grid.rows, size, 4242);
+        const legacy = alignMatePaths(quantizePieceGeometry(
+            generateProceduralPuzzle(grid.cols, grid.rows, size, 4242),
+        ));
         expect(state.pieces.map((p) => p.shape)).toEqual(legacy.map((p) => p.shape));
     });
 });

@@ -3,34 +3,34 @@
 exports[`traced-tab geometry byte-identity (#574) > classic-sine 5x5 traced v2 produces identical geometry 1`] = `
 {
   "count": 25,
-  "digest": "1923483c",
+  "digest": "4abff496",
 }
 `;
 
 exports[`traced-tab geometry byte-identity (#574) > classic-sine 6x6 traced v1 produces identical geometry 1`] = `
 {
   "count": 36,
-  "digest": "5e5c7fc0",
+  "digest": "775829d9",
 }
 `;
 
 exports[`traced-tab geometry byte-identity (#574) > triangles r6 traced v2 produces identical geometry 1`] = `
 {
   "count": 90,
-  "digest": "ac363939",
+  "digest": "9291154b",
 }
 `;
 
 exports[`traced-tab geometry byte-identity (#574) > wavy 5x5 traced v1 produces identical geometry 1`] = `
 {
   "count": 25,
-  "digest": "e695d88e",
+  "digest": "4dbdcd60",
 }
 `;
 
 exports[`traced-tab geometry byte-identity (#574) > wavy 6x5 traced v2 produces identical geometry 1`] = `
 {
   "count": 30,
-  "digest": "1190fe97",
+  "digest": "902c735f",
 }
 `;

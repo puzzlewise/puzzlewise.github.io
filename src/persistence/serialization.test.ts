@@ -1,6 +1,19 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import type { GameState, Piece, PieceGroup } from '../model/types.js';
 import { buildShape } from '../model/build-shape.js';
+import { formatEdgePath, parseEdgePath } from '../model/edge-path.js';
+import { buildPiecesById } from '../model/helpers.js';
+import { createNewGame } from '../game/init.js';
+import { registerTabGenerator } from '../puzzle/topology/generator-registry.js';
+import { tracedTabGenerator } from '../puzzle/topology/traced-tab-generator.js';
+import {
+    imageSize,
+    SEED,
+    styles,
+    viewport,
+    type StyleCase,
+} from '../test-helpers/generation-style-cases.js';
+import { v13Progress, v13StaticBlob } from '../test-helpers/v13-save.js';
 import {
     serializeState,
     deserializeState,
@@ -1330,5 +1343,145 @@ describe('blank puzzles', () => {
         expect(() => deserializeState(serialized)).toThrow(
             'imageUrl must be a non-empty string',
         );
+    });
+});
+
+describe('v14 mate path dedup', () => {
+    beforeAll(() => {
+        registerTabGenerator(tracedTabGenerator);
+    });
+
+    const generated = new Map<string, GameState>();
+    function generatedState(style: StyleCase): GameState {
+        let state = generated.get(style.name);
+        if (!state) {
+            state = createNewGame('img', imageSize, viewport, style.grid, { ...style.options, seed: SEED });
+            generated.set(style.name, state);
+        }
+        return state;
+    }
+
+    function wavyState(): GameState {
+        return generatedState(styles.find((s) => s.name === 'wavy')!);
+    }
+
+    function roundTrip(staticBlob: SerializedStaticState, state: GameState): GameState {
+        return recombine(
+            JSON.parse(JSON.stringify(staticBlob)),
+            JSON.parse(JSON.stringify(serializeProgress(state))),
+        );
+    }
+
+    function jsonBlob(state: GameState): SerializedStaticState {
+        return JSON.parse(JSON.stringify(serializeStatic(state)));
+    }
+
+    it('writes version 14', () => {
+        expect(serializeStatic(makeGameState()).version).toBe(14);
+        expect(serializeProgress(makeGameState()).version).toBe(14);
+        expect(serializeState(makeGameState()).version).toBe(14);
+    });
+
+    for (const style of styles) {
+        it(`omits rebuildable mate paths and restores them (${style.name})`, () => {
+            const state = generatedState(style);
+            const blob = jsonBlob(state);
+
+            const interior = blob.pieces.flatMap((p) => p.edges).filter((e) => e.mateEdgeId >= 0);
+            const pairs = interior.filter((e) => e.mateEdgeId > e.id).length;
+            expect(pairs).toBeGreaterThan(0);
+            expect(interior.filter((e) => 'path' in e).length).toBe(pairs);
+            expect(roundTrip(blob, state).pieces).toEqual(state.pieces);
+        });
+    }
+
+    it('generates self-mated pairs in the fractal case, so the round trip covers them', () => {
+        const state = generatedState(styles.find((s) => s.name === 'fractal')!);
+        const selfMated = state.pieces.flatMap((p) =>
+            p.edges.filter((e) => e.mateEdgeId >= 0 && e.matePieceId === p.id));
+        expect(selfMated.length).toBeGreaterThan(0);
+    });
+
+    it('also omits rebuildable mate paths in the legacy full-blob writer', () => {
+        const state = wavyState();
+        const blob = JSON.parse(JSON.stringify(serializeState(state))) as SerializedGameState;
+        const omitted = blob.pieces.flatMap((p) => p.edges).filter((e) => !('path' in e));
+        expect(omitted.length).toBeGreaterThan(0);
+        expect(deserializeState(blob).pieces).toEqual(state.pieces);
+    });
+
+    it('keeps a mate path it cannot rebuild', () => {
+        const base = wavyState();
+        const pieces = structuredClone(base.pieces);
+        const piece = pieces.find((p) => p.edges.some((e) => e.mateEdgeId >= 0 && e.mateEdgeId < e.id))!;
+        const edge = piece.edges.find((e) => e.mateEdgeId >= 0 && e.mateEdgeId < e.id)!;
+        const segments = parseEdgePath(edge.path)!;
+        const first = segments[0];
+        segments[0] = first.cmd === 'C'
+            ? { ...first, c1: { ...first.c1, x: first.c1.x + 0.01 } }
+            : { ...first, to: { ...first.to, x: first.to.x + 0.01 } };
+        const altered = formatEdgePath(segments);
+        expect(altered).not.toBe(edge.path);
+        edge.path = altered;
+        piece.shape = buildShape(piece.edges);
+        const state: GameState = { ...base, pieces, piecesById: buildPiecesById(pieces) };
+
+        const blob = jsonBlob(state);
+        const stored = blob.pieces.find((p) => p.id === piece.id)!.edges.find((e) => e.id === edge.id)!;
+
+        expect(stored.path).toBe(altered);
+        expect(roundTrip(blob, state).pieces).toEqual(pieces);
+    });
+
+    describe('rejects a corrupt v14 blob', () => {
+        type Corruption = (blob: SerializedStaticState) => void;
+        const NO_PATH = /^Invalid state: piece \d+ edge \d+ has no path$/;
+        const allEdges = (blob: SerializedStaticState) => blob.pieces.flatMap((p) => p.edges);
+        const canonical = (blob: SerializedStaticState) =>
+            allEdges(blob).find((e) => e.mateEdgeId > e.id)!;
+
+        const corruptions: Array<[string, Corruption, RegExp]> = [
+            ['canonical path deleted', (blob) => {
+                delete canonical(blob).path;
+            }, NO_PATH],
+            ['border edge path deleted', (blob) => {
+                delete allEdges(blob).find((e) => e.mateEdgeId < 0)!.path;
+            }, NO_PATH],
+            ['mate edge missing', (blob) => {
+                const canon = canonical(blob);
+                const owner = blob.pieces.find((p) => p.edges.includes(canon))!;
+                owner.edges = owner.edges.filter((e) => e !== canon);
+            }, NO_PATH],
+            ['canonical edge not pointing back', (blob) => {
+                const canon = canonical(blob);
+                canon.mateEdgeId = -1;
+                canon.matePieceId = -1;
+            }, NO_PATH],
+            ['canonical path unparseable', (blob) => {
+                canonical(blob).path = 'Q 1 2';
+            }, NO_PATH],
+            ['path not a string', (blob) => {
+                (allEdges(blob).find((e) => e.mateEdgeId < 0) as { path?: unknown }).path = 42;
+            }, /^Invalid state: piece \d+ edge \d+ has a non-string path$/],
+        ];
+
+        for (const [name, corrupt, message] of corruptions) {
+            it(name, () => {
+                const state = wavyState();
+                const blob = jsonBlob(state);
+                corrupt(blob);
+                expect(() => roundTrip(blob, state)).toThrow(message);
+            });
+        }
+    });
+
+    it('loads a v13 blob unchanged', () => {
+        const blob = v13StaticBlob();
+        const progress = v13Progress();
+
+        const restored = recombine(JSON.parse(JSON.stringify(blob)), progress);
+
+        expect(restored.pieces.map((p) => p.edges.map((e) => e.path)))
+            .toEqual(blob.pieces.map((p) => p.edges.map((e) => e.path)));
     });
 });

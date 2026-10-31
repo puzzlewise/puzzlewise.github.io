@@ -40,6 +40,7 @@ import {
     makeRectPiece,
     makeGameState as makeBaseGameState,
 } from '../test-helpers/fixtures.js';
+import { v13Progress, v13StaticBlob } from '../test-helpers/v13-save.js';
 
 // The app installs these from bootstrap.ts; this stands in. Installed once, as
 // production does — jsdom shares `window` across tests and the installer is
@@ -900,6 +901,19 @@ describe('unreadable save carries the raw blobs for download', () => {
         expect(outcome.raw.progress).toBeNull();
     });
 
+    it('reports parse-error for a v14 geometry blob with an edge path missing', () => {
+        const state = makeGameState({ seed: 14 });
+        const blob = JSON.parse(JSON.stringify(serializeStatic(state)));
+        delete blob.pieces[0].edges[0].path;
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(blob));
+        localStorage.setItem(PROGRESS_KEY, JSON.stringify(serializeProgress(state, [])));
+
+        const outcome = loadSavedGame();
+        expect(outcome.status).toBe('unreadable');
+        if (outcome.status !== 'unreadable') throw new Error('expected unreadable');
+        expect(outcome.reason).toBe('parse-error');
+    });
+
     it('still captures the progress blob when the geometry itself is corrupt', () => {
         // A corrupt geometry blob throws on parse before the progress key would
         // otherwise be decoded; the raw snapshot must still include progress so
@@ -1317,5 +1331,26 @@ describe('geometry seed token: re-anchored on load (#490)', () => {
         // Geometry + progress, exactly as before the re-anchor was added.
         expect(spy).toHaveBeenCalledTimes(2);
         spy.mockRestore();
+    });
+});
+
+describe('v13 saves', () => {
+    beforeEach(() => {
+        localStorage.clear();
+    });
+
+    it('resumes a v13 save without rewriting its geometry', () => {
+        const geometry = JSON.stringify({ ...v13StaticBlob(), seed: 13 });
+        localStorage.setItem(STORAGE_KEY, geometry);
+        localStorage.setItem(PROGRESS_KEY, JSON.stringify({ ...v13Progress(), seed: 13 }));
+        const setItem = vi.spyOn(Storage.prototype, 'setItem');
+
+        expect(loadSavedGame().status).toBe('ok');
+
+        const writtenKeys = setItem.mock.calls.map(([key]) => key);
+        setItem.mockRestore();
+        expect(writtenKeys).toContain(GEOMETRY_SEED_KEY);
+        expect(writtenKeys).not.toContain(STORAGE_KEY);
+        expect(localStorage.getItem(STORAGE_KEY)).toBe(geometry);
     });
 });

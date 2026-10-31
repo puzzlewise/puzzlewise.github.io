@@ -168,10 +168,21 @@ function extractCurvePoints(he: HalfEdge, bbox: BBox): Point[] | undefined {
         return undefined;
     }
 
-    return pts.map(p => ({
+    // Vertex merging (VERTEX_MERGE_TOLERANCE) leaves the curve's own ends up to
+    // ~1 px off the shared vertex, so the vertices are authoritative.
+    const local = pts.map(p => ({
         x: p.x - bbox.minX,
         y: p.y - bbox.minY,
     }));
+    local[0] = {
+        x: he.origin.position.x - bbox.minX,
+        y: he.origin.position.y - bbox.minY,
+    };
+    local[local.length - 1] = {
+        x: he.twin.origin.position.x - bbox.minX,
+        y: he.twin.origin.position.y - bbox.minY,
+    };
+    return local;
 }
 
 function isEssentiallyStraight(pts: Point[], tolerance = 0.5): boolean {
