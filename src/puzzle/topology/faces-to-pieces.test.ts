@@ -1,8 +1,14 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import { facesToPieceDefinitions } from './faces-to-pieces.js';
 import { buildDCEL } from './dcel.js';
 import { Curve } from './curve.js';
 import type { PieceDefinition } from '../composable/types.js';
+import { registerTabGenerator } from './generator-registry.js';
+import { tracedTabGenerator } from './traced-tab-generator.js';
+import { getCutStyleStrategy } from '../../game/cut-style-strategies.js';
+import type { InitOptions } from '../../game/init.js';
+import type { CutStyle } from '../../game/cut-styles.js';
+import { fmt } from '../../model/build-shape.js';
 
 function buildPipeline(curves: Curve[]): PieceDefinition[] {
     const dcel = buildDCEL({ curves });
@@ -407,4 +413,43 @@ describe('facesToPieceDefinitions: piece with hole', () => {
         expect(withHoles).toHaveLength(1);
         expect(countLoops(withHoles[0].edges)).toBe(2);
     });
+});
+
+describe('facesToPieceDefinitions: curve samples end at the edge vertices', () => {
+    beforeAll(() => {
+        registerTabGenerator(tracedTabGenerator);
+    });
+
+    const imageSize = { width: 1080, height: 720 };
+    const grid = { cols: 16, rows: 12 };
+    const cases: Array<{ name: string; options: InitOptions & { cutStyle: CutStyle } }> = [
+        { name: 'classic', options: { cutStyle: 'classic', classicConfig: { traceSetVersion: 1 } } },
+        { name: 'wavy', options: { cutStyle: 'wavy', wavyConfig: { traceSetVersion: 1 } } },
+    ];
+
+    for (const { name, options } of cases) {
+        it(`starts and ends curve samples at the edge vertices (${name})`, () => {
+            const strategy = getCutStyleStrategy(options.cutStyle);
+            const scaled = strategy.scaleGrid(grid, imageSize, options);
+            const puzzleSize = strategy.inscribePuzzleSize(imageSize, scaled, options);
+            const { pieces } = strategy.generatePieces(scaled, puzzleSize, 4242, options);
+
+            const mismatches: string[] = [];
+            let edgeCount = 0;
+            for (const piece of pieces) {
+                for (const edge of piece.edges) {
+                    edgeCount++;
+                    const nums = edge.path.match(/-?\d+(?:\.\d+)?(?:e[+-]?\d+)?/gi) ?? [];
+                    const got = nums.slice(-2).join(',');
+                    const want = `${fmt(edge.end.x)},${fmt(edge.end.y)}`;
+                    if (got !== want) {
+                        mismatches.push(`piece ${piece.id} edge ${edge.id}: ${got} vs ${want}`);
+                    }
+                }
+            }
+
+            expect(edgeCount).toBeGreaterThan(0);
+            expect(mismatches.slice(0, 5), `${mismatches.length} of ${edgeCount} edges`).toEqual([]);
+        });
+    }
 });
