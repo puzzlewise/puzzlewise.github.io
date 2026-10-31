@@ -1,0 +1,59 @@
+diff -ru -x node_modules -x dist /Users/bot/src/puzzle/src/app/bootstrap.ts proto/src/app/bootstrap.ts
+--- /Users/bot/src/puzzle/src/app/bootstrap.ts	2026-10-30 10:56:45
++++ proto/src/app/bootstrap.ts	2026-10-31 12:16:56
+@@ -192,6 +192,7 @@
+             completionPresenter.remove();
+             updateAttribution(state);
+             syncRotationUi(state);
++            void renderer.photoSettled().then(() => setTimeout(() => (globalThis as any).__PROTO_RESOLVE_SW?.(), 0));
+             if (state.completed) {
+                 completionPresenter.show(state);
+             }
+@@ -217,6 +218,12 @@
+ 
+     // The save coordinator flushes first so progress within the debounce
+     // window survives the update reload.
++    if ((globalThis as any).__PROTO_DEFER_SW_ON) {
++        (globalThis as any).__PROTO_DEFER_SW = new Promise<void>((resolve) => {
++            (globalThis as any).__PROTO_RESOLVE_SW = resolve;
++            setTimeout(resolve, 15000);
++        });
++    }
+     const pwaUpdates = initPwaUpdates(() => saveCoordinator.flush());
+ 
+     /**
+diff -ru -x node_modules -x dist /Users/bot/src/puzzle/src/app/start-new-game.ts proto/src/app/start-new-game.ts
+--- /Users/bot/src/puzzle/src/app/start-new-game.ts	2026-10-29 19:03:31
++++ proto/src/app/start-new-game.ts	2026-10-31 12:16:56
+@@ -193,6 +193,7 @@
+             }
+         }
+ 
++        if (imageUrl && (globalThis as any).__PROTO_PRELOAD) { const pre = new Image(); pre.src = imageUrl; }
+         // Collect the chunk outcome now the image has resolved — before the
+         // download report, not after: a start about to throw must not report a
+         // "download" for a photo it discards.
+diff -ru -x node_modules -x dist /Users/bot/src/puzzle/src/pwa/register.ts proto/src/pwa/register.ts
+--- /Users/bot/src/puzzle/src/pwa/register.ts	2026-10-26 22:13:40
++++ proto/src/pwa/register.ts	2026-10-31 12:16:56
+@@ -61,7 +61,10 @@
+         });
+     }
+ 
+-    const updateSW = registerSW({
++    let updateSWImpl: ((reload?: boolean) => Promise<void>) | undefined;
++    const updateSW = (r?: boolean) => updateSWImpl ? updateSWImpl(r) : Promise.resolve();
++    const ready: Promise<unknown> = (globalThis as any).__PROTO_DEFER_SW ?? Promise.resolve();
++    void ready.then(() => { updateSWImpl = registerSW({ immediate: true,
+         onNeedRefresh,
+         onRegisteredSW(_swScriptUrl, registration) {
+             if (registration) {
+@@ -78,7 +81,7 @@
+             diagnostics.warn('[pwa] service worker registration failed', error);
+             track('pwa-register-failed', describeRegisterFailure(error));
+         },
+-    });
++    }); });
+ 
+     controller.setUpdateSW(
+         reloadOnceActivated(

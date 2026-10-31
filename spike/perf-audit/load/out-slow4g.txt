@@ -1,0 +1,56 @@
+
+===== cold-first-slow4g-4  sw=uncontrolled
+nav {"respStart":7,"respEnd":774,"dcl":2068,"load":2068,"transfer":1872} paint [["first-paint",1744],["first-contentful-paint",1744]]
+marks {"overlayPresent":818,"lcp":5956,"DCL":2068,"windowLoad":2068,"overlayGone":3284,"firstPieceSvg":3284,"firstSvgImage":3284,"svgImageLoad":5892}
+events 2064:traced-chunk-preload-started 3016:traced-chunk-loaded(952) 3283:new-game-started(186)[worker] 5892:puzzle-image-loaded
+longtasks []
+results {"swReadyAt":6446}
+       4-   804    1572 sw=false 200 document http://localhost:5202/
+     802-  2038   84666 sw=false 200 script http://localhost:5202/assets/index-CqvDnvoP.js
+     803-  1578    7009 sw=false 200 stylesheet http://localhost:5202/assets/index-Cf9m-qOc.css
+    2069-  2844    2199 sw=false 200 script http://localhost:5202/assets/workbox-window.prod.es5-Bd17z0YL.js
+    2069-  3017   28449 sw=false 200 script http://localhost:5202/assets/traced-tab-generator-BqZeOlsd.js
+    2883-  2896       0 sw=false 200 script http://localhost:5202/sw.js
+    2902-  2904    1572 sw=false 200 fetch http://localhost:5202/index.html
+    2908-  2911    2199 sw=false 200 fetch http://localhost:5202/assets/workbox-window.prod.es5-Bd17z0YL.js
+    2912-  2916   28473 sw=false 200 fetch http://localhost:5202/assets/traced-tab-generator-DYTSAV5x.js
+    2916-  2919   28449 sw=false 200 fetch http://localhost:5202/assets/traced-tab-generator-BqZeOlsd.js
+    2920-  2926   84666 sw=false 200 fetch http://localhost:5202/assets/index-CqvDnvoP.js
+    2929-  2931    7009 sw=false 200 fetch http://localhost:5202/assets/index-Cf9m-qOc.css
+    2931-  2935   27887 sw=false 200 fetch http://localhost:5202/assets/generation-worker-CcqJ7-jI.js
+    2937-  2940  351163 sw=false 200 fetch http://localhost:5202/first-puzzle-portrait.jpg
+    2941-  2945  290376 sw=false 200 fetch http://localhost:5202/first-puzzle.jpg
+    2944-  2946   54763 sw=false 200 fetch http://localhost:5202/icon-192.png
+    2947-  2949  273573 sw=false 200 fetch http://localhost:5202/icon-512.png
+    2950-  2952     224 sw=false 200 fetch http://localhost:5202/manifest.webmanifest
+    3065-  3066    -310 sw=true 200 script http://localhost:5202/assets/generation-worker-CcqJ7-jI.js
+    3068-  3068    -310 sw=true 200 script http://localhost:5202/assets/traced-tab-generator-DYTSAV5x.js
+    3285-  5893  351163 sw=false 200 image http://localhost:5202/first-puzzle-portrait.jpg
+
+===== warm-resume-slow4g-4  sw=controlled
+nav {"respStart":4,"respEnd":5,"dcl":57,"load":69,"transfer":0} paint [["first-paint",116],["first-contentful-paint",116]]
+marks {"overlayPresent":15,"overlayGone":57,"firstPieceSvg":57,"firstSvgImage":57,"DCL":57,"svgImageLoad":69,"windowLoad":69,"lcp":116}
+events 69:puzzle-image-loaded
+longtasks []
+results {}
+       5-    13    -296 sw=true 200 document http://localhost:5202/
+      29-    29    -295 sw=true 200 stylesheet http://localhost:5202/assets/index-Cf9m-qOc.css
+      30-    31    -310 sw=true 200 script http://localhost:5202/assets/index-CqvDnvoP.js
+      64-    64    -260 sw=true 200 image http://localhost:5202/first-puzzle-portrait.jpg
+      69-    70    -309 sw=true 200 script http://localhost:5202/assets/workbox-window.prod.es5-Bd17z0YL.js
+
+===== warm-unsplash-slow4g-4  sw=controlled
+nav {"respStart":4,"respEnd":4,"dcl":67,"load":67,"transfer":0} paint [["first-paint",144],["first-contentful-paint",144]]
+marks {"overlayPresent":16,"DCL":67,"windowLoad":67,"lcp":584,"overlayGone":359,"firstPieceSvg":359,"firstSvgImage":359,"svgImageLoad":363}
+events 59:traced-chunk-preload-started 74:image-fetch-failed 75:traced-chunk-loaded(15.7) 81:image-stash-fallback 359:new-game-started(186)[worker] 363:puzzle-image-loaded
+longtasks []
+results {}
+       4-    14    -296 sw=true 200 document http://localhost:5202/
+      20-    20    -295 sw=true 200 stylesheet http://localhost:5202/assets/index-Cf9m-qOc.css
+      31-    32    -310 sw=true 200 script http://localhost:5202/assets/index-CqvDnvoP.js
+      68-               sw=undefined net::ERR_CONNECTION_REFUSED  http://localhost:8787/topics/wallpapers/photos?orientation=portrait&page=1&per_page=30
+      70-    71    -309 sw=true 200 script http://localhost:5202/assets/workbox-window.prod.es5-Bd17z0YL.js
+      72-    72    -310 sw=true 200 script http://localhost:5202/assets/traced-tab-generator-BqZeOlsd.js
+     142-   143    -310 sw=true 200 script http://localhost:5202/assets/generation-worker-CcqJ7-jI.js
+     147-   148    -310 sw=true 200 script http://localhost:5202/assets/traced-tab-generator-DYTSAV5x.js
+     363-   364    -260 sw=true 200 image http://localhost:5202/first-puzzle-portrait.jpg

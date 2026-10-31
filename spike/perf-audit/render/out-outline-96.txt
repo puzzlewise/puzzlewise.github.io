@@ -1,0 +1,32 @@
+[outline:none pan zoomed-in @{"x":70,"y":832}] x4 wall=9626ms rAF fps=11.8 p50=99.9 p95=133.4 max=150.1 >50ms=109 longTasks=0 top=6.8,6.8,6.8,6.7
+   main: BMF=294ms/105 style=5.1ms/74 layout=- prepaint=9.4ms/175 paint=0.6ms/1 layerize=103.9ms/90 commit=132.8ms/105 js(evt)=23.9ms/182 js(fn)=25.2ms/444 timer=1ms/81 rAF=3.5ms/105
+   styleElems={"n":74,"max":1,"sum":74} raster: rec=0.7ms/63 gpuRaster=7.5ms/39 decode=- | viz: drawFrame=36.8ms/75 renderPasses=35.5ms/349 gpuPaintPass=19.6ms/348 gpuBusy=122.7ms/884 vizBusy=54.3ms/470 implBusy=97.7ms/1091
+   cc: {"layers":107,"drawing":103,"willChange":96,"reasons":{"RootScroller":2,"OverflowScrolling":2,"WillChangeTransform":96,"BackdropFilter":6},"tiles":16,"tileMB":17.3,"maxScale":1.09,"medScale":1,"surfaces":93}
+[outline:shadow pan zoomed-in @{"x":60,"y":832}] x4 wall=10020ms rAF fps=11.5 p50=100 p95=133.4 max=150.1 >50ms=109 longTasks=0 top=9.4,8.5,6.5,6.4
+   main: BMF=274ms/110 style=13.6ms/74 layout=- prepaint=3.7ms/180 paint=4.1ms/97 layerize=85ms/100 commit=134.9ms/110 js(evt)=19.8ms/180 js(fn)=22.1ms/448 timer=6.8ms/81 rAF=3.3ms/110
+   styleElems={"n":74,"max":1,"sum":74} raster: rec=0.8ms/60 gpuRaster=8.4ms/38 decode=- | viz: drawFrame=65.5ms/75 renderPasses=63.8ms/997 gpuPaintPass=38.1ms/997 gpuBusy=176.5ms/1548 vizBusy=85.2ms/483 implBusy=98.2ms/1109
+   cc: {"layers":107,"drawing":103,"willChange":96,"reasons":{"RootScroller":2,"OverflowScrolling":2,"WillChangeTransform":96,"BackdropFilter":6},"tiles":42,"tileMB":60.2,"maxScale":1.047,"medScale":1,"surfaces":78}
+[outline:outline pan zoomed-in @{"x":70,"y":832}] x4 wall=11389ms rAF fps=9.5 p50=133.3 p95=150 max=150.1 >50ms=112 longTasks=0 top=7.9,7.6,7.6,7.2
+   main: BMF=339.7ms/97 style=6.8ms/74 layout=- prepaint=5.5ms/167 paint=1.5ms/97 layerize=121.4ms/89 commit=177.7ms/97 js(evt)=21.7ms/181 js(fn)=22.2ms/436 timer=2.2ms/81 rAF=1.8ms/97
+   styleElems={"n":74,"max":1,"sum":74} raster: rec=1.6ms/119 gpuRaster=11.2ms/103 decode=- | viz: drawFrame=135.8ms/75 renderPasses=130.1ms/2851 gpuPaintPass=86.7ms/2851 gpuBusy=274.9ms/3516 vizBusy=194ms/450 implBusy=138.4ms/1072
+   cc: {"layers":107,"drawing":103,"willChange":96,"reasons":{"RootScroller":2,"OverflowScrolling":2,"WillChangeTransform":96,"BackdropFilter":6},"tiles":124,"tileMB":184,"maxScale":1.09,"medScale":1,"surfaces":4}
+[css:nobackdrop pan zoomed-in @{"x":40,"y":832}] x4 wall=8986ms rAF fps=10 p50=100 p95=133.4 max=133.4 >50ms=107 longTasks=0 top=7.1,6.9,6.5,6.4
+   main: BMF=272.1ms/87 style=13ms/74 layout=- prepaint=4.1ms/157 paint=1.5ms/97 layerize=84.3ms/81 commit=138.5ms/87 js(evt)=24.9ms/184 js(fn)=22.5ms/426 timer=4ms/81 rAF=1.3ms/87
+   styleElems={"n":74,"max":1,"sum":74} raster: rec=1ms/97 gpuRaster=10.2ms/60 decode=- | viz: drawFrame=45.5ms/75 renderPasses=44.1ms/823 gpuPaintPass=28.5ms/823 gpuBusy=119.7ms/1317 vizBusy=63.9ms/417 implBusy=96.3ms/993
+   cc: {"layers":104,"drawing":100,"willChange":96,"reasons":{"RootScroller":1,"OverflowScrolling":1,"WillChangeTransform":96,"Overlap":3},"tiles":35,"tileMB":53.9,"maxScale":1.054,"medScale":1,"surfaces":80}
+[outline:none drag piece] x4 wall=7708ms rAF fps=9 p50=116.7 p95=133.4 max=133.4 >50ms=81 longTasks=0 top=11.4,7.3,7.1,6.5
+   main: BMF=247.9ms/68 style=9.9ms/57 layout=3.1ms/1 prepaint=5.7ms/81 paint=3.3ms/5 layerize=73.4ms/63 commit=83.6ms/68 js(evt)=41.9ms/134 js(fn)=54.8ms/427 timer=0.6ms/60 rAF=16.6ms/179
+   styleElems={"n":57,"max":10,"sum":66} raster: rec=1ms/104 gpuRaster=7.6ms/29 decode=- | viz: drawFrame=16.4ms/58 renderPasses=14.5ms/58 gpuPaintPass=191.6ms/58 gpuBusy=253ms/341 vizBusy=39.8ms/324 implBusy=74.6ms/755
+   cc: {"layers":107,"drawing":103,"willChange":96,"reasons":{"RootScroller":2,"OverflowScrolling":2,"WillChangeTransform":96,"BackdropFilter":6},"tiles":102,"tileMB":11.7,"maxScale":1,"medScale":0.184,"surfaces":4}
+[outline:shadow drag piece] x4 wall=2503ms rAF fps=28 p50=16.7 p95=116.7 max=133.3 >50ms=21 longTasks=0 top=14.6,7.2,7.1,7
+   main: BMF=261.3ms/96 style=2.7ms/57 layout=0.1ms/1 prepaint=2.1ms/110 paint=3.4ms/99 layerize=94.9ms/76 commit=82.2ms/96 js(evt)=43.7ms/134 js(fn)=49.2ms/455 timer=0.5ms/60 rAF=11.6ms/207
+   styleElems={"n":57,"max":10,"sum":66} raster: rec=1ms/103 gpuRaster=6.7ms/27 decode=- | viz: drawFrame=94.6ms/59 renderPasses=92.5ms/59 gpuPaintPass=23.7ms/59 gpuBusy=1117.3ms/240 vizBusy=117.7ms/415 implBusy=70.8ms/896
+   cc: {"layers":107,"drawing":103,"willChange":96,"reasons":{"RootScroller":2,"OverflowScrolling":2,"WillChangeTransform":96,"BackdropFilter":6},"tiles":102,"tileMB":11.8,"maxScale":1,"medScale":0.182,"surfaces":4}
+[outline:outline drag piece] x4 wall=7926ms rAF fps=14.1 p50=66.7 p95=133.3 max=133.4 >50ms=86 longTasks=0 top=12.7,9.3,8.3,7.8
+   main: BMF=319.4ms/109 style=11.8ms/57 layout=0.1ms/1 prepaint=6.8ms/122 paint=7.3ms/99 layerize=74.9ms/83 commit=122ms/109 js(evt)=55.7ms/132 js(fn)=69.2ms/468 timer=2.7ms/60 rAF=18.1ms/220
+   styleElems={"n":57,"max":10,"sum":66} raster: rec=1.2ms/103 gpuRaster=7.5ms/23 decode=- | viz: drawFrame=70.6ms/59 renderPasses=68.5ms/59 gpuPaintPass=14.6ms/59 gpuBusy=348.2ms/394 vizBusy=116.5ms/463 implBusy=91.5ms/1051
+   cc: {"layers":107,"drawing":103,"willChange":96,"reasons":{"RootScroller":2,"OverflowScrolling":2,"WillChangeTransform":96,"BackdropFilter":6},"tiles":102,"tileMB":8.3,"maxScale":1,"medScale":0.174,"surfaces":4}
+[css:nobackdrop drag piece] x4 wall=4049ms rAF fps=21.8 p50=16.7 p95=116.7 max=133.4 >50ms=42 longTasks=0 top=15.7,7.3,7.2,6.8
+   main: BMF=280.7ms/116 style=9.9ms/75 layout=0.1ms/1 prepaint=14.5ms/129 paint=5.4ms/99 layerize=77ms/98 commit=107.2ms/116 js(evt)=36.3ms/133 js(fn)=58.8ms/495 timer=0.5ms/60 rAF=24.6ms/247
+   styleElems={"n":75,"max":10,"sum":102} raster: rec=2.3ms/263 gpuRaster=16.1ms/61 decode=- | viz: drawFrame=127.6ms/68 renderPasses=125.2ms/68 gpuPaintPass=26.5ms/68 gpuBusy=1151.8ms/320 vizBusy=155ms/498 implBusy=88.5ms/1047
+   cc: {"layers":104,"drawing":100,"willChange":96,"reasons":{"RootScroller":1,"OverflowScrolling":1,"WillChangeTransform":96,"Overlap":3},"tiles":99,"tileMB":9.7,"maxScale":1,"medScale":0.184,"surfaces":4}

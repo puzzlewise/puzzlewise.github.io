@@ -1,0 +1,10 @@
+96 drag outline:none #0: frames=63 passes/f=1.0 gpuWait/f=0.87ms gpuBusy/f=4.87 gpuRaster=15ms | main BMF/f=3.98 layerize=60 commit=68 | tileMB=0.7 layers=104
+96 drag outline:none #1: frames=60 passes/f=1.0 gpuWait/f=0.60ms gpuBusy/f=1.63 gpuRaster=15ms | main BMF/f=4.38 layerize=66 commit=90 | tileMB=8.4 layers=104
+96 drag outline:shadow #0: frames=58 passes/f=1.0 gpuWait/f=15.21ms gpuBusy/f=18.37 gpuRaster=7ms | main BMF/f=3.98 layerize=81 commit=70 | tileMB=10.8 layers=104
+96 drag outline:shadow #1: frames=58 passes/f=1.0 gpuWait/f=15.27ms gpuBusy/f=18.78 gpuRaster=7ms | main BMF/f=4.56 layerize=75 commit=86 | tileMB=11.4 layers=104
+96 drag outline:outline #0: frames=82 passes/f=1.0 gpuWait/f=8.59ms gpuBusy/f=11.16 gpuRaster=14ms | main BMF/f=4.40 layerize=89 commit=134 | tileMB=1.8 layers=104
+96 drag outline:outline #1: frames=58 passes/f=1.0 gpuWait/f=5.48ms gpuBusy/f=7.59 gpuRaster=7ms | main BMF/f=3.82 layerize=84 commit=64 | tileMB=9 layers=104
+96 drag css:nofilter #0: frames=57 passes/f=1.0 gpuWait/f=0.16ms gpuBusy/f=0.64 gpuRaster=6ms | main BMF/f=3.67 layerize=84 commit=38 | tileMB=8 layers=104
+96 drag css:nofilter #1: frames=57 passes/f=1.0 gpuWait/f=0.16ms gpuBusy/f=0.64 gpuRaster=7ms | main BMF/f=3.29 layerize=66 commit=40 | tileMB=8.3 layers=104
+96 drag css:nowc #0: frames=57 passes/f=1.0 gpuWait/f=0.76ms gpuBusy/f=1.43 gpuRaster=11ms | main BMF/f=2.42 layerize=62 commit=19 | tileMB=10.7 layers=8
+96 drag css:nowc #1: frames=67 passes/f=1.0 gpuWait/f=9.24ms gpuBusy/f=12.88 gpuRaster=200ms | main BMF/f=3.30 layerize=62 commit=26 | tileMB=10.7 layers=8

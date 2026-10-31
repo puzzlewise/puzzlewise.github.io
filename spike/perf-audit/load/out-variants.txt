@@ -1,0 +1,16 @@
+var-base-cold-0            sw=uncontrolled overlayGone=4206 imgLoad=7780 lcp=7816 imgReqs=4210-7782
+var-base-unsplash-0        sw=uncontrolled overlayGone=4555 imgLoad=9038 lcp=9168 imgReqs=4386-8895,4556-9039
+var-preload-cold-0         sw=uncontrolled overlayGone=5214 imgLoad=5623 lcp=5672 imgReqs=2204-5624
+var-preload-unsplash-0     sw=uncontrolled overlayGone=4687 imgLoad=6475 lcp=6488 imgReqs=2685-6476
+var-defersw-cold-0         sw=uncontrolled overlayGone=4914 imgLoad=7592 lcp=7692 imgReqs=4914-7593
+var-defersw-unsplash-0     sw=uncontrolled overlayGone=4426 imgLoad=5551 lcp=5592 imgReqs=4430-5552
+var-both-cold-0            sw=uncontrolled overlayGone=4733 imgLoad=4952 lcp=5020 imgReqs=1738-4952
+var-both-unsplash-0        sw=uncontrolled overlayGone=4822 imgLoad=5295 lcp=5372 imgReqs=2681-5296
+var-base-cold-1            sw=uncontrolled overlayGone=4276 imgLoad=7711 lcp=7736 imgReqs=4277-7712
+var-base-unsplash-1        sw=uncontrolled overlayGone=4485 imgLoad=7521 lcp=7648 imgReqs=3668-6988,4489-7522
+var-preload-cold-1         sw=uncontrolled overlayGone=4865 imgLoad=5225 lcp=5304 imgReqs=1755-5226
+var-preload-unsplash-1     sw=uncontrolled overlayGone=4789 imgLoad=5873 lcp=5900 imgReqs=2683-5874
+var-defersw-cold-1         sw=uncontrolled overlayGone=4307 imgLoad=7014 lcp=7052 imgReqs=4308-7015
+var-defersw-unsplash-1     sw=uncontrolled overlayGone=4431 imgLoad=5490 lcp=5580 imgReqs=4435-5491
+var-both-cold-1            sw=uncontrolled overlayGone=4712 imgLoad=4979 lcp=5036 imgReqs=1728-4981
+var-both-unsplash-1        sw=uncontrolled overlayGone=4612 imgLoad=5807 lcp=5844 imgReqs=2666-4109,4613-5808

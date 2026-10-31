@@ -1,0 +1,85 @@
+
+===== cold-first-none-4-srv  sw=uncontrolled
+nav {"respStart":575,"respEnd":576,"dcl":1756,"load":1756,"transfer":1875} paint [["first-paint",1272],["first-contentful-paint",1272]]
+marks {"overlayPresent":591,"lcp":7420,"DCL":1756,"windowLoad":1756,"overlayGone":4214,"firstPieceSvg":4214,"firstSvgImage":4214,"svgImageLoad":7335}
+events 1756:traced-chunk-preload-started 2514:traced-chunk-loaded(756) 4214:new-game-started(1651)[worker] 7336:puzzle-image-loaded
+longtasks []
+results {"swReadyAt":17729}
+server log (url start end bytes):
+   S 1666 2235 1575 /
+   S 2258 2912 7009 /assets/index-Cf9m-qOc.css
+   S 2257 3392 84671 /assets/index-BC8gwQl6.js
+   S 3418 4005 2199 /assets/workbox-window.prod.es5-Bd17z0YL.js
+   S 3419 4168 28449 /assets/traced-tab-generator-e3cB8CWH.js
+   S 4039 4638 6511 /sw.js
+   S 4190 4910 27887 /assets/generation-worker-CcqJ7-jI.js
+   S 4642 5206 1575 /index.html
+   S 4916 5649 28473 /assets/traced-tab-generator-DYTSAV5x.js
+   S 5210 5793 2199 /assets/workbox-window.prod.es5-Bd17z0YL.js
+   S 5797 6626 28449 /assets/traced-tab-generator-e3cB8CWH.js
+   S 6630 7545 28473 /assets/traced-tab-generator-DYTSAV5x.js
+   S 7548 8191 7009 /assets/index-Cf9m-qOc.css
+   S 5876 8992 351163 /first-puzzle-portrait.jpg
+   S 8197 9394 84671 /assets/index-BC8gwQl6.js
+   S 9400 10135 27887 /assets/generation-worker-CcqJ7-jI.js
+   S 10139 12845 351163 /first-puzzle-portrait.jpg
+   S 12849 15184 290376 /first-puzzle.jpg
+   S 15187 16085 54763 /icon-192.png
+   S 16089 18309 273573 /icon-512.png
+   S 18312 18882 224 /manifest.webmanifest
+       4-   594    1575 sw=false 200 document http://localhost:5202/
+     592-  1256    7009 sw=false 200 stylesheet http://localhost:5202/assets/index-Cf9m-qOc.css
+     592-  1736   84671 sw=false 200 script http://localhost:5202/assets/index-BC8gwQl6.js
+    1757-  2349    2199 sw=false 200 script http://localhost:5202/assets/workbox-window.prod.es5-Bd17z0YL.js
+    1758-  2513   28449 sw=false 200 script http://localhost:5202/assets/traced-tab-generator-e3cB8CWH.js
+    2378-  2981       0 sw=false 200 script http://localhost:5202/sw.js
+    2528-  3254       0 sw=false 200 script http://localhost:5202/assets/generation-worker-CcqJ7-jI.js
+    2982-  3548    1575 sw=false 200 fetch http://localhost:5202/index.html
+    3254-  3991   28473 sw=false 200 script http://localhost:5202/assets/traced-tab-generator-DYTSAV5x.js
+    3550-  4135    2199 sw=false 200 fetch http://localhost:5202/assets/workbox-window.prod.es5-Bd17z0YL.js
+    4136-  4968   28449 sw=false 200 fetch http://localhost:5202/assets/traced-tab-generator-e3cB8CWH.js
+    4216-  7337  351163 sw=false 200 image http://localhost:5202/first-puzzle-portrait.jpg
+    4969-  5886   28473 sw=false 200 fetch http://localhost:5202/assets/traced-tab-generator-DYTSAV5x.js
+    5888-  6533    7009 sw=false 200 fetch http://localhost:5202/assets/index-Cf9m-qOc.css
+    6533-  7736   84671 sw=false 200 fetch http://localhost:5202/assets/index-BC8gwQl6.js
+    7739-  8477   27887 sw=false 200 fetch http://localhost:5202/assets/generation-worker-CcqJ7-jI.js
+    8479- 11187  351163 sw=false 200 fetch http://localhost:5202/first-puzzle-portrait.jpg
+   11188- 13526  290376 sw=false 200 fetch http://localhost:5202/first-puzzle.jpg
+   13527- 14427   54763 sw=false 200 fetch http://localhost:5202/icon-192.png
+   14428- 16651  273573 sw=false 200 fetch http://localhost:5202/icon-512.png
+   16652- 17225     224 sw=false 200 fetch http://localhost:5202/manifest.webmanifest
+
+===== warm-resume-none-4-srv  sw=controlled
+nav {"respStart":6,"respEnd":6,"dcl":58,"load":66,"transfer":0} paint [["first-paint",128],["first-contentful-paint",128]]
+marks {"overlayPresent":17,"overlayGone":56,"firstPieceSvg":56,"firstSvgImage":56,"DCL":58,"svgImageLoad":66,"windowLoad":66,"lcp":128}
+events 66:puzzle-image-loaded
+longtasks []
+results {}
+server log (url start end bytes):
+   S 19643 20242 6511 /sw.js
+       6-    14    -264 sw=true 200 document http://localhost:5202/
+      18-    18    -263 sw=true 200 stylesheet http://localhost:5202/assets/index-Cf9m-qOc.css
+      30-    30    -278 sw=true 200 script http://localhost:5202/assets/index-BC8gwQl6.js
+      63-    63    -228 sw=true 200 image http://localhost:5202/first-puzzle-portrait.jpg
+      66-    67    -277 sw=true 200 script http://localhost:5202/assets/workbox-window.prod.es5-Bd17z0YL.js
+
+===== warm-unsplash-none-4-srv  sw=controlled
+nav {"respStart":4,"respEnd":4,"dcl":60,"load":60,"transfer":0} paint [["first-paint",148],["first-contentful-paint",148]]
+marks {"overlayPresent":17,"DCL":60,"windowLoad":60,"lcp":2480,"overlayGone":1203,"firstPieceSvg":1203,"firstSvgImage":1203,"svgImageLoad":2444}
+events 58:traced-chunk-preload-started 65:traced-chunk-loaded(7.5) 1203:new-game-started(248)[worker] 2444:puzzle-image-loaded
+longtasks [[1152,51]]
+results {}
+server log (url start end bytes):
+   S 20863 21618 30572 /proxy/topics/architecture-interior/photos?orientation=portrait&page=1&per_page=
+   S 21623 22187 2 /proxy/download?url=https%3A%2F%2Fapi.unsplash.com%2Fphotos%2FTLzxYiyXw1o%2Fdown
+   S 22179 23241 80535 /cdn/photo-1660982238213-eeef93d9dc16?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ix
+       5-    17    -264 sw=true 200 document http://localhost:5202/
+      30-    30    -263 sw=true 200 stylesheet http://localhost:5202/assets/index-Cf9m-qOc.css
+      32-    33    -278 sw=true 200 script http://localhost:5202/assets/index-BC8gwQl6.js
+      62-    63    -277 sw=true 200 script http://localhost:5202/assets/workbox-window.prod.es5-Bd17z0YL.js
+      63-   823   30572 sw=false 200 fetch http://localhost:5202/proxy/topics/architecture-interior/photos?orientation=portrait&page=1&per_page=30
+      66-    67    -278 sw=true 200 script http://localhost:5202/assets/traced-tab-generator-e3cB8CWH.js
+     825-  1446       2 sw=false 200 fetch http://localhost:5202/proxy/download?url=https%3A%2F%2Fapi.unsplash.com%2Fphotos%2FTLzxYiyXw1o%2Fdownload%3Fixid%3DM3wxMDE3MjE1fDB8MXxyYW5kb
+     909-   911    -278 sw=true 200 script http://localhost:5202/assets/generation-worker-CcqJ7-jI.js
+     914-   915    -278 sw=true 200 script http://localhost:5202/assets/traced-tab-generator-DYTSAV5x.js
+    1205-  2445   80535 sw=false 200 image http://localhost:5202/cdn/photo-1660982238213-eeef93d9dc16?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3wxMDE3MjE1fDB8MXxyYW5kb218fHx8fHx8

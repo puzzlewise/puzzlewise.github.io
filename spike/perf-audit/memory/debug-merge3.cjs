@@ -1,0 +1,23 @@
+const { launch, sleep, poolImage, BASE } = require('./lib.cjs');
+(async () => {
+    const { browser, page } = await launch();
+    await page.goto(BASE);
+    await page.waitForFunction(() => typeof window.__reproPuzzle === 'function' && document.querySelector('[data-piece-id]'), null, { timeout: 60000 });
+    const img = poolImage(5);
+    console.log(img.imageSize);
+    await page.evaluate((p) => window.__reproPuzzle(p), { seed: 777, cutStyle: 'wavy', imageUrl: img.imageUrl, imageSize: img.imageSize, gridSize: { cols: 16, rows: 12 }, rotationMode: 'none', wavyConfig: { borderless: false, traceSetVersion: 2 } });
+    await sleep(1500);
+    const pos = (id) => page.evaluate((id) => { const s = document.querySelector(`svg[data-piece-id="${id}"]`); const g = s.parentElement; const m = /translate\(([-\d.e]+)px, ([-\d.e]+)px\)/.exec(g.style.transform); const r = s.getBoundingClientRect(); return { gid: g.dataset.groupId, wx: +m[1] + parseFloat(s.style.left) + 30, wy: +m[2] + parseFloat(s.style.top) + 30, ix: +s.querySelector('image').getAttribute('x'), iy: +s.querySelector('image').getAttribute('y'), r: [r.left, r.top, r.width, r.height], t: document.querySelector('[data-puzzle-table]').style.transform }; }, id);
+    const A = await pos(0), B = await pos(1);
+    console.log(A, B);
+    const scale = +/scale\(([\d.]+)\)/.exec(A.t)[1];
+    const tx = A.wx + (A.ix - B.ix) - B.wx, ty = A.wy + (A.iy - B.iy) - B.wy;
+    const x = B.r[0] + B.r[2] / 2, y = B.r[1] + B.r[3] / 2;
+    console.log('hit', await page.evaluate(([x, y]) => document.elementFromPoint(x, y)?.closest('svg[data-piece-id]')?.dataset.pieceId, [x, y]));
+    await page.mouse.move(x, y); await page.mouse.down();
+    for (let s = 1; s <= 8; s++) await page.mouse.move(x + tx * scale * s / 8, y + ty * scale * s / 8);
+    await page.mouse.up();
+    await sleep(300);
+    console.log('target', A.wx + (A.ix - B.ix), A.wy + (A.iy - B.iy), 'after', await pos(1));
+    await browser.close();
+})();

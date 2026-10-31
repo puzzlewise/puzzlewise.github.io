@@ -1,0 +1,58 @@
+=== pieces=96 outline=shadow cut=wavy throttle=4
+initial {"layers":107,"drawing":103,"willChange":96,"reasons":{"RootScroller":2,"OverflowScrolling":2,"WillChangeTransform":96,"BackdropFilter":6},"tiles":102,"tileMB":10.4,"maxScale":1,"medScale":0.175,"surfaces":4} translate(206px, 446px) scale(0.175073) domNodes 1045
+no empty bg
+[drag single piece] x4 wall=4562ms rAF fps=21.1 p50=16.7 p95=133.3 max=150 >50ms=58 longTasks=0 top=15,11.2,8.4,8
+   main: BMF=339.1ms/124 style=14.7ms/91 layout=0.1ms/1 prepaint=5.9ms/138 paint=1.8ms/191 layerize=79.9ms/98 commit=115.7ms/125 js(evt)=52.5ms/134 js(fn)=91.8ms/529 timer=0.5ms/60 rAF=44.9ms/281
+   styleElems={"n":91,"max":10,"sum":146} raster: rec=4.2ms/501 gpuRaster=28.8ms/122 decode=- | viz: drawFrame=232.4ms/82 renderPasses=229ms/82 gpuPaintPass=42.7ms/82
+   cc: {"layers":107,"drawing":103,"willChange":96,"reasons":{"RootScroller":2,"OverflowScrolling":2,"WillChangeTransform":96,"BackdropFilter":6},"tiles":102,"tileMB":10.3,"maxScale":1,"medScale":0.175,"surfaces":4}
+[wheel zoom in x8] x4 wall=1950ms rAF fps=34.5 p50=0 p95=100 max=133.4 >50ms=21 longTasks=0 top=7.3,6.2,5,4.4
+   main: BMF=41ms/32 style=0.4ms/8 layout=- prepaint=3.2ms/41 paint=3ms/97 layerize=13.7ms/24 commit=14.7ms/32 js(evt)=0.8ms/13 js(fn)=4ms/79 timer=0.2ms/5 rAF=3.5ms/64
+   styleElems={"n":8,"max":1,"sum":8} raster: rec=2.9ms/271 gpuRaster=67.3ms/255 decode=10.9ms/1 | viz: drawFrame=18.4ms/9 renderPasses=18ms/173 gpuPaintPass=17.3ms/173
+   cc: {"layers":107,"drawing":103,"willChange":96,"reasons":{"RootScroller":2,"OverflowScrolling":2,"WillChangeTransform":96,"BackdropFilter":6},"tiles":35,"tileMB":43.5,"maxScale":1.044,"medScale":1,"surfaces":85}
+  after zoom-in translate(-462.012px, -590.456px) scale(1.04352) null
+[pan(zoomed-in)] x4 wall=5011ms rAF fps=13.5 p50=83.3 p95=133.4 max=133.4 >50ms=50 longTasks=0 top=8.4,6.6,6.3,4.8
+   main: BMF=133ms/65 style=2.1ms/37 layout=- prepaint=3.5ms/100 paint=7.5ms/182 layerize=39.8ms/50 commit=62.9ms/66 js(evt)=10ms/93 js(fn)=12.1ms/234 timer=2.5ms/40 rAF=1.1ms/65
+   styleElems={"n":37,"max":1,"sum":37} raster: rec=1.2ms/133 gpuRaster=11ms/72 decode=- | viz: drawFrame=32.4ms/39 renderPasses=31.6ms/429 gpuPaintPass=16.6ms/429
+   cc: {"layers":107,"drawing":103,"willChange":96,"reasons":{"RootScroller":2,"OverflowScrolling":2,"WillChangeTransform":96,"BackdropFilter":6},"tiles":32,"tileMB":43,"maxScale":1.044,"medScale":1,"surfaces":84}
+[wheel zoom out x8 (+relayer)] x4 wall=2036ms rAF fps=17.3 p50=33.3 p95=133.3 max=133.3 >50ms=21 longTasks=0 top=20.3,6.8,6.8,5.9
+   main: BMF=65.1ms/38 style=2.9ms/12 layout=- prepaint=1ms/47 paint=3.2ms/97 layerize=22.6ms/29 commit=26.7ms/38 js(evt)=0.9ms/10 js(fn)=2.2ms/55 timer=0.3ms/3 rAF=1.8ms/42
+   styleElems={"n":12,"max":96,"sum":392} raster: rec=5.3ms/356 gpuRaster=87.4ms/288 decode=- | viz: drawFrame=46.5ms/12 renderPasses=45.4ms/313 gpuPaintPass=16ms/313
+   cc: {"layers":107,"drawing":103,"willChange":96,"reasons":{"RootScroller":2,"OverflowScrolling":2,"WillChangeTransform":96,"BackdropFilter":6},"tiles":102,"tileMB":4.7,"maxScale":1,"medScale":0.104,"surfaces":4}
+  after zoom-out+relayer translate(139.123px, 331.125px) scale(0.10447) null
+[pinch in] x4 wall=2528ms rAF fps=18.5 p50=33.4 p95=133.3 max=133.4 >50ms=33 longTasks=0 top=13.1,6.9,6.3,5.9
+   main: BMF=94.7ms/52 style=4.7ms/30 layout=- prepaint=1.3ms/105 paint=9.5ms/138 layerize=21.3ms/41 commit=49.7ms/53 js(evt)=10.4ms/94 js(fn)=10.6ms/125 timer=0.1ms/1 rAF=1.3ms/52
+   styleElems={"n":30,"max":1,"sum":30} raster: rec=4.4ms/528 gpuRaster=31.7ms/212 decode=- | viz: drawFrame=59.6ms/32 renderPasses=58ms/547 gpuPaintPass=25ms/547
+   cc: {"layers":107,"drawing":103,"willChange":96,"reasons":{"RootScroller":2,"OverflowScrolling":2,"WillChangeTransform":96,"BackdropFilter":6},"tiles":85,"tileMB":137.8,"maxScale":1,"medScale":1,"surfaces":49}
+  after pinch-in translate(-44.9336px, 15.2183px) scale(0.391761) null
+[pinch out (+relayer)] x4 wall=2983ms rAF fps=18 p50=66.6 p95=133.3 max=133.4 >50ms=40 longTasks=0 top=12.1,6.5,6.3,5.9
+   main: BMF=112.8ms/61 style=7.9ms/33 layout=- prepaint=2.4ms/114 paint=6.5ms/97 layerize=25.4ms/48 commit=63.9ms/62 js(evt)=14.5ms/97 js(fn)=21.7ms/144 timer=4.3ms/5 rAF=4.5ms/67
+   styleElems={"n":33,"max":97,"sum":606} raster: rec=7.5ms/695 gpuRaster=53ms/256 decode=- | viz: drawFrame=84.1ms/34 renderPasses=81.9ms/1310 gpuPaintPass=46.4ms/1310
+   cc: {"layers":107,"drawing":103,"willChange":96,"reasons":{"RootScroller":2,"OverflowScrolling":2,"WillChangeTransform":96,"BackdropFilter":6},"tiles":102,"tileMB":5.3,"maxScale":1,"medScale":0.104,"surfaces":4}
+  after pinch-out translate(139.123px, 331.125px) scale(0.10447) null
+no rotate button
+[rotate handle drag] x4 wall=2577ms rAF fps=24.7 p50=16.7 p95=116.8 max=133.4 >50ms=23 longTasks=0 top=6.2,6.1,6.1,6
+   main: BMF=162.3ms/78 style=2.1ms/44 layout=- prepaint=5.9ms/84 paint=5.3ms/101 layerize=49.7ms/61 commit=70.5ms/78 js(evt)=22.2ms/54 js(fn)=22.3ms/172 timer=- rAF=1.4ms/78
+   styleElems={"n":44,"max":1,"sum":44} raster: rec=0.9ms/105 gpuRaster=6ms/17 decode=- | viz: drawFrame=61.2ms/42 renderPasses=59.6ms/42 gpuPaintPass=16ms/42
+   cc: {"layers":108,"drawing":104,"willChange":96,"reasons":{"RootScroller":2,"OverflowScrolling":2,"WillChangeTransform":96,"BackdropFilter":7},"tiles":103,"tileMB":5.4,"maxScale":1,"medScale":0.104,"surfaces":4}
+[gather pieces] x4 wall=1336ms rAF fps=16.5 p50=83.3 p95=83.4 max=133.3 >50ms=15 longTasks=0 top=8.7,7.3,5.3,4.6
+   main: BMF=41.5ms/23 style=6.8ms/10 layout=- prepaint=0.4ms/34 paint=4.3ms/109 layerize=6.5ms/13 commit=17.8ms/23 js(evt)=4.4ms/14 js(fn)=5.8ms/41 timer=0.1ms/2 rAF=4ms/25
+   styleElems={"n":10,"max":8,"sum":17} raster: rec=1.4ms/110 gpuRaster=10.3ms/22 decode=- | viz: drawFrame=13.4ms/7 renderPasses=13.1ms/7 gpuPaintPass=2.9ms/7
+   cc: {"layers":108,"drawing":104,"willChange":96,"reasons":{"RootScroller":2,"OverflowScrolling":2,"WillChangeTransform":96,"BackdropFilter":7},"tiles":103,"tileMB":4.6,"maxScale":1,"medScale":0.104,"surfaces":4}
+  after gather translate(206px, 446px) scale(0.175073) null
+[solve (+completion zoom/glow)] x4 wall=2516ms rAF fps=12.9 p50=83.3 p95=133.4 max=133.4 >50ms=32 longTasks=1 top=57.4,9.2,5.3,4.1
+   main: BMF=89.4ms/33 style=9.3ms/37 layout=46.7ms/4 prepaint=7.9ms/36 paint=3.7ms/213 layerize=11.9ms/26 commit=6.2ms/34 js(evt)=9.1ms/12 js(fn)=11.6ms/37 timer=0.2ms/2 rAF=3.2ms/34
+   styleElems={"n":37,"max":894,"sum":1397} raster: rec=16.4ms/251 gpuRaster=17.2ms/163 decode=- | viz: drawFrame=27.1ms/29 renderPasses=26.5ms/79 gpuPaintPass=277.6ms/76
+   cc: {"layers":34,"drawing":30,"willChange":1,"reasons":{"RootScroller":2,"OverflowScrolling":2,"WillChangeTransform":1,"Overlap":18,"BackdropFilter":7,"ActiveTransformAnimation":1,"ActiveOpacityAnimation":3},"tiles":148,"tileMB":184.7,"maxScale":1,"medScale":1,"surfaces":4}
+  after solve translate(20.6px, 116.572px) scale(0.343333) null
+[idle w/ completion overlay 1s] x4 wall=1003ms rAF fps=13.6 p50=83.3 p95=116.7 max=116.7 >50ms=12 longTasks=0 top=1.3,0.3,0.2,0.1
+   main: BMF=2.6ms/13 style=- layout=- prepaint=0.2ms/13 paint=1.1ms/3 layerize=0.4ms/10 commit=0.5ms/14 js(evt)=- js(fn)=0.2ms/13 timer=- rAF=0.3ms/13
+   styleElems=null raster: rec=4.4ms/288 gpuRaster=22.3ms/168 decode=- | viz: drawFrame=3.3ms/2 renderPasses=3.2ms/6 gpuPaintPass=1.6ms/6
+   cc: {"layers":34,"drawing":30,"willChange":1,"reasons":{"RootScroller":2,"OverflowScrolling":2,"WillChangeTransform":1,"Overlap":18,"BackdropFilter":7,"ActiveTransformAnimation":1,"ActiveOpacityAnimation":3},"tiles":148,"tileMB":194,"maxScale":1,"medScale":1,"surfaces":4}
+[drag solved group (all pieces)] x4 wall=5433ms rAF fps=13 p50=83.3 p95=100 max=133.2 >50ms=77 longTasks=0 top=13.7,5.7,5.6,4.3
+   main: BMF=147.2ms/68 style=6.9ms/56 layout=0.2ms/1 prepaint=14.1ms/84 paint=2.3ms/4 layerize=66.6ms/63 commit=17.8ms/68 js(evt)=25.4ms/139 js(fn)=29.2ms/435 timer=0.4ms/60 rAF=8.3ms/122
+   styleElems={"n":56,"max":905,"sum":960} raster: rec=4.1ms/266 gpuRaster=17.6ms/46 decode=- | viz: drawFrame=28.3ms/56 renderPasses=27.7ms/112 gpuPaintPass=14ms/112
+   cc: {"layers":29,"drawing":25,"willChange":1,"reasons":{"RootScroller":2,"OverflowScrolling":2,"WillChangeTransform":1,"Overlap":17,"BackdropFilter":6},"tiles":140,"tileMB":186.4,"maxScale":1,"medScale":1,"surfaces":4}
+[spin proxy: rotate solved group 90deg + table zoom transition] x4 wall=1203ms rAF fps=32.1 p50=0 p95=83.2 max=133.3 >50ms=17 longTasks=0 top=4.4,3.3,2.6,2.1
+   main: BMF=15.8ms/19 style=2.8ms/15 layout=- prepaint=2.5ms/19 paint=7.1ms/3 layerize=2ms/13 commit=3.8ms/19 js(evt)=0ms/2 js(fn)=0.5ms/38 timer=- rAF=0.7ms/38
+   styleElems={"n":15,"max":2,"sum":30} raster: rec=2ms/136 gpuRaster=10.3ms/150 decode=- | viz: drawFrame=6.1ms/15 renderPasses=5.9ms/30 gpuPaintPass=3.7ms/30
+   cc: {"layers":29,"drawing":25,"willChange":1,"reasons":{"RootScroller":2,"OverflowScrolling":2,"WillChangeTransform":1,"Overlap":17,"BackdropFilter":6},"tiles":95,"tileMB":116.1,"maxScale":1,"medScale":1,"surfaces":4}
