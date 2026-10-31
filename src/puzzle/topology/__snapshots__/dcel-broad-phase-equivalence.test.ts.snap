@@ -17,7 +17,7 @@ exports[`DCEL broad-phase byte-identity (#439) > sine-flat 6x6 none produces ide
 exports[`DCEL broad-phase byte-identity (#439) > sine-flat 8x6 classic produces identical geometry 1`] = `
 {
   "count": 48,
-  "digest": "ddfba566",
+  "digest": "75565dc0",
 }
 `;
 
@@ -31,7 +31,7 @@ exports[`DCEL broad-phase byte-identity (#439) > triangular r6 j0 none produces 
 exports[`DCEL broad-phase byte-identity (#439) > triangular r6 j0.2 classic produces identical geometry 1`] = `
 {
   "count": 90,
-  "digest": "10de7b59",
+  "digest": "610397dc",
 }
 `;
 
@@ -45,34 +45,34 @@ exports[`DCEL broad-phase byte-identity (#439) > triangular r8 j0.3 none produce
 exports[`DCEL broad-phase byte-identity (#439) > venn classic produces identical geometry 1`] = `
 {
   "count": 4,
-  "digest": "75147b4e",
+  "digest": "0d026e43",
 }
 `;
 
 exports[`DCEL broad-phase byte-identity (#439) > venn none produces identical geometry 1`] = `
 {
   "count": 4,
-  "digest": "5307d17f",
+  "digest": "23e87a84",
 }
 `;
 
 exports[`DCEL broad-phase byte-identity (#439) > wavy 4x4 none produces identical geometry 1`] = `
 {
   "count": 16,
-  "digest": "4b9d79b6",
+  "digest": "7458248b",
 }
 `;
 
 exports[`DCEL broad-phase byte-identity (#439) > wavy 5x5 classic produces identical geometry 1`] = `
 {
   "count": 25,
-  "digest": "789ef54d",
+  "digest": "0b06f1ff",
 }
 `;
 
 exports[`DCEL broad-phase byte-identity (#439) > wavy 6x5 none produces identical geometry 1`] = `
 {
   "count": 30,
-  "digest": "8aa6b86d",
+  "digest": "d6522851",
 }
 `;
