@@ -1,6 +1,19 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import type { GameState, Piece, PieceGroup } from '../model/types.js';
 import { buildShape } from '../model/build-shape.js';
+import { formatEdgePath, parseEdgePath } from '../model/edge-path.js';
+import { buildPiecesById } from '../model/helpers.js';
+import { createNewGame } from '../game/init.js';
+import { registerTabGenerator } from '../puzzle/topology/generator-registry.js';
+import { tracedTabGenerator } from '../puzzle/topology/traced-tab-generator.js';
+import {
+    imageSize,
+    SEED,
+    styles,
+    viewport,
+    type StyleCase,
+} from '../test-helpers/generation-style-cases.js';
+import { v13Progress, v13StaticBlob } from '../test-helpers/v13-save.js';
 import {
     serializeState,
     deserializeState,
@@ -1330,5 +1343,213 @@ describe('blank puzzles', () => {
         expect(() => deserializeState(serialized)).toThrow(
             'imageUrl must be a non-empty string',
         );
+    });
+});
+
+describe('v14 mate path dedup', () => {
+    beforeAll(() => {
+        registerTabGenerator(tracedTabGenerator);
+    });
+
+    const generated = new Map<string, GameState>();
+    function generatedState(style: StyleCase): GameState {
+        let state = generated.get(style.name);
+        if (!state) {
+            state = createNewGame('img', imageSize, viewport, style.grid, { ...style.options, seed: SEED });
+            generated.set(style.name, state);
+        }
+        return state;
+    }
+
+    function wavyState(): GameState {
+        return generatedState(styles.find((s) => s.name === 'wavy')!);
+    }
+
+    function roundTrip(staticBlob: SerializedStaticState, state: GameState): GameState {
+        return recombine(
+            JSON.parse(JSON.stringify(staticBlob)),
+            JSON.parse(JSON.stringify(serializeProgress(state))),
+        );
+    }
+
+    function jsonBlob(state: GameState): SerializedStaticState {
+        return JSON.parse(JSON.stringify(serializeStatic(state)));
+    }
+
+    it('writes version 14', () => {
+        expect(serializeStatic(makeGameState()).version).toBe(14);
+        expect(serializeProgress(makeGameState()).version).toBe(14);
+        expect(serializeState(makeGameState()).version).toBe(14);
+    });
+
+    for (const style of styles) {
+        it(`omits rebuildable mate paths and restores them (${style.name})`, () => {
+            const state = generatedState(style);
+            const blob = jsonBlob(state);
+
+            const interior = blob.pieces.flatMap((p) => p.edges).filter((e) => e.mateEdgeId >= 0);
+            const pairs = interior.filter((e) => e.mateEdgeId > e.id).length;
+            expect(pairs).toBeGreaterThan(0);
+            expect(interior.filter((e) => 'path' in e).length).toBe(pairs);
+            expect(roundTrip(blob, state).pieces).toEqual(state.pieces);
+        });
+    }
+
+    it('generates self-mated pairs in the fractal case, so the round trip covers them', () => {
+        const state = generatedState(styles.find((s) => s.name === 'fractal')!);
+        const selfMated = state.pieces.flatMap((p) =>
+            p.edges.filter((e) => e.mateEdgeId >= 0 && e.matePieceId === p.id));
+        expect(selfMated.length).toBeGreaterThan(0);
+    });
+
+    it('also omits rebuildable mate paths in the legacy full-blob writer', () => {
+        const state = wavyState();
+        const blob = JSON.parse(JSON.stringify(serializeState(state))) as SerializedGameState;
+        const omitted = blob.pieces.flatMap((p) => p.edges).filter((e) => !('path' in e));
+        expect(omitted.length).toBeGreaterThan(0);
+        expect(deserializeState(blob).pieces).toEqual(state.pieces);
+    });
+
+    /**
+     * The one assertion that fails if the bytes a v14 load rebuilds change: a
+     * hand-written blob with mate paths omitted, so the expected strings are the
+     * on-disk contract. On failure the fix is a STATE_VERSION bump, not a new
+     * expectation here.
+     */
+    it('rebuilds omitted mate paths to pinned byte strings', () => {
+        type BlobEdge = SerializedStaticState['pieces'][number]['edges'][number];
+        const e = (
+            id: number,
+            mateEdgeId: number,
+            matePieceId: number,
+            start: { x: number; y: number },
+            end: { x: number; y: number },
+            path?: string,
+        ): BlobEdge => ({ id, mateEdgeId, matePieceId, start, end, ...(path === undefined ? {} : { path }) });
+        const blob: SerializedStaticState = {
+            version: 14,
+            imageUrl: 'img',
+            imageSize: { width: 100, height: 100 },
+            gridSize: { cols: 2, rows: 1 },
+            pieces: [
+                {
+                    id: 0,
+                    imageOffset: { x: -10.5, y: -0.75 },
+                    bounds: { minX: 0, minY: 0, maxX: 12.5, maxY: 10 },
+                    edges: [
+                        e(0, 1, 1, { x: 0, y: 0 }, { x: 10.25, y: 0 }, 'L 3.50 1 L 10.25 0'),
+                        e(2, 3, 1, { x: 10.25, y: 0 }, { x: 10.25, y: 10 }, 'C 12 2.50, 12.50 7.25, 10.25 10'),
+                    ],
+                },
+                {
+                    id: 1,
+                    imageOffset: { x: -0.25, y: 0 },
+                    bounds: { minX: 2, minY: 0.75, maxX: 22.75, maxY: 10.75 },
+                    edges: [
+                        e(3, 2, 0, { x: 20.5, y: 10.75 }, { x: 20.5, y: 0.75 }),
+                        e(1, 0, 0, { x: 20.5, y: 0.75 }, { x: 10.25, y: 0.75 }),
+                        e(4, 5, 1, { x: 2, y: 2 }, { x: 5, y: 2 }, 'A 1.50 1.50 0 0,1 5 2'),
+                        e(5, 4, 1, { x: 5, y: 2 }, { x: 2, y: 2 }),
+                    ],
+                },
+            ],
+        };
+        const progress: SerializedProgress = {
+            version: 14,
+            groups: [
+                { id: 0, pieces: [[0, { x: 0, y: 0 }]], position: { x: 0, y: 0 } },
+                { id: 1, pieces: [[1, { x: 0, y: 0 }]], position: { x: 50, y: 0 } },
+            ],
+            completed: false,
+        };
+
+        const [p0, p1] = recombine(blob, progress).pieces;
+
+        expect(p1.edges.map((edge) => edge.path)).toEqual([
+            'C 22.75 8, 22.25 3.25, 20.50 0.75',
+            'L 13.75 1.75 L 10.25 0.75',
+            'A 1.50 1.50 0 0,1 5 2',
+            'A 1.50 1.50 0 0,0 2 2',
+        ]);
+        expect(p0.shape).toBe('M 0 0 L 3.50 1 L 10.25 0 C 12 2.50, 12.50 7.25, 10.25 10 Z');
+        expect(p1.shape).toBe(
+            'M 20.50 10.75 C 22.75 8, 22.25 3.25, 20.50 0.75 L 13.75 1.75 L 10.25 0.75 Z '
+            + 'M 2 2 A 1.50 1.50 0 0,1 5 2 A 1.50 1.50 0 0,0 2 2 Z',
+        );
+    });
+
+    it('keeps a mate path it cannot rebuild', () => {
+        const base = wavyState();
+        const pieces = structuredClone(base.pieces);
+        const piece = pieces.find((p) => p.edges.some((e) => e.mateEdgeId >= 0 && e.mateEdgeId < e.id))!;
+        const edge = piece.edges.find((e) => e.mateEdgeId >= 0 && e.mateEdgeId < e.id)!;
+        const segments = parseEdgePath(edge.path)!;
+        const first = segments[0];
+        segments[0] = first.cmd === 'C'
+            ? { ...first, c1: { ...first.c1, x: first.c1.x + 0.01 } }
+            : { ...first, to: { ...first.to, x: first.to.x + 0.01 } };
+        const altered = formatEdgePath(segments);
+        expect(altered).not.toBe(edge.path);
+        edge.path = altered;
+        piece.shape = buildShape(piece.edges);
+        const state: GameState = { ...base, pieces, piecesById: buildPiecesById(pieces) };
+
+        const blob = jsonBlob(state);
+        const stored = blob.pieces.find((p) => p.id === piece.id)!.edges.find((e) => e.id === edge.id)!;
+
+        expect(stored.path).toBe(altered);
+        expect(roundTrip(blob, state).pieces).toEqual(pieces);
+    });
+
+    describe('rejects a corrupt v14 blob', () => {
+        type Corruption = (blob: SerializedStaticState) => void;
+        const NO_PATH = /^Invalid state: piece \d+ edge \d+ has no path$/;
+        const allEdges = (blob: SerializedStaticState) => blob.pieces.flatMap((p) => p.edges);
+        const canonical = (blob: SerializedStaticState) =>
+            allEdges(blob).find((e) => e.mateEdgeId > e.id)!;
+
+        const corruptions: Array<[string, Corruption, RegExp]> = [
+            ['canonical path deleted', (blob) => {
+                delete canonical(blob).path;
+            }, NO_PATH],
+            ['border edge path deleted', (blob) => {
+                delete allEdges(blob).find((e) => e.mateEdgeId < 0)!.path;
+            }, NO_PATH],
+            ['mate edge missing', (blob) => {
+                const canon = canonical(blob);
+                const owner = blob.pieces.find((p) => p.edges.includes(canon))!;
+                owner.edges = owner.edges.filter((e) => e !== canon);
+            }, NO_PATH],
+            ['canonical edge not pointing back', (blob) => {
+                const canon = canonical(blob);
+                canon.mateEdgeId = -1;
+                canon.matePieceId = -1;
+            }, NO_PATH],
+            ['canonical path unparseable', (blob) => {
+                canonical(blob).path = 'Q 1 2';
+            }, NO_PATH],
+            ['path not a string', (blob) => {
+                (allEdges(blob).find((e) => e.mateEdgeId < 0) as { path?: unknown }).path = 42;
+            }, /^Invalid state: piece \d+ edge \d+ has a non-string path$/],
+        ];
+
+        for (const [name, corrupt, message] of corruptions) {
+            it(name, () => {
+                const state = wavyState();
+                const blob = jsonBlob(state);
+                corrupt(blob);
+                expect(() => roundTrip(blob, state)).toThrow(message);
+            });
+        }
+    });
+
+    it('loads a v13 blob unchanged', () => {
+        const blob = v13StaticBlob();
+        const progress = v13Progress();
+
+        const restored = recombine(JSON.parse(JSON.stringify(blob)), progress);
+
+        expect(restored.pieces.map((p) => p.edges.map((e) => e.path)))
+            .toEqual(blob.pieces.map((p) => p.edges.map((e) => e.path)));
     });
 });

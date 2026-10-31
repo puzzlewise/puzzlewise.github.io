@@ -1,5 +1,5 @@
 /**
- * Shared with persistence: `serializePiece` omits `piece.shape` from the blob
+ * Shared with persistence: `serializePieces` omits `piece.shape` from the blob
  * when this reproduces it byte-identically from the edge paths (a shape it
  * cannot is stored verbatim), and the loader rebuilds it from those paths.
  *

@@ -14,6 +14,7 @@ import type {
 import { buildGroupIndexes, buildPiecesById } from '../model/helpers.js';
 import { getImageDimensions } from '../model/derive.js';
 import { buildShape } from '../model/build-shape.js';
+import { deriveMatePath } from '../model/edge-path.js';
 import { sealPieceGeometry } from '../model/seal-geometry.js';
 import { DEFAULT_COLS, DEFAULT_ROWS } from '../game/init.js';
 import { legacyDisableTabsToTabGenerator } from '../game/composable-config.js';
@@ -21,7 +22,7 @@ import { isDataUrl } from '../sharing/safe-url.js';
 import type { ViewportState } from '../interaction/viewport-transform.js';
 
 /** Bump when the serialized shape changes. */
-export const STATE_VERSION = 13;
+export const STATE_VERSION = 14;
 
 /**
  * Version history (migrations run on load; keep them — users still hold old saves):
@@ -38,13 +39,14 @@ export const STATE_VERSION = 13;
  *        bump, not just a test update (serialization.test.ts pins the bytes).
  * - v13: `imageUrl` optional (absent = blank); v≤12 stored a synthesized white PNG,
  *        migrated to absent on load.
+ * - v14: a non-canonical interior edge (mateEdgeId < id) omits path when deriveMatePath
+ *        (model/edge-path.ts) rebuilds it byte-identically from its mate; this makes
+ *        edge-path.ts part of the format.
  */
-const SUPPORTED_VERSIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13];
+const SUPPORTED_VERSIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14];
 
 /** An edge as stored in a blob: v≤11 blobs may carry curve samples. */
-export interface SerializedEdge extends Edge {
-    curvePoints?: Point[];
-}
+export type SerializedEdge = Omit<Edge, 'path'> & { path?: string; curvePoints?: Point[] };
 
 /**
  * `shape` is omitted (v12+) when `buildShape(edges)` reproduces it
@@ -171,7 +173,7 @@ export function serializeState(
 ): SerializedGameState {
     const serialized: SerializedGameState = {
         version: STATE_VERSION,
-        pieces: state.pieces.map(serializePiece),
+        pieces: serializePieces(state.pieces),
         groups: state.groups.map(serializeGroup),
         imageSize: state.imageSize,
         gridSize: state.gridSize,
@@ -231,7 +233,7 @@ export function serializeState(
 export function serializeStatic(state: GameState): SerializedStaticState {
     const s: SerializedStaticState = {
         version: STATE_VERSION,
-        pieces: state.pieces.map(serializePiece),
+        pieces: serializePieces(state.pieces),
         imageSize: state.imageSize,
         gridSize: state.gridSize,
     };
@@ -269,16 +271,69 @@ export function serializeProgress(
     return p;
 }
 
+interface EdgeOwner<E> {
+    edge: E;
+    imageOffset: Point;
+}
+
+function edgeOwners<E extends { id: number }>(
+    pieces: Array<{ edges: E[]; imageOffset: Point }>,
+): Map<number, EdgeOwner<E>> {
+    const owners = new Map<number, EdgeOwner<E>>();
+    for (const piece of pieces) {
+        if (!Array.isArray(piece.edges)) continue;
+        for (const edge of piece.edges) owners.set(edge.id, { edge, imageOffset: piece.imageOffset });
+    }
+    return owners;
+}
+
+function pathFromMate(
+    edge: SerializedEdge,
+    imageOffset: Point,
+    owners: Map<number, EdgeOwner<SerializedEdge>>,
+): string | null {
+    if (edge.mateEdgeId < 0 || edge.mateEdgeId >= edge.id) return null;
+    const canon = owners.get(edge.mateEdgeId);
+    if (canon?.edge.mateEdgeId !== edge.id || typeof canon.edge.path !== 'string') return null;
+    return deriveMatePath(canon.edge.path, canon.edge.start, canon.imageOffset, imageOffset);
+}
+
 /**
- * Serialize one piece, omitting `shape` when buildShape(edges) rebuilds it
- * byte-identically. Verified per piece, never per generator — whether the bytes
- * match is a per-piece fact (see game/init-geometry-precision.test.ts). Pieces
- * that keep their shape pass through by reference (no deep copy).
+ * Omits `shape` when buildShape(edges) rebuilds it, and a mate edge's `path`
+ * when its canonical edge rebuilds it, each byte-identically. Verified per
+ * item, never per generator — whether the bytes match is a per-item fact (see
+ * game/init-geometry-precision.test.ts).
  */
-function serializePiece(piece: Piece): SerializedPiece {
-    if (buildShape(piece.edges) !== piece.shape) return piece;
-    const { shape: _omitted, ...rest } = piece;
-    return rest;
+function serializePieces(pieces: Piece[]): SerializedPiece[] {
+    const owners = edgeOwners<SerializedEdge>(pieces);
+    return pieces.map((piece) => {
+        const edges = piece.edges.map((edge): SerializedEdge => {
+            if (pathFromMate(edge, piece.imageOffset, owners) !== edge.path) return edge;
+            const { path: _omitted, ...rest } = edge;
+            return rest;
+        });
+        const serialized: SerializedPiece = { ...piece, edges };
+        if (buildShape(piece.edges) === piece.shape) delete serialized.shape;
+        return serialized;
+    });
+}
+
+function restoreEdgePaths(
+    piece: SerializedPiece,
+    i: number,
+    owners: Map<number, EdgeOwner<SerializedEdge>>,
+): Edge[] {
+    return piece.edges.map((edge) => {
+        if (edge.path === undefined) {
+            const path = pathFromMate(edge, piece.imageOffset, owners);
+            if (path === null) throw new Error(`Invalid state: piece ${i} edge ${edge.id} has no path`);
+            return { ...edge, path };
+        }
+        if (typeof edge.path !== 'string') {
+            throw new Error(`Invalid state: piece ${i} edge ${edge.id} has a non-string path`);
+        }
+        return edge as Edge;
+    });
 }
 
 /**
@@ -306,6 +361,7 @@ function isUsableBounds(bounds: PieceBounds | undefined): bounds is PieceBounds 
  */
 function restorePieces(pieces: SerializedPiece[], version: number): Piece[] {
     if (version >= 12) {
+        const owners = version >= 14 ? edgeOwners(pieces) : null;
         return sealPieceGeometry(pieces.map((piece, i) => {
             const { bounds } = piece;
             if (!isUsableBounds(bounds)) {
@@ -317,10 +373,12 @@ function restorePieces(pieces: SerializedPiece[], version: number): Piece[] {
             if (piece.shape !== undefined && typeof piece.shape !== 'string') {
                 throw new Error(`Invalid state: piece ${i} has a non-string shape`);
             }
+            const edges = owners ? restoreEdgePaths(piece, i, owners) : piece.edges as Edge[];
             return {
                 ...piece,
+                edges,
                 bounds,
-                shape: piece.shape ?? buildShape(piece.edges),
+                shape: piece.shape ?? buildShape(edges),
             };
         }));
     }
@@ -334,7 +392,7 @@ function restorePieces(pieces: SerializedPiece[], version: number): Piece[] {
         // Drop any `bounds`: no v≤11 writer produced it, so one here is
         // untrustworthy — these saves' bounds come from their curve samples.
         const { bounds: _ignored, ...rest } = piece;
-        return { ...rest, shape: piece.shape };
+        return { ...rest, edges: piece.edges as Edge[], shape: piece.shape };
     }));
 }
 
