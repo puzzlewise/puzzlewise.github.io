@@ -40,6 +40,7 @@ import {
     makeRectPiece,
     makeGameState as makeBaseGameState,
 } from '../test-helpers/fixtures.js';
+import { v13Progress, v13StaticBlob } from '../test-helpers/v13-save.js';
 
 // The app installs these from bootstrap.ts; this stands in. Installed once, as
 // production does — jsdom shares `window` across tests and the installer is
@@ -1330,5 +1331,26 @@ describe('geometry seed token: re-anchored on load (#490)', () => {
         // Geometry + progress, exactly as before the re-anchor was added.
         expect(spy).toHaveBeenCalledTimes(2);
         spy.mockRestore();
+    });
+});
+
+describe('v13 saves', () => {
+    beforeEach(() => {
+        localStorage.clear();
+    });
+
+    it('resumes a v13 save without rewriting its geometry', () => {
+        const geometry = JSON.stringify({ ...v13StaticBlob(), seed: 13 });
+        localStorage.setItem(STORAGE_KEY, geometry);
+        localStorage.setItem(PROGRESS_KEY, JSON.stringify({ ...v13Progress(), seed: 13 }));
+        const setItem = vi.spyOn(Storage.prototype, 'setItem');
+
+        expect(loadSavedGame().status).toBe('ok');
+
+        const writtenKeys = setItem.mock.calls.map(([key]) => key);
+        setItem.mockRestore();
+        expect(writtenKeys).toContain(GEOMETRY_SEED_KEY);
+        expect(writtenKeys).not.toContain(STORAGE_KEY);
+        expect(localStorage.getItem(STORAGE_KEY)).toBe(geometry);
     });
 });
