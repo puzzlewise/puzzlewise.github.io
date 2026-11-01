@@ -8,9 +8,11 @@
  * https://github.com/Pomax/bezierjs
  */
 
-import type { Bezier } from 'bezier-js';
+import type { Bezier, MinMax } from 'bezier-js';
 
 const REDUCE_STEP = 0.01;
+const CURVE_INTERSECTION_THRESHOLD = 0.5;
+const PAIR_T_RESOLUTION = 100000;
 
 /**
  * `curve.reduce()` for a 2D cubic. bezier-js builds ~4 throwaway `Bezier`
@@ -64,6 +66,90 @@ export function reduce(curve: Bezier): Bezier[] {
         }
     }
     return pass2;
+}
+
+/**
+ * `Bezier.curveintersects(c1, c2)` with the default threshold. bezier-js
+ * recomputes `bbox()` (extrema plus root finding) 2–3 times per sub-curve
+ * and on every call for the same parts; this computes each sub-curve's
+ * once and caches the parts' across calls, which relies on their points
+ * never being mutated.
+ */
+export function curveIntersects(c1: Bezier[], c2: Bezier[]): string[] {
+    let intersections: string[] = [];
+    for (const left of c1) {
+        for (const right of c2) {
+            const leftBox = cachedBox(left);
+            const rightBox = cachedBox(right);
+            if (bboxOverlap(leftBox, rightBox)) {
+                intersections = intersections.concat(pairIteration(left, leftBox, right, rightBox));
+            }
+        }
+    }
+    return intersections;
+}
+
+const bboxCache = new WeakMap<Bezier, Box>();
+
+function cachedBox(curve: Bezier): Box {
+    let box = bboxCache.get(curve);
+    if (!box) {
+        box = bbox(curve);
+        bboxCache.set(curve, box);
+    }
+    return box;
+}
+
+/** bezier-js's `utils.pairiteration`, taking each curve's bbox along. */
+function pairIteration(c1: Bezier, c1Box: Box, c2: Bezier, c2Box: Box): string[] {
+    if (
+        c1Box.x.size + c1Box.y.size < CURVE_INTERSECTION_THRESHOLD &&
+        c2Box.x.size + c2Box.y.size < CURVE_INTERSECTION_THRESHOLD
+    ) {
+        const r = PAIR_T_RESOLUTION;
+        return [
+            `${(((r * (c1._t1 + c1._t2)) / 2) | 0) / r}/${(((r * (c2._t1 + c2._t2)) / 2) | 0) / r}`,
+        ];
+    }
+
+    const cc1 = c1.split(0.5);
+    const cc2 = c2.split(0.5);
+    const cc1LeftBox = bbox(cc1.left);
+    const cc1RightBox = bbox(cc1.right);
+    const cc2LeftBox = bbox(cc2.left);
+    const cc2RightBox = bbox(cc2.right);
+    const pairs: Array<[Bezier, Box, Bezier, Box]> = [
+        [cc1.left, cc1LeftBox, cc2.left, cc2LeftBox],
+        [cc1.left, cc1LeftBox, cc2.right, cc2RightBox],
+        [cc1.right, cc1RightBox, cc2.right, cc2RightBox],
+        [cc1.right, cc1RightBox, cc2.left, cc2LeftBox],
+    ];
+
+    let results: string[] = [];
+    for (const [left, leftBox, right, rightBox] of pairs) {
+        if (bboxOverlap(leftBox, rightBox)) {
+            results = results.concat(pairIteration(left, leftBox, right, rightBox));
+        }
+    }
+    return results.filter((v, i) => results.indexOf(v) === i);
+}
+
+/** `Bezier.bbox()` always fills `mid` and `size`; the typings mark them optional. */
+interface Box {
+    x: Required<MinMax>;
+    y: Required<MinMax>;
+}
+
+function bbox(curve: Bezier): Box {
+    return curve.bbox() as Box;
+}
+
+function bboxOverlap(b1: Box, b2: Box): boolean {
+    for (const dim of ['x', 'y'] as const) {
+        const d = (b1[dim].size + b2[dim].size) / 2;
+        if (Math.abs(b1[dim].mid - b2[dim].mid) >= d) return false;
+    }
+    return true;
 }
 
 /** Cubic control points as `[x0, y0, x1, y1, x2, y2, x3, y3]`. */

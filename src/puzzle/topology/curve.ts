@@ -5,6 +5,7 @@
 
 import type { Point } from '../../model/types.js';
 import { Bezier } from 'bezier-js';
+import { curveIntersects } from './bezier-js-port.js';
 import { completeReduction } from './complete-reduction.js';
 
 export interface CurveIntersection {
@@ -76,7 +77,7 @@ export class Curve {
 
     /**
      * Segment `index` reduced to sub-curves covering its whole length, for
-     * `Bezier.curveintersects`. See {@link completeReduction} for why
+     * `curveIntersects`. See {@link completeReduction} for why
      * bezier-js's `reduce()` isn't enough.
      *
      * Cached per segment (the bbox pre-filter means only a few segments per
@@ -341,8 +342,8 @@ export class Curve {
                     // Curve-curve: pair reduced sub-curves like `intersects()`,
                     // but from a reduction repaired to cover both segments so a
                     // crossing in a range `reduce()` dropped stays reachable
-                    // (#498). `curveintersects` only ever yields `"tA/tB"` pairs.
-                    const rawPairs = this.beziers[i].curveintersects(
+                    // (#498). `curveIntersects` only ever yields `"tA/tB"` pairs.
+                    const rawPairs = curveIntersects(
                         this.reducedSegment(i),
                         other.reducedSegment(j),
                     );
