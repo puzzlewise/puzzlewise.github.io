@@ -49,23 +49,21 @@ function expectCoversWholeCurve(parts: Bezier[]): void {
 }
 
 /**
- * Make `curve.reduce()` return parts covering exactly `ranges`.
+ * A stand-in `reduce()` result: parts of `curve` covering exactly `ranges`.
  *
- * Real `reduce()` always walks `t` forwards, so stubbing is the only way
+ * Real `reduce()` always walks `t` forwards, so a stand-in is the only way
  * to reach the cursor's `Math.max` guard against an out-of-order part
  * rewinding over already-covered `t`. The failure it prevents is a
  * redundant fill (duplicating a sub-curve, or turning a pass-through
  * into a modified array), not an inverted range.
  */
-function stubReduce(curve: Bezier, ranges: ReadonlyArray<[number, number]>): Bezier[] {
-    const parts = ranges.map(([t1, t2]) => {
+function partsCovering(curve: Bezier, ranges: ReadonlyArray<[number, number]>): Bezier[] {
+    return ranges.map(([t1, t2]) => {
         const part = curve.split(t1, t2);
         part._t1 = t1;
         part._t2 = t2;
         return part;
     });
-    curve.reduce = () => parts;
-    return parts;
 }
 
 describe('completeReduction', () => {
@@ -134,9 +132,9 @@ describe('completeReduction', () => {
     describe('parts that arrive out of order', () => {
         it('fills the tail from where coverage ends, not from the last part', () => {
             const curve = CURVES.simpleArc();
-            stubReduce(curve, [[0, 0.8], [0.4, 0.6]]);
+            const parts = partsCovering(curve, [[0, 0.8], [0.4, 0.6]]);
 
-            const completed = completeReduction(curve);
+            const completed = completeReduction(curve, parts);
 
             expect(completed).toHaveLength(3);
             expect(completed.at(-1)!._t1).toBeCloseTo(0.8, 9);
@@ -145,9 +143,9 @@ describe('completeReduction', () => {
 
         it('still passes reduce() through when an earlier part already reached the end', () => {
             const curve = CURVES.simpleArc();
-            const parts = stubReduce(curve, [[0, 1], [0.4, 0.6]]);
+            const parts = partsCovering(curve, [[0, 1], [0.4, 0.6]]);
 
-            expect(completeReduction(curve)).toBe(parts);
+            expect(completeReduction(curve, parts)).toBe(parts);
         });
     });
 
