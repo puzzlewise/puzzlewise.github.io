@@ -1747,3 +1747,69 @@ details.info-section[open] > .info-section-summary {
 @keyframes loading-overlay-spin {
   to { transform: rotate(360deg); }
 }
+
+/* Spike: edge variants drawn under each group's pieces (#687). */
+[data-edge-underlay] {
+  position: absolute;
+  left: 0;
+  top: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+[data-edge-underlay] g {
+  display: none;
+  fill: none;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+[data-puzzle-table] {
+  --edge-comp: 1;
+}
+
+[data-edge-fixed="on"] [data-puzzle-table] {
+  --edge-comp: var(--edge-zoom-comp, 1);
+}
+
+[data-edge-variant="stroke"] [data-edge-underlay] .edge-a {
+  display: inline;
+  stroke: var(--piece-outline-color, #080808);
+  stroke-width: calc(3px * var(--edge-comp));
+}
+
+[data-edge-variant="stroke-2tone"] [data-edge-underlay] .edge-a {
+  display: inline;
+  stroke: rgba(0, 0, 0, 0.8);
+  stroke-width: calc(4px * var(--edge-comp));
+}
+
+[data-edge-variant="stroke-2tone"] [data-edge-underlay] .edge-b {
+  display: inline;
+  stroke: rgba(255, 255, 255, 0.95);
+  stroke-width: calc(2px * var(--edge-comp));
+}
+
+[data-edge-variant="shadow-blur"] [data-edge-underlay] .edge-a {
+  display: inline;
+  stroke: rgba(0, 0, 0, 0.6);
+  stroke-width: calc(6px * var(--edge-comp));
+  filter: url(#edge-spike-blur);
+}
+
+[data-edge-variant="shadow-rings"] [data-edge-underlay] g {
+  display: inline;
+  stroke: rgba(0, 0, 0, 0.12);
+}
+
+[data-edge-variant="shadow-rings"] [data-edge-underlay] .edge-a {
+  stroke-width: calc(12px * var(--edge-comp));
+}
+
+[data-edge-variant="shadow-rings"] [data-edge-underlay] .edge-b {
+  stroke-width: calc(8px * var(--edge-comp));
+}
+
+[data-edge-variant="shadow-rings"] [data-edge-underlay] .edge-c {
+  stroke-width: calc(4px * var(--edge-comp));
+}

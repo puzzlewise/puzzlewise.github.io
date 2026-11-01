@@ -25,6 +25,7 @@ import {
     type SharedColorOutcome,
 } from '../ui/index.js';
 import { track } from '../analytics/index.js';
+import { installEdgeVariantSpike } from '../spike/edge-variants.js';
 
 export interface BackgroundColorControl {
     /**
@@ -45,6 +46,7 @@ export function installBackgroundColor(deps: {
     // background) it needs no re-apply on theme change.
     installPieceOutlineFilter();
     applyPieceOutline(loadPieceOutlinePreference());
+    installEdgeVariantSpike();
     applyPieceOutlineColor(loadPieceOutlineColorPreference());
 
     let currentColorId = loadColorPreference();

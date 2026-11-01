@@ -8,6 +8,7 @@
 import { getPieceBounds } from '../model/derive.js';
 import type { GameState, Piece, PieceGroup, Point } from '../model/types.js';
 import { VIEWPORT_TRANSITION_MS, type Renderer } from './types.js';
+import { setEdgeZoomComp } from '../spike/edge-variants.js';
 
 /** Accommodates tabs that extend beyond the base piece rectangle. */
 const PIECE_PADDING = 30;
@@ -171,6 +172,7 @@ export class SvgDomRenderer implements Renderer {
         if (this.relayerTimer !== null) clearTimeout(this.relayerTimer);
         this.relayerTimer = setTimeout(() => {
             this.relayerTimer = null;
+            setEdgeZoomComp(1 / scale);
             if (this.transitionActive) this.relayerAfterTransition = true;
             else this.relayerIfZoomedOut();
         }, RELAYER_IDLE_MS);
@@ -307,6 +309,7 @@ export class SvgDomRenderer implements Renderer {
         const expectedPieceIds = new Set(group.pieces.keys());
 
         for (const child of Array.from(groupEl.children)) {
+            if (child.hasAttribute('data-edge-underlay')) continue;
             const pieceId = Number((child as HTMLElement).dataset.pieceId);
 
             if (!expectedPieceIds.has(pieceId)) {
@@ -330,6 +333,49 @@ export class SvgDomRenderer implements Renderer {
             }
 
             this.positionPiece(svgEl, offset);
+        }
+
+        this.syncEdgeUnderlay(groupEl, group, pieceLookup);
+    }
+
+    private syncEdgeUnderlay(
+        groupEl: HTMLElement,
+        group: PieceGroup,
+        pieceLookup: Map<number, Piece>,
+    ): void {
+        const svgNS = 'http://www.w3.org/2000/svg';
+        let underlay = groupEl.querySelector<SVGSVGElement>(':scope > svg[data-edge-underlay]');
+        if (!underlay) {
+            underlay = document.createElementNS(svgNS, 'svg');
+            underlay.setAttribute('data-edge-underlay', '');
+            underlay.setAttribute('width', '1');
+            underlay.setAttribute('height', '1');
+            for (const name of ['edge-a', 'edge-b', 'edge-c']) {
+                const g = document.createElementNS(svgNS, 'g');
+                g.setAttribute('class', name);
+                underlay.appendChild(g);
+            }
+        }
+        if (groupEl.firstChild !== underlay) groupEl.insertBefore(underlay, groupEl.firstChild);
+
+        const key = [...group.pieces.keys()].sort((a, b) => a - b).join(',');
+        if (underlay.dataset.key === key) return;
+        underlay.dataset.key = key;
+        for (const g of Array.from(underlay.children)) {
+            g.replaceChildren();
+            for (const [pieceId, offset] of group.pieces) {
+                const piece = pieceLookup.get(pieceId);
+                if (!piece) continue;
+                const d = piece.edges
+                    .filter((edge) => !group.pieces.has(edge.matePieceId))
+                    .map((edge) => `M ${edge.start.x} ${edge.start.y} ${edge.path}`)
+                    .join(' ');
+                if (!d) continue;
+                const path = document.createElementNS(svgNS, 'path');
+                path.setAttribute('d', d);
+                path.setAttribute('transform', `translate(${offset.x} ${offset.y})`);
+                g.appendChild(path);
+            }
         }
     }
 
