@@ -1,6 +1,6 @@
 /**
- * `--piece-edge-filter` on `documentElement` is read by `[data-group-id]`
- * and its state variants via `var(...)`.
+ * On `documentElement`, `--piece-edge-idle-filter` is read by `[data-group-id]`
+ * and `--piece-edge-filter` by its state variants, via `var(...)`.
  */
 
 import { createIdPreferenceStore } from './preference-store.js';
@@ -11,6 +11,7 @@ export interface PieceOutlinePreset {
     label: string;
     description: string;
     filter: string;
+    idleFilter?: string;
 }
 
 export const PIECE_OUTLINE_PRESETS: readonly PieceOutlinePreset[] = [
@@ -22,6 +23,9 @@ export const PIECE_OUTLINE_PRESETS: readonly PieceOutlinePreset[] = [
         // the bare `none` keyword doesn't — `filter: none drop-shadow(...)` is
         // invalid CSS and the whole declaration is dropped.
         filter: 'opacity(1)',
+        // WebKit composites `opacity(1)` as a real filter on every group layer,
+        // which drops a zoomed-out 192-piece pan from ~60 to ~13 fps on iPad (#687).
+        idleFilter: 'none',
     },
     {
         id: 'shadow',
@@ -40,6 +44,7 @@ export const PIECE_OUTLINE_PRESETS: readonly PieceOutlinePreset[] = [
 export const DEFAULT_PIECE_OUTLINE_ID = 'shadow';
 export const PIECE_OUTLINE_PREFERENCE_KEY = 'puzzle-piece-outline';
 export const CSS_CUSTOM_PROPERTY = '--piece-edge-filter';
+export const IDLE_CSS_CUSTOM_PROPERTY = '--piece-edge-idle-filter';
 
 const store = createIdPreferenceStore({
     key: PIECE_OUTLINE_PREFERENCE_KEY,
@@ -54,8 +59,7 @@ export const loadPieceOutlinePreference = store.load;
 
 export function applyPieceOutline(id: string): void {
     const preset = getPieceOutlinePreset(id);
-    document.documentElement.style.setProperty(
-        CSS_CUSTOM_PROPERTY,
-        preset.filter,
-    );
+    const { style } = document.documentElement;
+    style.setProperty(CSS_CUSTOM_PROPERTY, preset.filter);
+    style.setProperty(IDLE_CSS_CUSTOM_PROPERTY, preset.idleFilter ?? preset.filter);
 }

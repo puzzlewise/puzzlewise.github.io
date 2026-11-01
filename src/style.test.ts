@@ -150,6 +150,27 @@ describe('group layer promotion CSS', () => {
         );
     });
 
+    it('filters idle groups through the idle edge filter (#687)', () => {
+        expect(declarationsFor(styleCss, '[data-group-id]')).toMatch(
+            /filter:\s*var\(--piece-edge-idle-filter,/,
+        );
+    });
+
+    it('composes state variants onto --piece-edge-filter, never the idle filter', () => {
+        for (const selector of [
+            '[data-group-id].selected',
+            '[data-group-id].selected.dragging',
+            '[data-group-id].dragging',
+        ]) {
+            const body = declarationsFor(styleCss, selector);
+            expect(body, selector).toMatch(/filter:\s*var\(--piece-edge-filter,/);
+            expect(body, selector).not.toMatch(/--piece-edge-idle-filter/);
+        }
+        const pulse = /@keyframes merge-pulse\s*\{([\s\S]*?)\n\}/.exec(styleCss)?.[1] ?? '';
+        expect(pulse.match(/var\(--piece-edge-filter,/g), 'merge-pulse frames').toHaveLength(2);
+        expect(pulse, 'merge-pulse').not.toMatch(/--piece-edge-idle-filter/);
+    });
+
     it('drops the group layers while the table is relayering (#680)', () => {
         expect(declarationsFor(styleCss, '[data-puzzle-table].relayer [data-group-id]')).toMatch(
             /will-change:\s*auto/,

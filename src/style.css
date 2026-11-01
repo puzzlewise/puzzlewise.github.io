@@ -362,7 +362,7 @@ html, body {
 
 /* Piece/group edge — value driven by the Piece outline setting. */
 [data-group-id] {
-  filter: var(--piece-edge-filter, drop-shadow(0 0 4px rgba(0, 0, 0, 0.35)));
+  filter: var(--piece-edge-idle-filter, drop-shadow(0 0 4px rgba(0, 0, 0, 0.35)));
   will-change: transform;
 }
 
