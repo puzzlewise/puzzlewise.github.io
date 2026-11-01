@@ -527,9 +527,15 @@ describe('SvgDomRenderer', () => {
         });
     });
 
-    describe('relayer after zooming out', () => {
+    describe('relayer after a zoom', () => {
         let frames: FrameRequestCallback[];
         let table: HTMLElement;
+
+        function runFrame(): void {
+            const pending = frames;
+            frames = [];
+            for (const cb of pending) cb(0);
+        }
 
         beforeEach(() => {
             vi.useFakeTimers();
@@ -538,18 +544,15 @@ describe('SvgDomRenderer', () => {
             renderer.init(container);
             table = container.querySelector<HTMLElement>('[data-puzzle-table]')!;
             renderer.setViewportTransform(2, 0, 0);
+            vi.advanceTimersByTime(RELAYER_IDLE_MS);
+            runFrame();
+            runFrame();
         });
 
         afterEach(() => {
             vi.unstubAllGlobals();
             vi.useRealTimers();
         });
-
-        function runFrame(): void {
-            const pending = frames;
-            frames = [];
-            for (const cb of pending) cb(0);
-        }
 
         it('drops the group layers for one frame once a zoom-out settles', () => {
             renderer.setViewportTransform(1, 0, 0);
@@ -576,29 +579,15 @@ describe('SvgDomRenderer', () => {
             expect(table.classList.contains('relayer')).toBe(true);
         });
 
-        it('compares against the highest zoom since the last relayer', () => {
-            renderer.setViewportTransform(4, 0, 0);
+        it('relayers once a zoom-in settles (#688)', () => {
             renderer.setViewportTransform(3, 0, 0);
             vi.advanceTimersByTime(RELAYER_IDLE_MS);
 
             expect(table.classList.contains('relayer')).toBe(true);
         });
 
-        it('does not relayer after zooming in or panning', () => {
-            renderer.setViewportTransform(3, 0, 0);
-            renderer.setViewportTransform(3, 50, 20);
-            vi.advanceTimersByTime(RELAYER_IDLE_MS);
-
-            expect(table.classList.contains('relayer')).toBe(false);
-        });
-
-        it('does not relayer again until the zoom drops below the last relayer scale', () => {
-            renderer.setViewportTransform(1, 0, 0);
-            vi.advanceTimersByTime(RELAYER_IDLE_MS);
-            runFrame();
-            runFrame();
-
-            renderer.setViewportTransform(1, 30, 0);
+        it('does not relayer after a pan', () => {
+            renderer.setViewportTransform(2, 50, 20);
             vi.advanceTimersByTime(RELAYER_IDLE_MS);
 
             expect(table.classList.contains('relayer')).toBe(false);
@@ -607,6 +596,16 @@ describe('SvgDomRenderer', () => {
         it('defers a relayer during an animated viewport transition until it ends', () => {
             renderer.enableViewportTransition();
             renderer.setViewportTransform(1, 0, 0);
+            vi.advanceTimersByTime(RELAYER_IDLE_MS);
+            expect(table.classList.contains('relayer')).toBe(false);
+
+            renderer.disableViewportTransition();
+            expect(table.classList.contains('relayer')).toBe(true);
+        });
+
+        it('relayers when an animated zoom-in ends, as the completion zoom does (#688)', () => {
+            renderer.enableViewportTransition();
+            renderer.setViewportTransform(3, 0, 0);
             vi.advanceTimersByTime(RELAYER_IDLE_MS);
             expect(table.classList.contains('relayer')).toBe(false);
 
