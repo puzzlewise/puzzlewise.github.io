@@ -8,6 +8,7 @@ import {
     DEFAULT_PIECE_OUTLINE_ID,
     PIECE_OUTLINE_PREFERENCE_KEY,
     CSS_CUSTOM_PROPERTY,
+    IDLE_CSS_CUSTOM_PROPERTY,
     getPieceOutlinePreset,
     savePieceOutlinePreference,
     loadPieceOutlinePreference,
@@ -75,6 +76,7 @@ describe('savePieceOutlinePreference / loadPieceOutlinePreference', () => {
 describe('applyPieceOutline', () => {
     beforeEach(() => {
         document.documentElement.style.removeProperty(CSS_CUSTOM_PROPERTY);
+        document.documentElement.style.removeProperty(IDLE_CSS_CUSTOM_PROPERTY);
     });
 
     it('sets the CSS custom property to the preset filter', () => {
@@ -97,5 +99,22 @@ describe('applyPieceOutline', () => {
         expect(
             document.documentElement.style.getPropertyValue(CSS_CUSTOM_PROPERTY),
         ).toBe(getPieceOutlinePreset(DEFAULT_PIECE_OUTLINE_ID).filter);
+    });
+
+    it('sets the idle filter to none for the none preset', () => {
+        applyPieceOutline('none');
+        expect(
+            document.documentElement.style.getPropertyValue(IDLE_CSS_CUSTOM_PROPERTY),
+        ).toBe('none');
+    });
+
+    it('sets the idle filter to the preset filter for shadow and outline', () => {
+        for (const id of ['shadow', 'outline']) {
+            applyPieceOutline(id);
+            expect(
+                document.documentElement.style.getPropertyValue(IDLE_CSS_CUSTOM_PROPERTY),
+                id,
+            ).toBe(getPieceOutlinePreset(id).filter);
+        }
     });
 });
