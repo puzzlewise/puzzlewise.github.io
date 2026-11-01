@@ -38,10 +38,10 @@ export function applyGroupTransform(
 }
 
 /**
- * On phones, `will-change: transform` group layers kept their zoomed-in scale
- * after zooming out, ran out of GPU memory and stopped rendering (#680).
- * Dropping the hint for one frame once a zoom-out has been still this long
- * rebuilds them at the current scale.
+ * `will-change: transform` group layers keep the raster scale they had when a
+ * zoom started (zoom-out, #680) or get redrawn at full size (zoom-in, #688),
+ * which ran phones out of GPU memory. Dropping the hint for one frame once a
+ * zoom has been still this long rebuilds them at the current scale.
  */
 export const RELAYER_IDLE_MS = 200;
 
@@ -78,7 +78,6 @@ export class SvgDomRenderer implements Renderer {
     private currentPieceCount = -1;
     private currentShapeFingerprint = '';
     private viewportScale: number | null = null;
-    private maxScaleSinceRelayer = 0;
     private relayerTimer: ReturnType<typeof setTimeout> | null = null;
     private transitionActive = false;
     private relayerAfterTransition = false;
@@ -167,12 +166,11 @@ export class SvgDomRenderer implements Renderer {
 
         if (scale === this.viewportScale) return;
         this.viewportScale = scale;
-        this.maxScaleSinceRelayer = Math.max(this.maxScaleSinceRelayer, scale);
         if (this.relayerTimer !== null) clearTimeout(this.relayerTimer);
         this.relayerTimer = setTimeout(() => {
             this.relayerTimer = null;
             if (this.transitionActive) this.relayerAfterTransition = true;
-            else this.relayerIfZoomedOut();
+            else this.relayer();
         }, RELAYER_IDLE_MS);
     }
 
@@ -188,15 +186,13 @@ export class SvgDomRenderer implements Renderer {
         this.transitionActive = false;
         if (this.relayerAfterTransition) {
             this.relayerAfterTransition = false;
-            this.relayerIfZoomedOut();
+            this.relayer();
         }
     }
 
-    private relayerIfZoomedOut(): void {
+    private relayer(): void {
         const table = this.tableEl;
-        const scale = this.viewportScale;
-        if (!table || scale === null || scale >= this.maxScaleSinceRelayer) return;
-        this.maxScaleSinceRelayer = scale;
+        if (!table) return;
         table.classList.add('relayer');
         requestAnimationFrame(() => {
             requestAnimationFrame(() => table.classList.remove('relayer'));

@@ -366,7 +366,7 @@ html, body {
   will-change: transform;
 }
 
-/* Set for one frame by the renderer after a zoom-out (#680). */
+/* Set for one frame by the renderer after a zoom settles (#680, #688). */
 [data-puzzle-table].relayer [data-group-id] {
   will-change: auto;
 }
