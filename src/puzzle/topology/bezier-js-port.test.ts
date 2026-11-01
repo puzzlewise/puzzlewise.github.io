@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { Bezier } from 'bezier-js';
 import { createSeededRandom } from '../seeded-random.js';
-import { reduce } from './bezier-js-port.js';
+import { curveIntersects, reduce } from './bezier-js-port.js';
 
 /**
  * Exact identity, not closeness: `-0` vs `0` or a last-ULP difference
@@ -55,5 +55,35 @@ describe('reduce', () => {
     it('defers to bezier-js for curves the port does not cover', () => {
         const quadratic = new Bezier(0, 0, 50, 100, 100, 0);
         expectIdenticalParts(reduce(quadratic), quadratic.reduce());
+    });
+});
+
+describe('curveIntersects', () => {
+    function randomCubic(random: () => number): Bezier {
+        return new Bezier(Array.from({ length: 8 }, () => random() * 100));
+    }
+
+    it('matches bezier-js, including on repeat calls with the same parts', () => {
+        const random = createSeededRandom(1686);
+        let pairsWithHits = 0;
+        for (let i = 0; i < 100; i++) {
+            const a = randomCubic(random).reduce();
+            const b = randomCubic(random).reduce();
+            const expected = new Bezier(0, 0, 1, 1, 2, 2, 3, 3).curveintersects(a, b);
+            if (expected.length > 0) pairsWithHits++;
+
+            expect(curveIntersects(a, b)).toEqual(expected);
+            expect(curveIntersects(a, b)).toEqual(expected);
+        }
+        expect(pairsWithHits).toBeGreaterThan(30);
+    });
+
+    it('treats boxes that only touch as not overlapping, like bezier-js', () => {
+        const flat = new Bezier(0, 50, 30, 50, 70, 50, 100, 50).reduce();
+        const risingFromFlat = new Bezier(50, 50, 60, 80, 80, 90, 100, 100).reduce();
+        const expected = new Bezier(0, 0, 1, 1, 2, 2, 3, 3).curveintersects(flat, risingFromFlat);
+
+        expect(expected).toEqual([]);
+        expect(curveIntersects(flat, risingFromFlat)).toEqual(expected);
     });
 });
