@@ -14,6 +14,7 @@
  */
 
 import { Bezier } from 'bezier-js';
+import { reduce } from './bezier-js-port.js';
 
 /**
  * Ignore coverage holes narrower than this in `t`: far below a pixel of
@@ -37,9 +38,7 @@ const MIN_GAP_T = 1e-9;
  * before later original parts, so `Curve.intersect`'s first-hit-wins
  * dedup can keep a slightly different point.
  */
-export function completeReduction(curve: Bezier): Bezier[] {
-    const parts = curve.reduce();
-
+export function completeReduction(curve: Bezier, parts = reduce(curve)): Bezier[] {
     const completed: Bezier[] = [];
     let cursor = 0;
     let filled = false;
