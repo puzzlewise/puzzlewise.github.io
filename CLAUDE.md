@@ -285,3 +285,22 @@ imports and the `bootstrap()` call. It is deliberately not a line-count cap —
 a threshold is just a number the next feature raises by ten. If you find
 yourself wanting to relax that assertion rather than clear it, the thing you
 are adding belongs in `bootstrap.ts` or in a module it wires.
+
+## Check for orphaned test workers after an interrupted run
+
+After any interrupted or timed-out test run, check for orphaned vitest workers:
+
+```
+ps -Ao pid,ppid,%cpu,etime,command | awk '$2==1 && /vitest/'
+```
+
+Kill any whose command line points into this repo's `node_modules/vitest`.
+That includes workers started from worktrees with `node_modules` symlinked
+here, since their paths resolve to this checkout, not the worktree.
+
+A worker stuck in a synchronous loop survives `pkill -f 'vitest run …'`: that
+pattern matches only the parent, and the worker never notices it has gone. One
+spun for three days and exhausted the Mac mini's memory. To stop a hung run,
+stop the whole background task or process group, not a pattern match.
+The watchdog in `src/test-helpers/vitest-setup.ts` kills such workers within
+a second or two, but check anyway: it can't help if it never started.
