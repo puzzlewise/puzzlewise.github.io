@@ -61,5 +61,6 @@ export default defineConfig({
     exclude: ['**/node_modules/**', '**/dist/**', '**/.worktrees/**'],
     // Allow palette.css / style.css to be imported as ?raw in their tests.
     css: { include: [/palette\.css/, /style\.css/] },
+    setupFiles: ['src/test-helpers/vitest-setup.ts'],
   },
 });
