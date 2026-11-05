@@ -7,6 +7,7 @@
 
 import { describe, it, expect } from 'vitest';
 import styleCss from './style.css?raw';
+import { DEFAULT_COLOR_ID } from './ui/background-color.js';
 
 function matchingBrace(css: string, open: number): number {
     let depth = 0;
@@ -216,6 +217,14 @@ describe('outline underlay CSS', () => {
         expect(
             declarationsFor(styleCss, '[data-outline-constant-width] [data-outline-underlay]'),
         ).toMatch(/--outline-stroke-scale:\s*var\(--outline-zoom-comp, 1\)/);
+    });
+});
+
+describe('first-paint background', () => {
+    it('paints the default swatch, in the current OS theme, before JS runs', () => {
+        expect(declarationsFor(styleCss, ':root')).toContain(
+            `--puzzle-bg-color: var(--color-${DEFAULT_COLOR_ID});`,
+        );
     });
 });
 

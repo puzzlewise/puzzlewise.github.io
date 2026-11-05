@@ -12,8 +12,7 @@ import type { SwatchEntry } from './swatch-picker.js';
 
 export type BackgroundColorPreset = PaletteSwatch;
 
-/** Closest to the old "midnight" default. */
-export const DEFAULT_COLOR_ID = 'indigo-darker';
+export const DEFAULT_COLOR_ID = 'glaucous-lighter';
 
 export const COLOR_PREFERENCE_KEY = 'puzzle-background-color';
 
