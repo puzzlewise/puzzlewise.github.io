@@ -18,7 +18,6 @@ export const DEFAULT_PIECE_OUTLINE_COLOR_ID = 'gray-darker-3';
 
 export const PIECE_OUTLINE_COLOR_PREFERENCE_KEY = 'puzzle-piece-outline-color';
 
-/** CSS custom property the outline filter's flood-color reads. */
 export const CSS_CUSTOM_PROPERTY = '--piece-outline-color';
 
 const swatchById = new Map<string, PaletteSwatch>(

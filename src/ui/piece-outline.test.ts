@@ -24,8 +24,8 @@ describe('PIECE_OUTLINE_PRESETS', () => {
         ]);
     });
 
-    it('default id is "shadow"', () => {
-        expect(DEFAULT_PIECE_OUTLINE_ID).toBe('shadow');
+    it('default id is "outline"', () => {
+        expect(DEFAULT_PIECE_OUTLINE_ID).toBe('outline');
     });
 
     it('each preset has id, label, description, and filter', () => {
@@ -48,8 +48,10 @@ describe('PIECE_OUTLINE_PRESETS', () => {
         );
     });
 
-    it('outline preset references the piece-outline SVG filter', () => {
-        expect(getPieceOutlinePreset('outline').filter).toBe('url(#piece-outline)');
+    it('outline preset puts no filter on groups, like none (#687)', () => {
+        const outline = getPieceOutlinePreset('outline');
+        expect(outline.filter).toBe('opacity(1)');
+        expect(outline.idleFilter).toBe('none');
     });
 });
 
@@ -80,14 +82,14 @@ describe('applyPieceOutline', () => {
     });
 
     it('sets the CSS custom property to the preset filter', () => {
-        applyPieceOutline('outline');
+        applyPieceOutline('shadow');
         expect(
             document.documentElement.style.getPropertyValue(CSS_CUSTOM_PROPERTY),
-        ).toBe('url(#piece-outline)');
+        ).toBe(getPieceOutlinePreset('shadow').filter);
     });
 
     it('overwrites on subsequent calls', () => {
-        applyPieceOutline('outline');
+        applyPieceOutline('shadow');
         applyPieceOutline('none');
         expect(
             document.documentElement.style.getPropertyValue(CSS_CUSTOM_PROPERTY),
@@ -101,20 +103,29 @@ describe('applyPieceOutline', () => {
         ).toBe(getPieceOutlinePreset(DEFAULT_PIECE_OUTLINE_ID).filter);
     });
 
-    it('sets the idle filter to none for the none preset', () => {
-        applyPieceOutline('none');
-        expect(
-            document.documentElement.style.getPropertyValue(IDLE_CSS_CUSTOM_PROPERTY),
-        ).toBe('none');
-    });
-
-    it('sets the idle filter to the preset filter for shadow and outline', () => {
-        for (const id of ['shadow', 'outline']) {
+    it('sets the idle filter to none for the none and outline presets', () => {
+        for (const id of ['none', 'outline']) {
             applyPieceOutline(id);
             expect(
                 document.documentElement.style.getPropertyValue(IDLE_CSS_CUSTOM_PROPERTY),
                 id,
-            ).toBe(getPieceOutlinePreset(id).filter);
+            ).toBe('none');
         }
+    });
+
+    it('sets the idle filter to the preset filter for shadow', () => {
+        applyPieceOutline('shadow');
+        expect(
+            document.documentElement.style.getPropertyValue(IDLE_CSS_CUSTOM_PROPERTY),
+        ).toBe(getPieceOutlinePreset('shadow').filter);
+    });
+
+    it('exposes the active preset id on the root element for the outline underlay CSS', () => {
+        applyPieceOutline('outline');
+        expect(document.documentElement.dataset.pieceOutline).toBe('outline');
+        applyPieceOutline('not-a-mode');
+        expect(document.documentElement.dataset.pieceOutline).toBe(DEFAULT_PIECE_OUTLINE_ID);
+        applyPieceOutline('shadow');
+        expect(document.documentElement.dataset.pieceOutline).toBe('shadow');
     });
 });

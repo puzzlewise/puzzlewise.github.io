@@ -17,11 +17,12 @@ import {
     adoptSharedBackgroundColor,
     onColorSchemeChange,
     createBackgroundColorPicker,
-    installPieceOutlineFilter,
     loadPieceOutlinePreference,
     applyPieceOutline,
     loadPieceOutlineColorPreference,
     applyPieceOutlineColor,
+    loadOutlineConstantWidthPreference,
+    applyOutlineConstantWidth,
     type SharedColorOutcome,
 } from '../ui/index.js';
 import { track } from '../analytics/index.js';
@@ -43,9 +44,9 @@ export function installBackgroundColor(deps: {
 
     // The outline color flips with the OS theme via CSS, so (unlike the
     // background) it needs no re-apply on theme change.
-    installPieceOutlineFilter();
     applyPieceOutline(loadPieceOutlinePreference());
     applyPieceOutlineColor(loadPieceOutlineColorPreference());
+    applyOutlineConstantWidth(loadOutlineConstantWidthPreference());
 
     let currentColorId = loadColorPreference();
     applyBackgroundColor(currentColorId);

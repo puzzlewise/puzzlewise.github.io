@@ -36,6 +36,17 @@ describe('installBackgroundColor', () => {
         expect(container.querySelector('.bg-color-button')).not.toBeNull();
     });
 
+    it('applies the saved piece-outline settings', () => {
+        localStorage.setItem('puzzle-piece-outline', 'shadow');
+        localStorage.setItem('puzzle-outline-constant-width', 'true');
+        document.documentElement.removeAttribute('data-outline-constant-width');
+
+        installBackgroundColor({ container });
+
+        expect(document.documentElement.dataset.pieceOutline).toBe('shadow');
+        expect(document.documentElement.hasAttribute('data-outline-constant-width')).toBe(true);
+    });
+
     it('reports an adopted shared color', () => {
         const control = installBackgroundColor({ container });
         expect(control.adopt(OTHER_PRESET.id)).toBe('adopted');

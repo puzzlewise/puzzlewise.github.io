@@ -23,6 +23,10 @@ export function fmt(n: number): string {
     return Number.isInteger(n) ? String(n) : n.toFixed(2);
 }
 
+export function edgePathD(edge: Edge): string {
+    return `M ${fmt(edge.start.x)} ${fmt(edge.start.y)} ${edge.path}`;
+}
+
 /** Tolerance for matching consecutive edges' end→start in piece-local px. */
 const CHAIN_EPSILON = 0.5;
 

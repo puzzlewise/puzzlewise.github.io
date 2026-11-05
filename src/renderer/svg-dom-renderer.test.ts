@@ -803,6 +803,135 @@ describe('SvgDomRenderer', () => {
         });
     });
 
+    describe('outline underlay', () => {
+        function underlayOf(groupId: number): SVGSVGElement {
+            const groupEl = container.querySelector(`[data-group-id="${groupId}"]`)!;
+            const underlay = groupEl.firstElementChild as SVGSVGElement;
+            expect(underlay.hasAttribute('data-outline-underlay')).toBe(true);
+            return underlay;
+        }
+
+        function drawnEdgeCounts(groupId: number): number[] {
+            return Array.from(underlayOf(groupId).querySelectorAll('path'))
+                .map((p) => p.getAttribute('d')!.split('M').length - 1);
+        }
+
+        function makeMatedPairState(merged: boolean): GameState {
+            const state = make2x2State();
+            state.pieces[0].edges[1].matePieceId = 1;
+            state.pieces[1].edges[3].matePieceId = 0;
+            if (merged) {
+                state.groups = [makeGroup(0, [0, 1], 50, 50), ...state.groups.slice(2)];
+            }
+            return state;
+        }
+
+        it('draws every edge of a lone piece, under the piece', () => {
+            renderer.init(container);
+            renderer.renderState(make2x2State());
+
+            expect(drawnEdgeCounts(0)).toEqual([4]);
+            expect(underlayOf(0).nextElementSibling!.getAttribute('data-piece-id')).toBe('0');
+        });
+
+        it('places each piece outline at its offset within the group', () => {
+            renderer.init(container);
+            renderer.renderState(makeMatedPairState(true));
+
+            const transforms = Array.from(underlayOf(0).querySelectorAll('path'))
+                .map((p) => p.getAttribute('transform'));
+            expect(transforms).toEqual(['translate(0 0)', 'translate(100 0)']);
+        });
+
+        it('leaves out the edges where pieces in the same group meet', () => {
+            renderer.init(container);
+            renderer.renderState(makeMatedPairState(true));
+
+            expect(drawnEdgeCounts(0)).toEqual([3, 3]);
+        });
+
+        it('keeps edges whose mate is in another group', () => {
+            renderer.init(container);
+            renderer.renderState(makeMatedPairState(false));
+
+            expect(drawnEdgeCounts(0)).toEqual([4]);
+            expect(drawnEdgeCounts(1)).toEqual([4]);
+        });
+
+        it('redraws the outline when groups merge, keeping the pieces', () => {
+            renderer.init(container);
+            renderer.renderState(makeMatedPairState(false));
+            renderer.renderState(makeMatedPairState(true));
+
+            expect(drawnEdgeCounts(0)).toEqual([3, 3]);
+            const groupEl = container.querySelector('[data-group-id="0"]')!;
+            expect(groupEl.querySelectorAll('svg[data-piece-id]')).toHaveLength(2);
+            expect(groupEl.querySelectorAll('[data-outline-underlay]')).toHaveLength(1);
+        });
+
+        it('reuses the outline across renders while the group is unchanged', () => {
+            renderer.init(container);
+            renderer.renderState(makeMatedPairState(true));
+            const underlay = underlayOf(0);
+            const path = underlay.querySelector('path');
+
+            renderer.renderState(makeMatedPairState(true));
+
+            expect(underlayOf(0)).toBe(underlay);
+            expect(underlayOf(0).querySelector('path')).toBe(path);
+        });
+
+        it('moves the outline when a piece offset changes without a membership change', () => {
+            renderer.init(container);
+            const state = makeMatedPairState(true);
+            renderer.renderState(state);
+
+            state.groups[0].pieces.set(1, { x: 120, y: 0 });
+            renderer.renderState(state);
+
+            const transforms = Array.from(underlayOf(0).querySelectorAll('path'))
+                .map((p) => p.getAttribute('transform'));
+            expect(transforms).toEqual(['translate(0 0)', 'translate(120 0)']);
+        });
+
+        describe('zoom compensation', () => {
+            beforeEach(() => {
+                vi.useFakeTimers();
+                vi.stubGlobal('requestAnimationFrame', () => 0);
+            });
+
+            afterEach(() => {
+                vi.unstubAllGlobals();
+                vi.useRealTimers();
+            });
+
+            it('sets the inverse scale on the table once a zoom has settled', () => {
+                renderer.init(container);
+                const table = container.querySelector<HTMLElement>('[data-puzzle-table]')!;
+
+                renderer.setViewportTransform(0.25, 0, 0);
+                vi.advanceTimersByTime(RELAYER_IDLE_MS - 1);
+                expect(table.style.getPropertyValue('--outline-zoom-comp')).toBe('');
+
+                vi.advanceTimersByTime(1);
+                expect(table.style.getPropertyValue('--outline-zoom-comp')).toBe('4');
+            });
+
+            it('holds the value back until an animated zoom has finished', () => {
+                renderer.init(container);
+                const table = container.querySelector<HTMLElement>('[data-puzzle-table]')!;
+
+                renderer.enableViewportTransition();
+                renderer.setViewportTransform(0.5, 0, 0);
+                vi.advanceTimersByTime(RELAYER_IDLE_MS);
+                expect(table.style.getPropertyValue('--outline-zoom-comp')).toBe('');
+
+                renderer.disableViewportTransition();
+                expect(table.style.getPropertyValue('--outline-zoom-comp')).toBe('2');
+            });
+        });
+    });
+
     describe('destroy', () => {
         it('removes the table element', () => {
             renderer.init(container);

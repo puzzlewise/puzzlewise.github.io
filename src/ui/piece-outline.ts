@@ -1,6 +1,7 @@
 /**
  * On `documentElement`, `--piece-edge-idle-filter` is read by `[data-group-id]`
- * and `--piece-edge-filter` by its state variants, via `var(...)`.
+ * and `--piece-edge-filter` by its state variants, via `var(...)`;
+ * `data-piece-outline` holds the active preset id.
  */
 
 import { createIdPreferenceStore } from './preference-store.js';
@@ -36,12 +37,15 @@ export const PIECE_OUTLINE_PRESETS: readonly PieceOutlinePreset[] = [
     {
         id: 'outline',
         label: 'Outline',
-        description: 'Sharp 1px line',
-        filter: 'url(#piece-outline)',
+        description: 'Sharp line',
+        // Drawn by the renderer's per-group underlay instead: any filter on
+        // the group layers is paid on every frame (#687).
+        filter: 'opacity(1)',
+        idleFilter: 'none',
     },
 ] as const;
 
-export const DEFAULT_PIECE_OUTLINE_ID = 'shadow';
+export const DEFAULT_PIECE_OUTLINE_ID = 'outline';
 export const PIECE_OUTLINE_PREFERENCE_KEY = 'puzzle-piece-outline';
 export const CSS_CUSTOM_PROPERTY = '--piece-edge-filter';
 export const IDLE_CSS_CUSTOM_PROPERTY = '--piece-edge-idle-filter';
@@ -59,7 +63,9 @@ export const loadPieceOutlinePreference = store.load;
 
 export function applyPieceOutline(id: string): void {
     const preset = getPieceOutlinePreset(id);
-    const { style } = document.documentElement;
+    const root = document.documentElement;
+    root.dataset.pieceOutline = preset.id;
+    const { style } = root;
     style.setProperty(CSS_CUSTOM_PROPERTY, preset.filter);
     style.setProperty(IDLE_CSS_CUSTOM_PROPERTY, preset.idleFilter ?? preset.filter);
 }
