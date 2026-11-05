@@ -7,6 +7,7 @@
 import type { GeneratedPiece, Point, Size } from '../../model/types.js';
 import { buildDCEL, getFaceEdges } from './dcel.js';
 import type { Face, HalfEdge } from './dcel.js';
+import { walkLoop } from './half-edge-loop.js';
 import { facesToPieceDefinitions } from './faces-to-pieces.js';
 import type { EdgeDefinition } from '../composable/types.js';
 import { composePuzzle } from '../composable/compose.js';
@@ -150,13 +151,11 @@ export function generateTopologyPuzzle(
     // into starting groups instead of mutating the DCEL.
     const computeArea = (face: { outerEdge: HalfEdge }) => {
         let area = 0;
-        let current = face.outerEdge;
-        do {
+        for (const current of walkLoop(face.outerEdge)) {
             const a = current.origin.position;
             const b = current.twin.origin.position;
             area += (a.x * b.y - b.x * a.y);
-            current = current.next;
-        } while (current !== face.outerEdge);
+        }
         return area / 2;
     };
     logFaceDetails('dcel-faces', graph.faces, computeArea as (face: Face) => number);
