@@ -1,7 +1,7 @@
 :root {
   /* First-paint fallback before JS applies the saved/default color.
-     Matches the default preset (indigo-darker) so there's no flash. */
-  --puzzle-bg-color: #1a237e;
+     Matches the default preset so there's no flash. */
+  --puzzle-bg-color: var(--color-glaucous-lighter);
   --piece-opacity: 1;
   /* Fill for a blank puzzle's pieces, which carry no image. Deliberately
      not in palette.css: that file excludes absolute white, and this does

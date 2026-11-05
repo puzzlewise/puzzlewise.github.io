@@ -28,6 +28,10 @@ describe('BACKGROUND_COLOR_PRESETS', () => {
         }
     });
 
+    it('defaults to the light glaucous swatch', () => {
+        expect(DEFAULT_COLOR_ID).toBe('glaucous-lighter');
+    });
+
     it('default id resolves to a preset', () => {
         expect(
             BACKGROUND_COLOR_PRESETS.some((p) => p.id === DEFAULT_COLOR_ID),
