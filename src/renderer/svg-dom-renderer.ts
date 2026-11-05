@@ -5,6 +5,7 @@
  * `group.position + piece.groupOffset`.
  */
 
+import { edgePathD } from '../model/build-shape.js';
 import { getPieceBounds } from '../model/derive.js';
 import type { GameState, Piece, PieceGroup, Point } from '../model/types.js';
 import { VIEWPORT_TRANSITION_MS, type Renderer } from './types.js';
@@ -81,7 +82,7 @@ export class SvgDomRenderer implements Renderer {
     private maxScaleSinceRelayer = 0;
     private relayerTimer: ReturnType<typeof setTimeout> | null = null;
     private transitionActive = false;
-    private relayerAfterTransition = false;
+    private settleAfterTransition = false;
 
     init(container: HTMLElement): void {
         const table = document.createElement('div');
@@ -171,8 +172,8 @@ export class SvgDomRenderer implements Renderer {
         if (this.relayerTimer !== null) clearTimeout(this.relayerTimer);
         this.relayerTimer = setTimeout(() => {
             this.relayerTimer = null;
-            if (this.transitionActive) this.relayerAfterTransition = true;
-            else this.relayerIfZoomedOut();
+            if (this.transitionActive) this.settleAfterTransition = true;
+            else this.settleZoom();
         }, RELAYER_IDLE_MS);
     }
 
@@ -186,10 +187,18 @@ export class SvgDomRenderer implements Renderer {
         if (!this.tableEl) return;
         this.tableEl.style.transition = '';
         this.transitionActive = false;
-        if (this.relayerAfterTransition) {
-            this.relayerAfterTransition = false;
-            this.relayerIfZoomedOut();
+        if (this.settleAfterTransition) {
+            this.settleAfterTransition = false;
+            this.settleZoom();
         }
+    }
+
+    /** Once per settled zoom, not per frame: the width change restyles every outline path. */
+    private settleZoom(): void {
+        if (this.viewportScale !== null) {
+            this.tableEl?.style.setProperty('--outline-zoom-comp', String(1 / this.viewportScale));
+        }
+        this.relayerIfZoomedOut();
     }
 
     private relayerIfZoomedOut(): void {
@@ -263,7 +272,7 @@ export class SvgDomRenderer implements Renderer {
     destroy(): void {
         if (this.relayerTimer !== null) clearTimeout(this.relayerTimer);
         this.relayerTimer = null;
-        this.relayerAfterTransition = false;
+        this.settleAfterTransition = false;
 
         if (this.tableEl) {
             this.tableEl.remove();
@@ -307,6 +316,7 @@ export class SvgDomRenderer implements Renderer {
         const expectedPieceIds = new Set(group.pieces.keys());
 
         for (const child of Array.from(groupEl.children)) {
+            if (child.hasAttribute('data-outline-underlay')) continue;
             const pieceId = Number((child as HTMLElement).dataset.pieceId);
 
             if (!expectedPieceIds.has(pieceId)) {
@@ -331,6 +341,48 @@ export class SvgDomRenderer implements Renderer {
 
             this.positionPiece(svgEl, offset);
         }
+
+        this.syncOutlineUnderlay(groupEl, group, pieceLookup);
+    }
+
+    /** Edges between pieces of the same group are left out so joins stay seamless. */
+    private syncOutlineUnderlay(
+        groupEl: HTMLElement,
+        group: PieceGroup,
+        pieceLookup: Map<number, Piece>,
+    ): void {
+        const svgNS = 'http://www.w3.org/2000/svg';
+        let underlay = groupEl.querySelector<SVGSVGElement>(':scope > svg[data-outline-underlay]');
+        if (!underlay) {
+            underlay = document.createElementNS(svgNS, 'svg');
+            underlay.setAttribute('data-outline-underlay', '');
+            underlay.setAttribute('width', '1');
+            underlay.setAttribute('height', '1');
+        }
+        if (groupEl.firstChild !== underlay) groupEl.insertBefore(underlay, groupEl.firstChild);
+
+        const key = [...group.pieces]
+            .map(([pieceId, offset]) => `${pieceId}:${offset.x},${offset.y}`)
+            .sort()
+            .join(' ');
+        if (underlay.dataset.pieces === key) return;
+        underlay.dataset.pieces = key;
+
+        const paths: SVGPathElement[] = [];
+        for (const [pieceId, offset] of group.pieces) {
+            const piece = pieceLookup.get(pieceId);
+            if (!piece) continue;
+            const d = piece.edges
+                .filter((edge) => !group.pieces.has(edge.matePieceId))
+                .map(edgePathD)
+                .join(' ');
+            if (!d) continue;
+            const path = document.createElementNS(svgNS, 'path');
+            path.setAttribute('d', d);
+            path.setAttribute('transform', `translate(${offset.x} ${offset.y})`);
+            paths.push(path);
+        }
+        underlay.replaceChildren(...paths);
     }
 
     private createPieceSvg(piece: Piece, imageUrl: string | null): SVGSVGElement {
@@ -406,10 +458,7 @@ export class SvgDomRenderer implements Renderer {
         for (const edge of piece.edges) {
             if (edge.mateEdgeId !== -1) continue;
             const edgePath = document.createElementNS(svgNS, 'path');
-            edgePath.setAttribute(
-                'd',
-                `M ${edge.start.x} ${edge.start.y} ${edge.path}`,
-            );
+            edgePath.setAttribute('d', edgePathD(edge));
             edgePath.setAttribute('fill', 'none');
             edgePath.setAttribute('stroke', '#FF69B4');
             edgePath.setAttribute('stroke-width', '2');

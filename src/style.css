@@ -362,8 +362,34 @@ html, body {
 
 /* Piece/group edge — value driven by the Piece outline setting. */
 [data-group-id] {
-  filter: var(--piece-edge-idle-filter, drop-shadow(0 0 4px rgba(0, 0, 0, 0.35)));
+  filter: var(--piece-edge-idle-filter, none);
   will-change: transform;
+}
+
+/* Outline preset. The pieces drawn on top cover the inner half of the stroke. */
+[data-outline-underlay] {
+  display: none;
+  position: absolute;
+  left: 0;
+  top: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+[data-piece-outline="outline"] [data-outline-underlay] {
+  display: block;
+}
+
+[data-outline-underlay] path {
+  fill: none;
+  stroke: var(--piece-outline-color, #080808);
+  stroke-width: calc(3px * var(--outline-stroke-scale, 1));
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+[data-outline-constant-width] [data-outline-underlay] {
+  --outline-stroke-scale: var(--outline-zoom-comp, 1);
 }
 
 /* Set for one frame by the renderer after a zoom-out (#680). */
@@ -1107,6 +1133,10 @@ html, body {
 
 .outline-color-row[hidden] {
   display: none;
+}
+
+.outline-width-row {
+  margin-top: 8px;
 }
 
 .outline-color-button {

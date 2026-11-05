@@ -443,7 +443,11 @@ export interface InfoModalClosedData {
 
 export type SettingChangedData =
     | { setting: 'snap-distance' | 'piece-outline' | 'outline-color'; from: string; to: string }
-    | { setting: 'offset-drag' | 'enclose-to-select'; from: boolean; to: boolean };
+    | {
+        setting: 'offset-drag' | 'enclose-to-select' | 'outline-constant-width';
+        from: boolean;
+        to: boolean;
+    };
 
 /**
  * Data attached to `traced-chunk-preload-started`.

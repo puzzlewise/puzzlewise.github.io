@@ -176,6 +176,47 @@ describe('group layer promotion CSS', () => {
             /will-change:\s*auto/,
         );
     });
+
+    it('falls back to no idle filter before the edge setting is applied', () => {
+        expect(declarationsFor(styleCss, '[data-group-id]')).toMatch(
+            /filter:\s*var\(--piece-edge-idle-filter,\s*none\)/,
+        );
+    });
+});
+
+describe('outline underlay CSS', () => {
+    it('hides the underlay unless the Outline preset is active', () => {
+        expect(declarationsFor(styleCss, '[data-outline-underlay]')).toMatch(/display:\s*none/);
+        expect(
+            declarationsFor(styleCss, '[data-piece-outline="outline"] [data-outline-underlay]'),
+        ).toMatch(/display:\s*block/);
+    });
+
+    it('lets the underlay overflow its box and ignore pointers', () => {
+        const body = declarationsFor(styleCss, '[data-outline-underlay]');
+        expect(body).toMatch(/overflow:\s*visible/);
+        expect(body).toMatch(/pointer-events:\s*none/);
+    });
+
+    it('strokes the edges in the outline colour, unfilled', () => {
+        const body = declarationsFor(styleCss, '[data-outline-underlay] path');
+        expect(body).toMatch(/stroke:\s*var\(--piece-outline-color,/);
+        expect(body).toMatch(/fill:\s*none/);
+        expect(body).toMatch(/stroke-width:\s*calc\(3px \* var\(--outline-stroke-scale, 1\)\)/);
+    });
+
+    it('declares the stroke width in one place', () => {
+        expect(styleCss.match(/stroke-width:[^;]*3px/g)).toHaveLength(1);
+    });
+
+    it('scales the stroke by the zoom compensation only in constant-width mode', () => {
+        expect(declarationsFor(styleCss, '[data-outline-underlay]')).not.toMatch(
+            /--outline-zoom-comp/,
+        );
+        expect(
+            declarationsFor(styleCss, '[data-outline-constant-width] [data-outline-underlay]'),
+        ).toMatch(/--outline-stroke-scale:\s*var\(--outline-zoom-comp, 1\)/);
+    });
 });
 
 describe('blank-piece CSS', () => {

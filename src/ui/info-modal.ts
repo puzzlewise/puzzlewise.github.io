@@ -30,6 +30,11 @@ import {
     applyPieceOutlineColor,
 } from './piece-outline-color.js';
 import { createPieceOutlineColorPicker } from './piece-outline-color-picker.js';
+import {
+    loadOutlineConstantWidthPreference,
+    saveOutlineConstantWidthPreference,
+    applyOutlineConstantWidth,
+} from './outline-constant-width.js';
 import { attachShareSection } from './share-section.js';
 import { createSelectToolIcon, createMarqueeToolIcon } from './tool-icons.js';
 import { buildReproParams } from '../sharing/index.js';
@@ -285,7 +290,7 @@ function buildPieceOutlineSetting(): HTMLElement {
                 .querySelectorAll('.preset-option')
                 .forEach((btn) => btn.classList.remove('selected'));
             button.classList.add('selected');
-            updateColorRowVisibility(preset.id);
+            updateOutlineOnlyRows(preset.id);
         });
 
         container.appendChild(button);
@@ -317,50 +322,69 @@ function buildPieceOutlineSetting(): HTMLElement {
         },
     });
 
-    function updateColorRowVisibility(styleId: string): void {
+    const widthRow = buildOutlineConstantWidthToggle();
+
+    function updateOutlineOnlyRows(styleId: string): void {
         colorRow.hidden = styleId !== 'outline';
+        widthRow.hidden = styleId !== 'outline';
     }
-    updateColorRowVisibility(currentId);
+    updateOutlineOnlyRows(currentId);
 
     setting.appendChild(colorRow);
+    setting.appendChild(widthRow);
     return setting;
+}
+
+function buildOutlineConstantWidthToggle(): HTMLElement {
+    const row = buildCheckboxSetting({
+        testid: 'outline-constant-width-toggle',
+        label: 'Same width at any zoom',
+        description:
+            'Keep the outline equally thick on screen when you zoom, so it stays visible zoomed out.',
+        setting: 'outline-constant-width',
+        load: loadOutlineConstantWidthPreference,
+        save: (on) => {
+            saveOutlineConstantWidthPreference(on);
+            applyOutlineConstantWidth(on);
+        },
+    });
+    row.className = 'outline-width-row';
+    row.dataset.testid = 'outline-constant-width-row';
+    return row;
 }
 
 function buildOffsetDragSetting(): HTMLElement {
-    const setting = document.createElement('div');
-    setting.className = 'info-setting';
-
-    const toggleLabel = document.createElement('label');
-    toggleLabel.className = 'info-setting-toggle';
-
-    const checkbox = document.createElement('input');
-    checkbox.type = 'checkbox';
-    checkbox.className = 'form-checkbox';
-    checkbox.dataset.testid = 'offset-drag-toggle';
-    checkbox.checked = loadOffsetDragPreference();
-    checkbox.addEventListener('change', () => {
-        trackSettingChange({ setting: 'offset-drag', from: loadOffsetDragPreference(), to: checkbox.checked });
-        saveOffsetDragPreference(checkbox.checked);
+    return buildCheckboxSetting({
+        testid: 'offset-drag-toggle',
+        label: 'Offset drag',
+        description: "Shift the dragged piece or group upward, so your finger doesn't block the view.",
+        setting: 'offset-drag',
+        load: loadOffsetDragPreference,
+        save: saveOffsetDragPreference,
     });
-
-    const text = document.createElement('span');
-    text.className = 'info-setting-label';
-    text.textContent = 'Offset drag';
-
-    toggleLabel.appendChild(checkbox);
-    toggleLabel.appendChild(text);
-    setting.appendChild(toggleLabel);
-
-    const desc = document.createElement('p');
-    desc.className = 'info-setting-description';
-    desc.textContent =
-        "Shift the dragged piece or group upward, so your finger doesn't block the view.";
-    setting.appendChild(desc);
-
-    return setting;
 }
 
 function buildMarqueeContainSetting(): HTMLElement {
+    return buildCheckboxSetting({
+        testid: 'marquee-contain-toggle',
+        label: 'Enclose to select',
+        description:
+            'When dragging a selection box, select only pieces fully inside the ' +
+            'box instead of every piece the box touches.',
+        setting: 'enclose-to-select',
+        load: loadMarqueeContainPreference,
+        save: saveMarqueeContainPreference,
+    });
+}
+
+function buildCheckboxSetting(opts: {
+    testid: string;
+    label: string;
+    description: string;
+    setting: Extract<SettingChangedData, { to: boolean }>['setting'];
+    load: () => boolean;
+    save: (value: boolean) => void;
+}): HTMLElement {
     const setting = document.createElement('div');
     setting.className = 'info-setting';
 
@@ -370,20 +394,16 @@ function buildMarqueeContainSetting(): HTMLElement {
     const checkbox = document.createElement('input');
     checkbox.type = 'checkbox';
     checkbox.className = 'form-checkbox';
-    checkbox.dataset.testid = 'marquee-contain-toggle';
-    checkbox.checked = loadMarqueeContainPreference();
+    checkbox.dataset.testid = opts.testid;
+    checkbox.checked = opts.load();
     checkbox.addEventListener('change', () => {
-        trackSettingChange({
-            setting: 'enclose-to-select',
-            from: loadMarqueeContainPreference(),
-            to: checkbox.checked,
-        });
-        saveMarqueeContainPreference(checkbox.checked);
+        trackSettingChange({ setting: opts.setting, from: opts.load(), to: checkbox.checked });
+        opts.save(checkbox.checked);
     });
 
     const text = document.createElement('span');
     text.className = 'info-setting-label';
-    text.textContent = 'Enclose to select';
+    text.textContent = opts.label;
 
     toggleLabel.appendChild(checkbox);
     toggleLabel.appendChild(text);
@@ -391,9 +411,7 @@ function buildMarqueeContainSetting(): HTMLElement {
 
     const desc = document.createElement('p');
     desc.className = 'info-setting-description';
-    desc.textContent =
-        'When dragging a selection box, select only pieces fully inside the ' +
-        'box instead of every piece the box touches.';
+    desc.textContent = opts.description;
     setting.appendChild(desc);
 
     return setting;

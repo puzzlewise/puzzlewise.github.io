@@ -89,7 +89,11 @@ export {
 } from './piece-outline.js';
 export type { PieceOutlinePreset } from './piece-outline.js';
 
-export { installPieceOutlineFilter } from './piece-outline-filter.js';
+export {
+    loadOutlineConstantWidthPreference,
+    saveOutlineConstantWidthPreference,
+    applyOutlineConstantWidth,
+} from './outline-constant-width.js';
 
 export {
     PIECE_OUTLINE_COLOR_PRESETS,

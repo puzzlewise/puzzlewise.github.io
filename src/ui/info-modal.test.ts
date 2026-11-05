@@ -341,6 +341,8 @@ describe('createInfoModal — Piece outline setting', () => {
         localStorage.clear();
         document.documentElement.style.removeProperty('--piece-edge-filter');
         document.documentElement.style.removeProperty('--piece-outline-color');
+        delete document.documentElement.dataset.pieceOutline;
+        document.documentElement.removeAttribute('data-outline-constant-width');
     });
 
     afterEach(() => {
@@ -360,28 +362,29 @@ describe('createInfoModal — Piece outline setting', () => {
         expect(labels).toEqual(['None', 'Shadow', 'Outline']);
     });
 
-    it('marks Shadow as selected by default', () => {
-        createInfoModal({ container });
-
-        const shadowBtn = document.querySelector(
-            '[data-testid="piece-outline-shadow"]',
-        );
-        expect(shadowBtn?.classList.contains('selected')).toBe(true);
-    });
-
-    it('clicking Outline persists the choice and updates the CSS variable', () => {
+    it('marks Outline as selected by default', () => {
         createInfoModal({ container });
 
         const outlineBtn = document.querySelector(
             '[data-testid="piece-outline-outline"]',
-        ) as HTMLButtonElement;
-        outlineBtn.click();
+        );
+        expect(outlineBtn?.classList.contains('selected')).toBe(true);
+    });
 
-        expect(localStorage.getItem('puzzle-piece-outline')).toBe('outline');
+    it('clicking Shadow persists the choice and updates the CSS variable', () => {
+        createInfoModal({ container });
+
+        const shadowBtn = document.querySelector(
+            '[data-testid="piece-outline-shadow"]',
+        ) as HTMLButtonElement;
+        shadowBtn.click();
+
+        expect(localStorage.getItem('puzzle-piece-outline')).toBe('shadow');
         expect(
             document.documentElement.style.getPropertyValue('--piece-edge-filter'),
-        ).toBe('url(#piece-outline)');
-        expect(outlineBtn.classList.contains('selected')).toBe(true);
+        ).toMatch(/^drop-shadow\(/);
+        expect(document.documentElement.dataset.pieceOutline).toBe('shadow');
+        expect(shadowBtn.classList.contains('selected')).toBe(true);
     });
 
     it('clicking a second option deselects the first', () => {
@@ -401,7 +404,16 @@ describe('createInfoModal — Piece outline setting', () => {
         expect(outlineBtn.classList.contains('selected')).toBe(false);
     });
 
-    it('hides the outline-colour row by default (Shadow active)', () => {
+    it('shows the outline-colour row by default (Outline active)', () => {
+        createInfoModal({ container });
+        const row = document.querySelector(
+            '[data-testid="piece-outline-color-row"]',
+        ) as HTMLElement;
+        expect(row.hidden).toBe(false);
+    });
+
+    it('hides the outline-colour row when Shadow is the saved style', () => {
+        localStorage.setItem('puzzle-piece-outline', 'shadow');
         createInfoModal({ container });
         const row = document.querySelector(
             '[data-testid="piece-outline-color-row"]',
@@ -436,6 +448,42 @@ describe('createInfoModal — Piece outline setting', () => {
             '[data-testid="piece-outline-color-row"]',
         ) as HTMLElement;
         expect(row.hidden).toBe(false);
+    });
+
+    it('offers an unchecked same-width toggle, shown only with Outline', () => {
+        createInfoModal({ container });
+        const toggle = container.querySelector<HTMLInputElement>(
+            '[data-testid="outline-constant-width-toggle"]',
+        )!;
+        const row = toggle.closest<HTMLElement>('[data-testid="outline-constant-width-row"]')!;
+        expect(toggle.checked).toBe(false);
+        expect(row.hidden).toBe(false);
+
+        container.querySelector<HTMLButtonElement>('[data-testid="piece-outline-shadow"]')!.click();
+        expect(row.hidden).toBe(true);
+    });
+
+    it('checking the same-width toggle persists it and flags the root element', () => {
+        createInfoModal({ container });
+        const toggle = container.querySelector<HTMLInputElement>(
+            '[data-testid="outline-constant-width-toggle"]',
+        )!;
+
+        toggle.checked = true;
+        toggle.dispatchEvent(new Event('change'));
+
+        expect(localStorage.getItem('puzzle-outline-constant-width')).toBe('true');
+        expect(document.documentElement.hasAttribute('data-outline-constant-width')).toBe(true);
+    });
+
+    it('shows the saved same-width choice on open', () => {
+        localStorage.setItem('puzzle-outline-constant-width', 'true');
+        createInfoModal({ container });
+        expect(
+            container.querySelector<HTMLInputElement>(
+                '[data-testid="outline-constant-width-toggle"]',
+            )!.checked,
+        ).toBe(true);
     });
 
     it('selecting a swatch persists the colour and sets the CSS variable', () => {
@@ -828,7 +876,7 @@ describe('createInfoModal — analytics', () => {
 
     it.each([
         ['snap-distance', 'tolerance-strict', 'normal', 'strict'],
-        ['piece-outline', 'piece-outline-none', 'shadow', 'none'],
+        ['piece-outline', 'piece-outline-none', 'outline', 'none'],
     ])('sends setting-changed for %s', (setting, testid, from, to) => {
         createInfoModal({ container });
 
@@ -837,7 +885,7 @@ describe('createInfoModal — analytics', () => {
         expect(trackedData('setting-changed')).toEqual([{ setting, from, to }]);
     });
 
-    it.each(['tolerance-normal', 'piece-outline-shadow'])(
+    it.each(['tolerance-normal', 'piece-outline-outline'])(
         'sends no setting-changed when the selected preset %s is clicked again',
         (testid) => {
             createInfoModal({ container });
@@ -863,6 +911,7 @@ describe('createInfoModal — analytics', () => {
     it.each([
         ['offset-drag', 'offset-drag-toggle'],
         ['enclose-to-select', 'marquee-contain-toggle'],
+        ['outline-constant-width', 'outline-constant-width-toggle'],
     ])('sends setting-changed for %s', (setting, testid) => {
         createInfoModal({ container });
         const checkbox = container.querySelector<HTMLInputElement>(`[data-testid="${testid}"]`)!;

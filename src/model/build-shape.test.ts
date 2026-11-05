@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildShape, fmt } from './build-shape.js';
+import { buildShape, edgePathD, fmt } from './build-shape.js';
 import { GEOMETRY_PRECISION_DECIMALS } from './quantize-geometry.js';
 import type { Edge } from './types.js';
 
@@ -29,6 +29,14 @@ describe('fmt', () => {
             '(model/quantize-geometry.ts) is derived from it and has to move with ' +
             'it, or stored geometry becomes the binding constraint on rendered geometry',
         ).toHaveLength(GEOMETRY_PRECISION_DECIMALS);
+    });
+});
+
+describe('edgePathD', () => {
+    it('starts the edge path at its start point, formatted like the piece shape', () => {
+        const e = edge(0, { x: 1.23456, y: 7 }, { x: 10, y: 0 }, 'L 10 0');
+        expect(edgePathD(e)).toBe('M 1.23 7 L 10 0');
+        expect(buildShape([e])).toBe(`${edgePathD(e)} Z`);
     });
 });
 
