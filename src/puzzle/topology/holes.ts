@@ -3,7 +3,8 @@
  * frame + two-circle Venn); deeper nesting is unverified.
  */
 
-import type { TopologyGraph, Face, HalfEdge } from './dcel.js';
+import type { TopologyGraph, Face } from './dcel.js';
+import { walkLoop } from './half-edge-loop.js';
 import type { Component } from './components.js';
 import type { Point } from '../../model/types.js';
 
@@ -28,11 +29,9 @@ export function assignHoles(graph: TopologyGraph, components: Component[]): void
         // local-outer Face, the faceId→pieceId lookup misses and yields
         // matePieceId = -1, marking inner-boundary edges as unmated borders and
         // breaking interactive merge.
-        let cur: HalfEdge = localOuterFace.outerEdge;
-        do {
-            cur.face = containingFace;
-            cur = cur.next;
-        } while (cur !== localOuterFace.outerEdge);
+        for (const he of walkLoop(localOuterFace.outerEdge)) {
+            he.face = containingFace;
+        }
 
         const idx = graph.faces.indexOf(localOuterFace);
         if (idx >= 0) graph.faces.splice(idx, 1);
@@ -83,13 +82,7 @@ function findContainingFace(
 }
 
 function sampleFaceBoundary(face: Face): Point[] {
-    const points: Point[] = [];
-    let current: HalfEdge = face.outerEdge;
-    do {
-        points.push(...current.curve.sample(8));
-        current = current.next;
-    } while (current !== face.outerEdge);
-    return points;
+    return walkLoop(face.outerEdge).flatMap(he => he.curve.sample(8));
 }
 
 function pointInPolygon(p: Point, polygon: Point[]): boolean {
@@ -117,13 +110,8 @@ function polygonArea(polygon: Point[]): number {
  * collapses to zero for few-vertex curved faces (a 2-vertex circle).
  */
 function sampledSignedArea(face: Face): number {
-    const points: { x: number; y: number }[] = [];
-    let current: HalfEdge = face.outerEdge;
-    do {
-        // Shoelace is robust to the endpoints duplicated between edges.
-        points.push(...current.curve.sample(8));
-        current = current.next;
-    } while (current !== face.outerEdge);
+    // Shoelace is robust to the endpoints duplicated between edges.
+    const points = walkLoop(face.outerEdge).flatMap(he => he.curve.sample(8));
 
     let area = 0;
     for (let i = 0, j = points.length - 1; i < points.length; j = i++) {

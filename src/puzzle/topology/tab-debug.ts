@@ -13,6 +13,7 @@
  */
 
 import type { HalfEdge, TopologyGraph } from './dcel.js';
+import { faceBoundaryEdges } from './faces-to-pieces.js';
 import {
     setTracedTabChoiceRecorder,
     type TracedTabChoice,
@@ -126,43 +127,8 @@ function matePieceFor(
     return faceIdToPieceId.get(twinFace.id) ?? null;
 }
 
-/**
- * Mirrors `facesToPieceDefinitions` ordering: outer-loop edges first, then each
- * inner loop, so `edgeIndex` lines up with the piece's `edges[]` array.
- */
 function indexInFaceWalk(target: HalfEdge): number {
     const face = target.face;
     if (!face) return -1;
-
-    let offset = 0;
-    let i = walkUntil(face.outerEdge, target);
-    if (i >= 0) return offset + i;
-    offset += walkLength(face.outerEdge);
-    for (const innerStart of face.innerBoundaries) {
-        i = walkUntil(innerStart, target);
-        if (i >= 0) return offset + i;
-        offset += walkLength(innerStart);
-    }
-    return -1;
-}
-
-function walkUntil(start: HalfEdge, target: HalfEdge): number {
-    let i = 0;
-    let cur = start;
-    do {
-        if (cur === target) return i;
-        cur = cur.next;
-        i++;
-    } while (cur !== start);
-    return -1;
-}
-
-function walkLength(start: HalfEdge): number {
-    let n = 0;
-    let cur = start;
-    do {
-        cur = cur.next;
-        n++;
-    } while (cur !== start);
-    return n;
+    return faceBoundaryEdges(face).indexOf(target);
 }

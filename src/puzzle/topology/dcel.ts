@@ -8,6 +8,7 @@ import { Curve } from './curve.js';
 import type { CurveIntersection, BoundingBox } from './curve.js';
 import { findComponents } from './components.js';
 import { assignHoles } from './holes.js';
+import { walkLoop } from './half-edge-loop.js';
 
 export interface Vertex {
     id: number;
@@ -617,12 +618,10 @@ function discoverFaces(halfEdges: HalfEdge[]): Face[] {
             innerBoundaries: [],
         };
 
-        let current = he;
-        do {
+        for (const current of walkLoop(he)) {
             visited.add(current.id);
             current.face = face;
-            current = current.next;
-        } while (current !== he);
+        }
 
         faces.push(face);
     }
@@ -653,44 +652,24 @@ function identifyOuterFace(faces: Face[]): Face {
  */
 function computeSignedArea(face: Face): number {
     let area = 0;
-    let current = face.outerEdge;
-    do {
+    for (const current of walkLoop(face.outerEdge)) {
         const a = current.origin.position;
         const b = current.twin.origin.position;
         area += (a.x * b.y - b.x * a.y);
-        current = current.next;
-    } while (current !== face.outerEdge);
+    }
     return area / 2;
 }
 
 export function getFaceVertices(face: Face): Point[] {
-    const points: Point[] = [];
-    let current = face.outerEdge;
-    do {
-        points.push(current.origin.position);
-        current = current.next;
-    } while (current !== face.outerEdge);
-    return points;
+    return walkLoop(face.outerEdge).map(he => he.origin.position);
 }
 
 export function getFaceEdges(face: Face): HalfEdge[] {
-    const edges: HalfEdge[] = [];
-    let current = face.outerEdge;
-    do {
-        edges.push(current);
-        current = current.next;
-    } while (current !== face.outerEdge);
-    return edges;
+    return walkLoop(face.outerEdge);
 }
 
 export function countFaceEdges(face: Face): number {
-    let count = 0;
-    let current = face.outerEdge;
-    do {
-        count++;
-        current = current.next;
-    } while (current !== face.outerEdge);
-    return count;
+    return walkLoop(face.outerEdge).length;
 }
 
 function pointDist(a: Point, b: Point): number {

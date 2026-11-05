@@ -2,8 +2,9 @@
 
 import type { Point } from '../../model/types.js';
 import type { PieceDefinition, EdgeDefinition } from '../composable/types.js';
-import type { HalfEdge, TopologyGraph } from './dcel.js';
+import type { Face, HalfEdge, TopologyGraph } from './dcel.js';
 import { getFaceEdges } from './dcel.js';
+import { walkLoop } from './half-edge-loop.js';
 
 export function facesToPieceDefinitions(
     dcel: TopologyGraph,
@@ -18,8 +19,7 @@ export function facesToPieceDefinitions(
     let nextEdgeId = 0;
     const halfEdgeToEdgeId = new Map<number, number>();
     for (const face of innerFaces) {
-        const edges = getFaceEdges(face);
-        for (const he of edges) {
+        for (const he of faceBoundaryEdges(face)) {
             if (!halfEdgeToEdgeId.has(he.id)) {
                 halfEdgeToEdgeId.set(he.id, nextEdgeId++);
             }
@@ -27,38 +27,18 @@ export function facesToPieceDefinitions(
                 halfEdgeToEdgeId.set(he.twin.id, nextEdgeId++);
             }
         }
-        // Assign edge IDs for inner-boundary loops too, or the
-        // halfEdgeToEdgeDef call below throws on them.
-        for (const innerStart of face.innerBoundaries) {
-            const innerEdges = walkLoop(innerStart);
-            for (const he of innerEdges) {
-                if (!halfEdgeToEdgeId.has(he.id)) {
-                    halfEdgeToEdgeId.set(he.id, nextEdgeId++);
-                }
-                if (!halfEdgeToEdgeId.has(he.twin.id)) {
-                    halfEdgeToEdgeId.set(he.twin.id, nextEdgeId++);
-                }
-            }
-        }
     }
 
     return innerFaces.map(face => {
         const pieceId = faceIdToPieceId.get(face.id)!;
-        const outerHE = getFaceEdges(face);
-
         // Outer boundary only — inner edges are inside it, so they don't
         // extend the bbox.
-        const bbox = computeFaceBBox(outerHE);
+        const bbox = computeFaceBBox(getFaceEdges(face));
 
         // Loop boundaries are implicit in the flat edge list — the renderer
         // detects them where consecutive edges' end/start don't match. All
         // loops share the same piece-local frame (bbox).
-        const allHE: HalfEdge[] = [...outerHE];
-        for (const innerStart of face.innerBoundaries) {
-            allHE.push(...walkLoop(innerStart));
-        }
-
-        const edges: EdgeDefinition[] = allHE.map(he =>
+        const edges: EdgeDefinition[] = faceBoundaryEdges(face).map(he =>
             halfEdgeToEdgeDef(he, bbox, faceIdToPieceId, halfEdgeToEdgeId),
         );
 
@@ -70,14 +50,8 @@ export function facesToPieceDefinitions(
     });
 }
 
-function walkLoop(start: HalfEdge): HalfEdge[] {
-    const loop: HalfEdge[] = [];
-    let current = start;
-    do {
-        loop.push(current);
-        current = current.next;
-    } while (current !== start);
-    return loop;
+export function faceBoundaryEdges(face: Face): HalfEdge[] {
+    return [face.outerEdge, ...face.innerBoundaries].flatMap(start => walkLoop(start));
 }
 
 interface BBox {
