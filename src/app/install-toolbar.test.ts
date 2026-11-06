@@ -42,6 +42,7 @@ describe('installToolbar', () => {
             onNewGame: vi.fn(),
             installBackgroundColorControl: vi.fn(makeBackgroundColor),
             solve: vi.fn(),
+            onEffectsChanged: vi.fn(),
             ...overrides,
         };
     }
@@ -139,6 +140,16 @@ describe('installToolbar', () => {
 
         expect(fitView).toHaveBeenCalledWith(state);
         expect(save).toHaveBeenCalledWith(state);
+    });
+
+    it('wires onEffectsChanged into the info modal Effects setting', () => {
+        const onEffectsChanged = vi.fn();
+        installToolbar(deps({ onEffectsChanged }));
+
+        container.querySelector<HTMLButtonElement>('.info-button')!.click();
+        container.querySelector<HTMLButtonElement>('[data-testid="effects-simple"]')!.click();
+
+        expect(onEffectsChanged).toHaveBeenCalledExactlyOnceWith('simple');
     });
 
     it('wires solve into the info modal Solve button rather than a window lookup', () => {

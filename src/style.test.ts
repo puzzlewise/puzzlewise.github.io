@@ -177,6 +177,23 @@ describe('group layer promotion CSS', () => {
         expect(pulse, 'merge-pulse').not.toMatch(/--piece-edge-idle-filter/);
     });
 
+    it('strokes the outline from its wrapper so ring references can take their own stroke', () => {
+        const wrapper = declarationsFor(styleCss, '[data-edge-outline]');
+        expect(wrapper).toMatch(/stroke:\s*var\(--piece-outline-color, #080808\)/);
+        expect(wrapper).toMatch(/stroke-width:\s*calc\(3px \* var\(--outline-stroke-scale, 1\)\)/);
+        expect(declarationsFor(styleCss, '[data-outline-underlay] path')).not.toMatch(/stroke:|stroke-width:/);
+    });
+
+    it('hides rings and the outline wrapper unless something shows them', () => {
+        const ring = declarationsFor(styleCss, '[data-ring]');
+        expect(ring).toMatch(/display:\s*none/);
+        expect(ring).toMatch(/fill:\s*none/);
+        expect(declarationsFor(styleCss, '[data-edge-outline]')).toMatch(/display:\s*none/);
+        expect(declarationsFor(styleCss, '[data-piece-outline="outline"] [data-edge-outline]')).toMatch(
+            /display:\s*inline/,
+        );
+    });
+
     it('drops the group layers while the table is relayering (#680)', () => {
         expect(declarationsFor(styleCss, '[data-puzzle-table].relayer [data-group-id]')).toMatch(
             /will-change:\s*auto/,
@@ -204,11 +221,8 @@ describe('outline underlay CSS', () => {
         expect(body).toMatch(/pointer-events:\s*none/);
     });
 
-    it('strokes the edges in the outline colour, unfilled', () => {
-        const body = declarationsFor(styleCss, '[data-outline-underlay] path');
-        expect(body).toMatch(/stroke:\s*var\(--piece-outline-color,/);
-        expect(body).toMatch(/fill:\s*none/);
-        expect(body).toMatch(/stroke-width:\s*calc\(3px \* var\(--outline-stroke-scale, 1\)\)/);
+    it('leaves the edge paths unfilled', () => {
+        expect(declarationsFor(styleCss, '[data-outline-underlay] path')).toMatch(/fill:\s*none/);
     });
 
     it('declares the stroke width in one place', () => {

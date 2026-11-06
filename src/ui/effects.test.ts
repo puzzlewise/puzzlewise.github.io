@@ -15,6 +15,8 @@ import {
     saveEffectsPreference,
     resolveEffectsLevel,
     applyEffects,
+    currentEffectsLevel,
+    usesRings,
     type EffectsSignals,
 } from './effects.js';
 
@@ -152,5 +154,32 @@ describe('applyEffects', () => {
     it('resolves auto from the detected level', () => {
         applyEffects('auto');
         expect(document.documentElement.dataset.effects).toBe('full');
+    });
+});
+
+describe('usesRings', () => {
+    it('draws rings only for the simple level', () => {
+        expect(usesRings('simple')).toBe(true);
+        expect(usesRings('full')).toBe(false);
+    });
+});
+
+describe('currentEffectsLevel', () => {
+    beforeEach(() => {
+        localStorage.clear();
+        resetDetectedEffectsLevelForTests();
+    });
+
+    it('resolves the saved preference against the detected level', () => {
+        expect(currentEffectsLevel()).toBe('full');
+        saveEffectsPreference('simple');
+        expect(currentEffectsLevel()).toBe('simple');
+    });
+});
+
+describe('applyEffects return value', () => {
+    it('returns the level it applied', () => {
+        expect(applyEffects('simple')).toBe('simple');
+        expect(applyEffects('full')).toBe('full');
     });
 });

@@ -26,6 +26,7 @@ export interface FakeRenderer extends Renderer {
     setGroupDragging: Mock<Renderer['setGroupDragging']>;
     flashMergePulse: Mock<Renderer['flashMergePulse']>;
     setGroupSelected: Mock<Renderer['setGroupSelected']>;
+    setRingsEnabled: Mock<Renderer['setRingsEnabled']>;
     pieceIdFromTarget: Mock<Renderer['pieceIdFromTarget']>;
     pieceIdAtPoint: Mock<Renderer['pieceIdAtPoint']>;
     photoSettled: Mock<Renderer['photoSettled']>;
@@ -43,6 +44,7 @@ export function createFakeRenderer(): FakeRenderer {
         setGroupDragging: vi.fn(),
         flashMergePulse: vi.fn(),
         setGroupSelected: vi.fn(),
+        setRingsEnabled: vi.fn(),
         pieceIdFromTarget: vi.fn<Renderer['pieceIdFromTarget']>(() => null),
         pieceIdAtPoint: vi.fn<Renderer['pieceIdAtPoint']>(() => null),
         photoSettled: vi.fn(() => new Promise<'loaded' | 'failed'>(() => {})),

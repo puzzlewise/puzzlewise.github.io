@@ -41,6 +41,8 @@ export interface Renderer {
 
     setGroupSelected(groupId: number, selected: boolean): void;
 
+    setRingsEnabled(enabled: boolean): void;
+
     /**
      * Lets PointerRouter classify pointer events without per-piece
      * listeners.

@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { SvgDomRenderer, RELAYER_IDLE_MS } from './svg-dom-renderer.js';
+import { SvgDomRenderer, RELAYER_IDLE_MS, RING_NAMES } from './svg-dom-renderer.js';
 import { VIEWPORT_TRANSITION_MS } from './types.js';
 import type { GameState, PieceGroup } from '../model/types.js';
 import { makeGameState, makeRectPiece } from '../test-helpers/fixtures.js';
@@ -825,6 +825,73 @@ describe('SvgDomRenderer', () => {
             }
             return state;
         }
+
+        it('adds a ring for every ring name, before the outline, each referencing the group edges', () => {
+            renderer.init(container);
+            renderer.setRingsEnabled(true);
+            renderer.renderState(make2x2State());
+
+            const underlay = underlayOf(0);
+            const children = Array.from(underlay.children);
+            const rings = children.slice(0, RING_NAMES.length);
+            expect(rings.map((el) => el.tagName.toLowerCase())).toEqual(RING_NAMES.map(() => 'use'));
+            expect(rings.map((el) => el.getAttribute('data-ring'))).toEqual([...RING_NAMES]);
+            expect(rings.map((el) => el.getAttribute('href'))).toEqual(RING_NAMES.map(() => '#group-edges-0'));
+
+            const outline = children[children.length - 1];
+            expect(children).toHaveLength(RING_NAMES.length + 1);
+            expect(outline.hasAttribute('data-edge-outline')).toBe(true);
+            expect(outline.contains(underlay.querySelector('#group-edges-0'))).toBe(true);
+        });
+
+        it('keeps ring references valid after a merge', () => {
+            renderer.init(container);
+            renderer.setRingsEnabled(true);
+            renderer.renderState(makeMatedPairState(false));
+            renderer.renderState(makeMatedPairState(true));
+
+            const underlay = underlayOf(0);
+            const rings = Array.from(underlay.querySelectorAll('use[data-ring]'));
+            expect(rings).toHaveLength(RING_NAMES.length);
+            for (const ring of rings) {
+                const target = underlay.querySelector(ring.getAttribute('href')!);
+                expect(target, ring.getAttribute('data-ring')!).not.toBeNull();
+            }
+            expect(drawnEdgeCounts(0)).toEqual([3, 3]);
+        });
+
+        it('leaves rings unreferenced until rings are enabled, so Full builds no clones', () => {
+            renderer.init(container);
+            renderer.renderState(make2x2State());
+
+            const rings = Array.from(underlayOf(0).querySelectorAll('use[data-ring]'));
+            expect(rings).toHaveLength(RING_NAMES.length);
+            expect(rings.filter((r) => r.hasAttribute('href'))).toEqual([]);
+        });
+
+        it('references or releases the edges on existing groups when rings are toggled', () => {
+            renderer.init(container);
+            renderer.renderState(make2x2State());
+            const hrefs = () => Array.from(underlayOf(0).querySelectorAll('use[data-ring]'))
+                .map((r) => r.getAttribute('href'));
+
+            renderer.setRingsEnabled(true);
+            expect(hrefs()).toEqual(RING_NAMES.map(() => '#group-edges-0'));
+
+            renderer.setRingsEnabled(false);
+            expect(hrefs()).toEqual(RING_NAMES.map(() => null));
+        });
+
+        it('ignores the document-level effects attribute', async () => {
+            renderer.init(container);
+            renderer.renderState(make2x2State());
+
+            document.documentElement.dataset.effects = 'simple';
+            await Promise.resolve();
+            delete document.documentElement.dataset.effects;
+
+            expect(underlayOf(0).querySelectorAll('use[data-ring][href]')).toHaveLength(0);
+        });
 
         it('draws every edge of a lone piece, under the piece', () => {
             renderer.init(container);
