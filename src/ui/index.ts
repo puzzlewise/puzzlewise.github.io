@@ -90,6 +90,16 @@ export {
 export type { PieceOutlinePreset } from './piece-outline.js';
 
 export {
+    EFFECTS_PRESETS,
+    describeAuto,
+    getDetectedEffectsLevel,
+    loadEffectsPreference,
+    saveEffectsPreference,
+    applyEffects,
+} from './effects.js';
+export type { EffectsLevel, EffectsPreset } from './effects.js';
+
+export {
     loadOutlineConstantWidthPreference,
     saveOutlineConstantWidthPreference,
     applyOutlineConstantWidth,
