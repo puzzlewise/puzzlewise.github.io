@@ -23,6 +23,7 @@ import {
 import type { SelectionManager } from '../interaction/selection-manager.js';
 import type { BackgroundColorControl } from './install-background-color.js';
 import type { GameSession } from './game-session.js';
+import type { EffectsLevel } from '../ui/index.js';
 
 export interface InstallToolbarDeps {
     container: HTMLElement;
@@ -51,6 +52,7 @@ export interface InstallToolbarDeps {
     installBackgroundColorControl: () => BackgroundColorControl;
     /** Solve the puzzle — the same reference `installDevHooks` assigns to `window.__solvePuzzle` (see the module doc). */
     solve: () => void;
+    onEffectsChanged: (level: EffectsLevel) => void;
 }
 
 export function installToolbar(deps: InstallToolbarDeps): BackgroundColorControl {
@@ -63,6 +65,7 @@ export function installToolbar(deps: InstallToolbarDeps): BackgroundColorControl
         onNewGame,
         installBackgroundColorControl,
         solve,
+        onEffectsChanged,
     } = deps;
 
     createNewGameButton({
@@ -107,6 +110,7 @@ export function installToolbar(deps: InstallToolbarDeps): BackgroundColorControl
                 getState: () => session.current(),
                 state: session.current(),
                 onSolve: solve,
+                onEffectsChanged,
             });
         },
     });

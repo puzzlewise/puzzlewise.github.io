@@ -139,6 +139,7 @@ import { STORAGE_KEY, GEOMETRY_SEED_KEY } from '../persistence/storage.js';
 import { loadGameContext, loadGameStartedAt, saveGameContext } from '../analytics/game-context.js';
 import type { LoadSharedPuzzleDeps } from './load-shared-puzzle.js';
 import { bootstrap } from './bootstrap.js';
+import { SvgDomRenderer } from '../renderer/index.js';
 
 const HOOK_NAMES = [
     '__solvePuzzle',
@@ -462,6 +463,28 @@ describe('bootstrap', () => {
         const calls = vi.mocked(track).mock.calls as unknown as Array<[string, { outcome?: string; trigger?: string }]>;
         expect(calls.filter(([name]) => name === 'puzzle-image-loaded').map(([, data]) => data))
             .toEqual([expect.objectContaining({ outcome: 'abandoned', trigger: 'resume' })]);
+    });
+
+    it('enables the renderer rings at boot when the effects level is Simple', () => {
+        localStorage.setItem('puzzle-effects', 'simple');
+        const setRingsEnabled = vi.spyOn(SvgDomRenderer.prototype, 'setRingsEnabled');
+        onTestFinished(() => setRingsEnabled.mockRestore());
+
+        bootstrap(root);
+
+        expect(setRingsEnabled).toHaveBeenLastCalledWith(true);
+    });
+
+    it('routes an Effects change from the info modal to the renderer', () => {
+        const setRingsEnabled = vi.spyOn(SvgDomRenderer.prototype, 'setRingsEnabled');
+        onTestFinished(() => setRingsEnabled.mockRestore());
+        bootstrap(root);
+        expect(setRingsEnabled).toHaveBeenLastCalledWith(false);
+
+        root.querySelector<HTMLButtonElement>('.info-button')!.click();
+        root.querySelector<HTMLButtonElement>('[data-testid="effects-simple"]')!.click();
+
+        expect(setRingsEnabled).toHaveBeenLastCalledWith(true);
     });
 
     it('keeps the background-color control between deselect and Info', () => {

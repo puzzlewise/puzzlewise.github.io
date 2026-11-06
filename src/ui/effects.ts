@@ -84,6 +84,21 @@ export function resolveEffectsLevel(id: string, detectedLevel: EffectsLevel): Ef
     return detectedLevel;
 }
 
-export function applyEffects(id: string): void {
-    document.documentElement.dataset.effects = resolveEffectsLevel(id, getDetectedEffectsLevel());
+export function currentEffectsLevel(): EffectsLevel {
+    return resolveEffectsLevel(loadEffectsPreference(), getDetectedEffectsLevel());
+}
+
+export function usesRings(level: EffectsLevel): boolean {
+    switch (level) {
+        case 'simple':
+            return true;
+        case 'full':
+            return false;
+    }
+}
+
+export function applyEffects(id: string): EffectsLevel {
+    const level = resolveEffectsLevel(id, getDetectedEffectsLevel());
+    document.documentElement.dataset.effects = level;
+    return level;
 }

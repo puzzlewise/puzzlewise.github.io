@@ -37,6 +37,7 @@ import {
     loadEffectsPreference,
     saveEffectsPreference,
     applyEffects,
+    type EffectsLevel,
 } from './effects.js';
 import {
     loadOutlineConstantWidthPreference,
@@ -58,6 +59,7 @@ export interface InfoModalOptions {
     container: HTMLElement;
     onDismiss?: () => void;
     onToleranceChanged?: (id: string) => void;
+    onEffectsChanged?: (level: EffectsLevel) => void;
     onSolve?: () => void;
     /** Used by the Debug panel's repro block; when absent the block is omitted. */
     getState?: () => GameState | null | undefined;
@@ -177,6 +179,7 @@ function buildHowToPlaySection(): HTMLElement {
 
 function buildSettingsSection(args: {
     onToleranceChanged?: (id: string) => void;
+    onEffectsChanged?: (level: EffectsLevel) => void;
 }): HTMLElement {
     const section = document.createElement('section');
     section.className = 'info-section';
@@ -187,7 +190,7 @@ function buildSettingsSection(args: {
 
     section.appendChild(buildToleranceSetting(args.onToleranceChanged));
     section.appendChild(buildPieceOutlineSetting());
-    section.appendChild(buildEffectsSetting());
+    section.appendChild(buildEffectsSetting(args.onEffectsChanged));
     section.appendChild(buildOffsetDragSetting());
     section.appendChild(buildMarqueeContainSetting());
 
@@ -344,7 +347,7 @@ function buildPieceOutlineSetting(): HTMLElement {
     return setting;
 }
 
-function buildEffectsSetting(): HTMLElement {
+function buildEffectsSetting(onEffectsChanged?: (level: EffectsLevel) => void): HTMLElement {
     const setting = document.createElement('div');
     setting.className = 'info-setting';
 
@@ -394,7 +397,8 @@ function buildEffectsSetting(): HTMLElement {
                 detected: getDetectedEffectsLevel(),
             });
             saveEffectsPreference(preset.id);
-            applyEffects(preset.id);
+            const level = applyEffects(preset.id);
+            onEffectsChanged?.(level);
             container
                 .querySelectorAll('.preset-option')
                 .forEach((btn) => btn.classList.remove('selected'));
@@ -832,7 +836,7 @@ const CLOSED_BY_OVERLAY_CAUSE: Record<OverlayDismissCause, InfoModalClosedData['
 };
 
 export function createInfoModal(options: InfoModalOptions): void {
-    const { container, onDismiss, onToleranceChanged, getState, onSolve } = options;
+    const { container, onDismiss, onToleranceChanged, onEffectsChanged, getState, onSolve } = options;
     const openedAt = Date.now();
     let maxSeen = 0;
     let scrolled = false;
@@ -893,7 +897,7 @@ export function createInfoModal(options: InfoModalOptions): void {
     }
 
     content.appendChild(buildHowToPlaySection());
-    content.appendChild(buildSettingsSection({ onToleranceChanged }));
+    content.appendChild(buildSettingsSection({ onToleranceChanged, onEffectsChanged }));
     content.appendChild(buildCreditsSection());
     content.appendChild(buildAboutSection());
     const debugSection = buildDebugSection({

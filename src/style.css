@@ -380,10 +380,27 @@ html, body {
   display: block;
 }
 
-[data-outline-underlay] path {
-  fill: none;
+/* Stroked on the wrapper, not the paths: rules matching the paths also apply
+   inside each ring's <use>, which then couldn't set its own stroke. */
+[data-edge-outline] {
+  display: none;
   stroke: var(--piece-outline-color, #080808);
   stroke-width: calc(3px * var(--outline-stroke-scale, 1));
+}
+
+[data-piece-outline="outline"] [data-edge-outline] {
+  display: inline;
+}
+
+[data-outline-underlay] path {
+  fill: none;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+[data-ring] {
+  display: none;
+  fill: none;
   stroke-linejoin: round;
   stroke-linecap: round;
 }

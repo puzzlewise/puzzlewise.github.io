@@ -46,6 +46,25 @@ export function applyGroupTransform(
  */
 export const RELAYER_IDLE_MS = 200;
 
+/** Paint order, bottom to top: selection rings must cover lift rings. */
+export const RING_NAMES = [
+    'edge-1', 'edge-2', 'edge-3',
+    'lift-1', 'lift-2', 'lift-3',
+    'completion-shadow', 'completion-1', 'completion-2',
+    'glow-1', 'glow-2', 'glow-3',
+] as const;
+
+/**
+ * Full never shows the rings, and a `<use>` with an `href` builds its clone
+ * tree even while hidden, so rings reference the edges only under Simple.
+ */
+function syncRingReferences(groupEl: HTMLElement, groupId: number, enabled: boolean): void {
+    for (const ring of groupEl.querySelectorAll(':scope > svg[data-outline-underlay] > use[data-ring]')) {
+        if (enabled) ring.setAttribute('href', `#group-edges-${groupId}`);
+        else ring.removeAttribute('href');
+    }
+}
+
 interface PhotoSettle {
     promise: Promise<'loaded' | 'failed'>;
     watch(image: SVGImageElement): void;
@@ -83,6 +102,7 @@ export class SvgDomRenderer implements Renderer {
     private relayerTimer: ReturnType<typeof setTimeout> | null = null;
     private transitionActive = false;
     private settleAfterTransition = false;
+    private ringsEnabled = false;
 
     init(container: HTMLElement): void {
         const table = document.createElement('div');
@@ -269,6 +289,13 @@ export class SvgDomRenderer implements Renderer {
         return this.photoSettle.promise;
     }
 
+    setRingsEnabled(enabled: boolean): void {
+        this.ringsEnabled = enabled;
+        for (const [groupId, groupEl] of this.groupElements) {
+            syncRingReferences(groupEl, groupId, enabled);
+        }
+    }
+
     destroy(): void {
         if (this.relayerTimer !== null) clearTimeout(this.relayerTimer);
         this.relayerTimer = null;
@@ -352,14 +379,28 @@ export class SvgDomRenderer implements Renderer {
         pieceLookup: Map<number, Piece>,
     ): void {
         const svgNS = 'http://www.w3.org/2000/svg';
+        const edgesId = `group-edges-${group.id}`;
         let underlay = groupEl.querySelector<SVGSVGElement>(':scope > svg[data-outline-underlay]');
+        const created = underlay === null;
         if (!underlay) {
             underlay = document.createElementNS(svgNS, 'svg');
             underlay.setAttribute('data-outline-underlay', '');
             underlay.setAttribute('width', '1');
             underlay.setAttribute('height', '1');
+            for (const name of RING_NAMES) {
+                const ring = document.createElementNS(svgNS, 'use');
+                ring.setAttribute('data-ring', name);
+                underlay.appendChild(ring);
+            }
+            const outline = document.createElementNS(svgNS, 'g');
+            outline.setAttribute('data-edge-outline', '');
+            const edges = document.createElementNS(svgNS, 'g');
+            edges.id = edgesId;
+            outline.appendChild(edges);
+            underlay.appendChild(outline);
         }
         if (groupEl.firstChild !== underlay) groupEl.insertBefore(underlay, groupEl.firstChild);
+        if (created) syncRingReferences(groupEl, group.id, this.ringsEnabled);
 
         const key = [...group.pieces]
             .map(([pieceId, offset]) => `${pieceId}:${offset.x},${offset.y}`)
@@ -382,7 +423,7 @@ export class SvgDomRenderer implements Renderer {
             path.setAttribute('transform', `translate(${offset.x} ${offset.y})`);
             paths.push(path);
         }
-        underlay.replaceChildren(...paths);
+        underlay.querySelector(`#${edgesId}`)!.replaceChildren(...paths);
     }
 
     private createPieceSvg(piece: Piece, imageUrl: string | null): SVGSVGElement {

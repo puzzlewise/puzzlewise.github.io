@@ -390,6 +390,16 @@ describe('createInfoModal — Effects setting', () => {
         ).toBe(false);
     });
 
+    it('reports the applied level through onEffectsChanged', () => {
+        const onEffectsChanged = vi.fn();
+        createInfoModal({ container, onEffectsChanged });
+
+        container.querySelector<HTMLButtonElement>('[data-testid="effects-simple"]')!.click();
+        container.querySelector<HTMLButtonElement>('[data-testid="effects-auto"]')!.click();
+
+        expect(onEffectsChanged.mock.calls).toEqual([['simple'], [getDetectedEffectsLevel()]]);
+    });
+
     it('sits right after the Piece outline setting', () => {
         createInfoModal({ container });
 
