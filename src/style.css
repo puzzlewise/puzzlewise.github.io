@@ -462,8 +462,8 @@ html, body {
 }
 
 @keyframes merge-pulse {
-  0%   { filter: var(--piece-edge-filter, opacity(1)) brightness(1.2); }
-  100% { filter: var(--piece-edge-filter, opacity(1)) brightness(1); }
+  0%   { filter: brightness(1.2) var(--piece-edge-filter, opacity(1)); }
+  100% { filter: brightness(1) var(--piece-edge-filter, opacity(1)); }
 }
 
 .marquee-box {

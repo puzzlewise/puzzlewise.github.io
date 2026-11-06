@@ -169,6 +169,11 @@ describe('group layer promotion CSS', () => {
         }
         const pulse = /@keyframes merge-pulse\s*\{([\s\S]*?)\n\}/.exec(styleCss)?.[1] ?? '';
         expect(pulse.match(/var\(--piece-edge-filter,/g), 'merge-pulse frames').toHaveLength(2);
+        // WebKit composites a filter list only when its drop-shadow comes last (#704).
+        expect(
+            pulse.match(/var\(--piece-edge-filter, opacity\(1\)\);/g),
+            'edge filter last in each merge-pulse frame',
+        ).toHaveLength(2);
         expect(pulse, 'merge-pulse').not.toMatch(/--piece-edge-idle-filter/);
     });
 
