@@ -31,6 +31,14 @@ import {
 } from './piece-outline-color.js';
 import { createPieceOutlineColorPicker } from './piece-outline-color-picker.js';
 import {
+    EFFECTS_PRESETS,
+    describeAuto,
+    getDetectedEffectsLevel,
+    loadEffectsPreference,
+    saveEffectsPreference,
+    applyEffects,
+} from './effects.js';
+import {
     loadOutlineConstantWidthPreference,
     saveOutlineConstantWidthPreference,
     applyOutlineConstantWidth,
@@ -179,6 +187,7 @@ function buildSettingsSection(args: {
 
     section.appendChild(buildToleranceSetting(args.onToleranceChanged));
     section.appendChild(buildPieceOutlineSetting());
+    section.appendChild(buildEffectsSetting());
     section.appendChild(buildOffsetDragSetting());
     section.appendChild(buildMarqueeContainSetting());
 
@@ -332,6 +341,70 @@ function buildPieceOutlineSetting(): HTMLElement {
 
     setting.appendChild(colorRow);
     setting.appendChild(widthRow);
+    return setting;
+}
+
+function buildEffectsSetting(): HTMLElement {
+    const setting = document.createElement('div');
+    setting.className = 'info-setting';
+
+    const label = document.createElement('label');
+    label.className = 'info-setting-label';
+    label.textContent = 'Effects';
+    setting.appendChild(label);
+
+    const desc = document.createElement('p');
+    desc.className = 'info-setting-description';
+    desc.textContent =
+        'Simple draws shadows and the selection glow as plain rings, ' +
+        'which is much lighter work for older devices.';
+    setting.appendChild(desc);
+
+    const container = document.createElement('div');
+    container.className = 'preset-options';
+    container.dataset.testid = 'effects-options';
+
+    const currentId = loadEffectsPreference();
+    for (const preset of EFFECTS_PRESETS) {
+        const button = document.createElement('button');
+        button.className = 'preset-option';
+        button.type = 'button';
+        button.dataset.testid = `effects-${preset.id}`;
+        if (preset.id === currentId) {
+            button.classList.add('selected');
+        }
+
+        const labelSpan = document.createElement('span');
+        labelSpan.className = 'preset-option-label';
+        labelSpan.textContent = preset.label;
+        button.appendChild(labelSpan);
+
+        const descSpan = document.createElement('span');
+        descSpan.className = 'preset-option-desc';
+        descSpan.textContent = preset.id === 'auto'
+            ? describeAuto(getDetectedEffectsLevel())
+            : preset.description;
+        button.appendChild(descSpan);
+
+        button.addEventListener('click', () => {
+            trackSettingChange({
+                setting: 'effects',
+                from: loadEffectsPreference(),
+                to: preset.id,
+                detected: getDetectedEffectsLevel(),
+            });
+            saveEffectsPreference(preset.id);
+            applyEffects(preset.id);
+            container
+                .querySelectorAll('.preset-option')
+                .forEach((btn) => btn.classList.remove('selected'));
+            button.classList.add('selected');
+        });
+
+        container.appendChild(button);
+    }
+
+    setting.appendChild(container);
     return setting;
 }
 
