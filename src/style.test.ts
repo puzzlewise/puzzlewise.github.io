@@ -8,6 +8,8 @@
 import { describe, it, expect } from 'vitest';
 import styleCss from './style.css?raw';
 import { DEFAULT_COLOR_ID } from './ui/background-color.js';
+import { RING_NAMES } from './renderer/svg-dom-renderer.js';
+import { PIECE_OUTLINE_PRESETS } from './ui/piece-outline.js';
 
 function matchingBrace(css: string, open: number): number {
     let depth = 0;
@@ -289,5 +291,68 @@ describe('overlay stacking', () => {
         const completion = pxValue('.completion-overlay', 'z-index');
         expect(completion).toBeGreaterThanOrEqual(pxValue('.info-modal-overlay', 'z-index'));
         expect(completion).toBeGreaterThanOrEqual(pxValue('.size-picker-overlay', 'z-index'));
+    });
+});
+
+describe('simple effects', () => {
+    it('shows the underlay under Simple', () => {
+        expect(declarationsFor(styleCss, '[data-effects="simple"] [data-outline-underlay]')).toMatch(
+            /display:\s*block/,
+        );
+    });
+
+    it('neutralizes the edge filter variables on groups under Simple', () => {
+        const body = declarationsFor(styleCss, '[data-effects="simple"] [data-group-id]');
+        expect(body).toMatch(/--piece-edge-filter:\s*opacity\(1\)/);
+        expect(body).toMatch(/--piece-edge-idle-filter:\s*none/);
+    });
+
+    it.each([
+        '[data-effects="simple"] [data-group-id].selected',
+        '[data-effects="simple"] [data-group-id].dragging',
+    ])('drops the state filter for %s', (selector) => {
+        expect(declarationsFor(styleCss, selector)).toMatch(/filter:\s*none/);
+    });
+
+    it('drops the completion glow filter and its fade under Simple', () => {
+        const body = declarationsFor(styleCss, '[data-effects="simple"] .completion-glow [data-group-id]');
+        expect(body).toMatch(/filter:\s*none/);
+        expect(body).toMatch(/transition:\s*none/);
+    });
+
+    it.each([
+        '[data-effects="simple"][data-piece-outline="shadow"] [data-ring^="edge-"]',
+        '[data-effects="simple"] [data-group-id].dragging [data-ring^="lift-"]',
+        '[data-effects="simple"] .completion-glow [data-ring^="completion-"]',
+        '[data-effects="simple"] [data-group-id].selected [data-ring^="glow-"]',
+    ])('shows rings for %s', (selector) => {
+        expect(declarationsFor(styleCss, selector)).toMatch(/display:\s*inline/);
+    });
+
+    it.each(RING_NAMES)('gives ring %s its own stroke width', (name) => {
+        expect(declarationsFor(styleCss, `[data-ring="${name}"]`)).toMatch(/stroke-width:/);
+    });
+
+    it.each(
+        PIECE_OUTLINE_PRESETS
+            .filter((p) => [p.filter, p.idleFilter].some((f) => f?.includes('drop-shadow')))
+            .map((p) => p.id),
+    )('draws Simple edge rings for the %s preset, whose Full edge is a drop-shadow', (id) => {
+        expect(
+            declarationsFor(styleCss, `[data-effects="simple"][data-piece-outline="${id}"] [data-ring^="edge-"]`),
+        ).toMatch(/display:\s*inline/);
+    });
+
+    it('colors the selection rings with --selection-glow', () => {
+        expect(declarationsFor(styleCss, '[data-ring^="glow-"]')).toMatch(/stroke:\s*var\(--selection-glow\)/);
+    });
+
+    it('declares no drop-shadow in any Simple rule', () => {
+        const css = styleCss.replace(/\/\*[\s\S]*?\*\//g, '');
+        const simpleBodies = [...css.matchAll(/([^{}]*)\{([^{}]*)\}/g)]
+            .filter(([, prelude]) => prelude.includes('[data-effects="simple"]'))
+            .map(([, , body]) => body);
+        expect(simpleBodies.length).toBeGreaterThan(0);
+        for (const body of simpleBodies) expect(body).not.toMatch(/drop-shadow/);
     });
 });
