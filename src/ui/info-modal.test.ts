@@ -10,6 +10,11 @@ import { SelectionManager } from '../interaction/selection-manager.js';
 import type { GameState } from '../model/types.js';
 import { makeGameState } from '../test-helpers/fixtures.js';
 import { DISTINCT_ID_KEY } from '../analytics/distinct-id.js';
+import {
+    describeAuto,
+    getDetectedEffectsLevel,
+    resetDetectedEffectsLevelForTests,
+} from './effects.js';
 
 function toolbarButtonIcon(
     create: (opts: {
@@ -329,6 +334,71 @@ describe('createInfoModal — How to Play section', () => {
         const context = text.slice(ninetyIdx, ninetyIdx + 60);
         expect(context).toContain('Fractal');
         expect(context).not.toContain('Classic');
+    });
+});
+
+describe('createInfoModal — Effects setting', () => {
+    let container: HTMLElement;
+
+    beforeEach(() => {
+        container = document.createElement('div');
+        document.body.appendChild(container);
+        localStorage.clear();
+        resetDetectedEffectsLevelForTests();
+        delete document.documentElement.dataset.effects;
+    });
+
+    afterEach(() => {
+        container.remove();
+    });
+
+    it('renders Auto, Full and Simple with Auto selected by default', () => {
+        createInfoModal({ container });
+
+        const buttons = Array.from(
+            container.querySelectorAll<HTMLButtonElement>('[data-testid="effects-options"] button'),
+        );
+        expect(buttons.map((b) => b.dataset.testid)).toEqual([
+            'effects-auto',
+            'effects-full',
+            'effects-simple',
+        ]);
+        expect(buttons[0].classList.contains('selected')).toBe(true);
+    });
+
+    it('shows what Auto resolved to on this device', () => {
+        createInfoModal({ container });
+
+        const desc = container.querySelector(
+            '[data-testid="effects-auto"] .preset-option-desc',
+        )!.textContent;
+        expect(desc).toBe(describeAuto(getDetectedEffectsLevel()));
+        expect(desc).toBe('Full on this device');
+    });
+
+    it('saves and applies a choice, and moves the selection', () => {
+        createInfoModal({ container });
+
+        const simple = container.querySelector<HTMLButtonElement>('[data-testid="effects-simple"]')!;
+        simple.click();
+
+        expect(localStorage.getItem('puzzle-effects')).toBe('simple');
+        expect(document.documentElement.dataset.effects).toBe('simple');
+        expect(simple.classList.contains('selected')).toBe(true);
+        expect(
+            container.querySelector('[data-testid="effects-auto"]')!.classList.contains('selected'),
+        ).toBe(false);
+    });
+
+    it('sits right after the Piece outline setting', () => {
+        createInfoModal({ container });
+
+        const outlineSetting = container
+            .querySelector('[data-testid="piece-outline-options"]')!
+            .closest('.info-setting')!;
+        expect(
+            outlineSetting.nextElementSibling!.querySelector('[data-testid="effects-options"]'),
+        ).not.toBeNull();
     });
 });
 
@@ -883,6 +953,16 @@ describe('createInfoModal — analytics', () => {
         container.querySelector<HTMLButtonElement>(`[data-testid="${testid}"]`)!.click();
 
         expect(trackedData('setting-changed')).toEqual([{ setting, from, to }]);
+    });
+
+    it('sends setting-changed for effects with what Auto detects on this device', () => {
+        createInfoModal({ container });
+
+        container.querySelector<HTMLButtonElement>('[data-testid="effects-simple"]')!.click();
+
+        expect(trackedData('setting-changed')).toEqual([
+            { setting: 'effects', from: 'auto', to: 'simple', detected: getDetectedEffectsLevel() },
+        ]);
     });
 
     it.each(['tolerance-normal', 'piece-outline-outline'])(

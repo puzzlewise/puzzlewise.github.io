@@ -13,6 +13,7 @@
 import type { Orientation } from '../model/types.js';
 import type { OfflineDownloadReason } from '../images/offline-stash.js';
 import type { MoveFailureReason } from '../move/move-protocol.js';
+import type { EffectsLevel } from '../ui/effects.js';
 import { resolveDistinctId } from './distinct-id.js';
 
 declare global {
@@ -441,8 +442,14 @@ export interface InfoModalClosedData {
     debugOpened: boolean;
 }
 
+/**
+ * `detected` (effects only) is the level Auto resolves to on this device,
+ * sent whatever `from` and `to` are, so `from: 'auto'` with `to` other than
+ * `detected` counts players overriding the detection.
+ */
 export type SettingChangedData =
     | { setting: 'snap-distance' | 'piece-outline' | 'outline-color'; from: string; to: string }
+    | { setting: 'effects'; from: string; to: string; detected: EffectsLevel }
     | {
         setting: 'offset-drag' | 'enclose-to-select' | 'outline-constant-width';
         from: boolean;
