@@ -280,6 +280,26 @@ describe('blank-piece CSS', () => {
     });
 });
 
+describe('seam fill CSS', () => {
+    it('lets the seam fill overflow its box and ignore pointers', () => {
+        const body = declarationsFor(styleCss, '[data-seam-fill]');
+        expect(body).toMatch(/overflow:\s*visible/);
+        expect(body).toMatch(/pointer-events:\s*none/);
+    });
+
+    it('paints a blank seam fill like a blank piece', () => {
+        expect(declarationsFor(styleCss, '[data-seam-fill] rect')).toMatch(
+            /fill:\s*var\(--piece-blank-fill\)/,
+        );
+    });
+
+    it('hides the seam fill in the debug piece view and while pieces are translucent', () => {
+        expect(declarationsFor(styleCss, '.show-debug-pieces [data-seam-fill]')).toMatch(/display:\s*none/);
+        expect(declarationsFor(styleCss, '.pieces-translucent [data-seam-fill]')).toMatch(/display:\s*none/);
+        expect(declarationsFor(styleCss, '[data-seam-fill]')).not.toMatch(/opacity/);
+    });
+});
+
 function pxValue(selector: string, property: string): number {
     const match = new RegExp(`\\s${property}:\\s*(\\d+)(?:px)?\\s*;`).exec(declarationsFor(styleCss, selector));
     expect(match, `${selector} ${property}`).not.toBeNull();

@@ -824,12 +824,205 @@ describe('SvgDomRenderer', () => {
         });
     });
 
+    describe('seam fill', () => {
+        function makeMergedState(imageUrl: string | null = 'test-puzzle.jpg'): GameState {
+            const state = make2x2State();
+            state.imageUrl = imageUrl;
+            state.pieces[0].edges[1].matePieceId = 1;
+            state.pieces[1].edges[3].matePieceId = 0;
+            state.groups = [makeGroup(0, [0, 1], 50, 50), ...state.groups.slice(2)];
+            return state;
+        }
+
+        function seamFillOf(groupId: number): SVGSVGElement | null {
+            return container.querySelector<SVGSVGElement>(
+                `[data-group-id="${groupId}"] > svg[data-seam-fill]`,
+            );
+        }
+
+        it('adds none to a lone piece', () => {
+            renderer.init(container);
+            renderer.renderState(make2x2State());
+
+            expect(seamFillOf(0)).toBeNull();
+        });
+
+        it('sits under the outline underlay, which sits under the pieces', () => {
+            renderer.init(container);
+            renderer.renderState(makeMergedState());
+
+            const seamFill = seamFillOf(0)!;
+            expect(seamFill.previousElementSibling).toBeNull();
+            const underlay = seamFill.nextElementSibling!;
+            expect(underlay.hasAttribute('data-outline-underlay')).toBe(true);
+            expect(underlay.nextElementSibling!.getAttribute('data-piece-id')).toBe('0');
+        });
+
+        it('keeps the layer order without moving anything on later renders', () => {
+            renderer.init(container);
+            renderer.renderState(makeMergedState());
+            const groupEl = container.querySelector('[data-group-id="0"]')!;
+            const before = Array.from(groupEl.children);
+            const observer = new MutationObserver(() => {});
+            observer.observe(groupEl, { childList: true });
+
+            renderer.renderState(makeMergedState());
+
+            expect(observer.takeRecords()).toEqual([]);
+            expect(Array.from(groupEl.children)).toEqual(before);
+            observer.disconnect();
+        });
+
+        function seamClipD(): string {
+            return seamFillOf(0)!.querySelector('clipPath#seam-clip-0 > path')!.getAttribute('d')!;
+        }
+
+        it('clips to the group outline', () => {
+            renderer.init(container);
+            renderer.renderState(makeMergedState());
+
+            expect(seamFillOf(0)!.querySelectorAll('clipPath > path')).toHaveLength(1);
+            expect(seamClipD()).toBe('M 0 0 L 100 0 L 200 0 L 200 100 L 100 100 L 0 100 L 0 0 Z');
+        });
+
+        it('falls back to every piece shape when the outline does not close', () => {
+            renderer.init(container);
+            const state = makeMergedState();
+            state.groups[0].pieces.set(1, { x: 130, y: 0 });
+            renderer.renderState(state);
+
+            expect(seamClipD()).toBe('M 0 0 L 100 0 L 100 100 L 0 100 Z M 130 0 L 230 0 L 230 100 L 130 100 Z');
+        });
+
+        it('skips a piece the state does not hold, like the rest of the group', () => {
+            renderer.init(container);
+            const state = makeMergedState();
+            state.groups[0].pieces.set(99, { x: 200, y: 0 });
+
+            expect(() => renderer.renderState(state)).not.toThrow();
+            expect(seamClipD()).toBe('M 0 0 L 100 0 L 100 100 L 0 100 Z M 100 0 L 200 0 L 200 100 L 100 100 Z');
+        });
+
+        it('still fails the render for errors other than unparseable path data', () => {
+            renderer.init(container);
+            const state = makeMergedState();
+            state.groups[0].pieces.set(1, { x: 130, y: 0 });
+            state.pieces[1].shape = null as unknown as string;
+
+            expect(() => renderer.renderState(state)).toThrow(TypeError);
+        });
+
+        it('renders a group none of whose pieces the state holds', () => {
+            renderer.init(container);
+            const state = makeMergedState();
+            state.groups[0] = makeGroup(0, [98, 99], 50, 50);
+
+            expect(() => renderer.renderState(state)).not.toThrow();
+            expect(seamClipD()).toBe('');
+        });
+
+        it('draws no fill, rather than failing the render, for path data it cannot parse', () => {
+            renderer.init(container);
+            const state = makeMergedState();
+            state.pieces[1].edges[0].path = 'L 200 0 ?';
+            state.pieces[1].shape = 'M 0 0 ? Z';
+
+            expect(() => renderer.renderState(state)).not.toThrow();
+            expect(seamClipD()).toBe('');
+        });
+
+        function anchoredOnPiece1(pieceIds: number[]): PieceGroup {
+            const solved = new Map([[0, { x: -100, y: 0 }], [1, { x: 0, y: 0 }], [2, { x: -100, y: 100 }]]);
+            return {
+                id: 0,
+                pieces: new Map(pieceIds.map((id) => [id, solved.get(id)!])),
+                position: { x: 50, y: 50 },
+                rotation: 0,
+            };
+        }
+
+        function photoXY(): [string | null, string | null] {
+            const image = seamFillOf(0)!.querySelector('image')!;
+            return [image.getAttribute('x'), image.getAttribute('y')];
+        }
+
+        it('draws the photo exactly where the pieces draw it', () => {
+            renderer.init(container);
+            const state = makeMergedState();
+            state.groups[0] = anchoredOnPiece1([1, 0]);
+            renderer.renderState(state);
+
+            const image = seamFillOf(0)!.querySelector('image')!;
+            const pieceImage = container.querySelector('[data-piece-id="1"] image')!;
+            expect(image.getAttribute('clip-path')).toBe('url(#seam-clip-0)');
+            expect(image.getAttributeNS('http://www.w3.org/1999/xlink', 'href')).toBe('test-puzzle.jpg');
+            expect(photoXY()).toEqual(['-100', '0']);
+            for (const attr of ['width', 'height', 'preserveAspectRatio']) {
+                expect(image.getAttribute(attr), attr).toBe(pieceImage.getAttribute(attr));
+            }
+        });
+
+        it('fills a blank puzzle with a rect over the group bounds', () => {
+            renderer.init(container);
+            renderer.renderState(makeMergedState(null));
+
+            const seamFill = seamFillOf(0)!;
+            expect(seamFill.querySelector('image')).toBeNull();
+            const rect = seamFill.querySelector('rect')!;
+            expect(rect.getAttribute('clip-path')).toBe('url(#seam-clip-0)');
+            expect(['x', 'y', 'width', 'height'].map((a) => rect.getAttribute(a))).toEqual(['0', '0', '200', '100']);
+        });
+
+        it('appears when groups merge and survives later renders', () => {
+            renderer.init(container);
+            renderer.renderState(make2x2State());
+            renderer.renderState(makeMergedState());
+            const seamFill = seamFillOf(0);
+            expect(seamFill).not.toBeNull();
+
+            renderer.renderState(makeMergedState());
+
+            expect(seamFillOf(0)).toBe(seamFill);
+            expect(container.querySelectorAll('[data-group-id="0"] svg[data-piece-id]')).toHaveLength(2);
+        });
+
+        it('updates the clip in place on a merge, so the photo is not reloaded', () => {
+            renderer.init(container);
+            const before = make2x2State();
+            before.groups = [anchoredOnPiece1([1, 0]), ...before.groups.slice(2)];
+            renderer.renderState(before);
+            const image = seamFillOf(0)!.querySelector('image');
+            const path = seamFillOf(0)!.querySelector('clipPath > path');
+            const d = path!.getAttribute('d');
+
+            const after = make2x2State();
+            after.groups = [anchoredOnPiece1([1, 0, 2]), after.groups[3]];
+            renderer.renderState(after);
+
+            expect(seamFillOf(0)!.querySelector('image')).toBe(image);
+            expect(seamFillOf(0)!.querySelector('clipPath > path')).toBe(path);
+            expect(path!.getAttribute('d')).not.toBe(d);
+            expect(photoXY()).toEqual(['-100', '0']);
+        });
+
+        it('follows a piece offset change without a membership change', () => {
+            renderer.init(container);
+            const state = makeMergedState();
+            renderer.renderState(state);
+
+            state.groups[0].pieces.set(0, { x: 10, y: 0 });
+            state.groups[0].pieces.set(1, { x: 110, y: 0 });
+            renderer.renderState(state);
+
+            expect(seamClipD()).toBe('M 10 0 L 110 0 L 210 0 L 210 100 L 110 100 L 10 100 L 10 0 Z');
+        });
+    });
+
     describe('outline underlay', () => {
         function underlayOf(groupId: number): SVGSVGElement {
-            const groupEl = container.querySelector(`[data-group-id="${groupId}"]`)!;
-            const underlay = groupEl.firstElementChild as SVGSVGElement;
-            expect(underlay.hasAttribute('data-outline-underlay')).toBe(true);
-            return underlay;
+            return container.querySelector<SVGSVGElement>(
+                `[data-group-id="${groupId}"] > [data-outline-underlay]`,
+            )!;
         }
 
         function drawnEdgeCounts(groupId: number): number[] {

@@ -191,6 +191,22 @@ describe('createInfoModal', () => {
         ).toBe(false);
     });
 
+    it('marks <html> while the piece opacity slider is below 1', () => {
+        createInfoModal({ container });
+        const slider = container.querySelector<HTMLInputElement>('[data-testid="piece-opacity-slider"]')!;
+        const set = (value: string) => {
+            slider.value = value;
+            slider.dispatchEvent(new Event('input'));
+        };
+
+        set('0.5');
+        expect(document.documentElement.classList.contains('pieces-translucent')).toBe(true);
+
+        set('1');
+        expect(document.documentElement.classList.contains('pieces-translucent')).toBe(false);
+        document.documentElement.style.removeProperty('--piece-opacity');
+    });
+
     it('gives every toggle checkbox the shared form-checkbox accent class', () => {
         // Pass state so the share section renders; its "Include my current
         // progress" checkbox is an .info-setting-toggle and must carry the
