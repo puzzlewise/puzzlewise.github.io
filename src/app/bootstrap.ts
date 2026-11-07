@@ -91,8 +91,11 @@ export function bootstrap(
 
     const renderer = new SvgDomRenderer();
     renderer.init(root);
+    const setEffects = (preference: string): void => {
+        renderer.setRingsEnabled(usesRings(applyEffects(preference)));
+    };
     const effectsPreference = loadEffectsPreference();
-    renderer.setRingsEnabled(usesRings(applyEffects(effectsPreference)));
+    setEffects(effectsPreference);
     reportEffectsResolved(effectsPreference);
 
     const selectionManager = new SelectionManager();
@@ -370,7 +373,7 @@ export function bootstrap(
         }),
         installBackgroundColorControl: () => installBackgroundColor({ container: root }),
         solve,
-        onEffectsChanged: (level) => renderer.setRingsEnabled(usesRings(level)),
+        onEffectsChanged: setEffects,
     });
 
     /**
