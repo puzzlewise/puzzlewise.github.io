@@ -62,5 +62,7 @@ export interface Renderer {
      */
     photoSettled(): Promise<'loaded' | 'failed'>;
 
+    prefetchPhoto(url: string): void;
+
     destroy(): void;
 }
