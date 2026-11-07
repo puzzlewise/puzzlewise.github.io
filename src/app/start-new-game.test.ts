@@ -76,6 +76,7 @@ describe('startNewGame', () => {
     let persistNewPuzzle: Mock<(state: GameState) => void>;
     let onGameAnalytics: Mock<(data: unknown, state: GameState) => void>;
     let replacedGameAnalytics: Mock<() => ReplacedGameData | undefined>;
+    let prefetchPhoto: Mock<(url: string) => void>;
     let deps: StartNewGameDeps;
     /**
      * Restored one by one, not via `vi.restoreAllMocks()`: `vite.config.ts`
@@ -100,6 +101,7 @@ describe('startNewGame', () => {
         persistNewPuzzle = vi.fn();
         onGameAnalytics = vi.fn();
         replacedGameAnalytics = vi.fn(() => undefined);
+        prefetchPhoto = vi.fn();
         deps = {
             container: document.createElement('div'),
             session: { install },
@@ -109,6 +111,7 @@ describe('startNewGame', () => {
             onGameAnalytics,
             replacedGameAnalytics,
             hasCurrentGame: () => false,
+            prefetchPhoto,
         };
     });
 
@@ -433,6 +436,39 @@ describe('startNewGame', () => {
         await startNewGame({ cols: 2, rows: 2 }, { cutStyle: 'wavy' }, deps);
 
         expect(resolveUnsplashImage).toHaveBeenCalled();
+    });
+
+    it('prefetches the photo before awaiting the traced chunk', async () => {
+        let release!: () => void;
+        vi.mocked(preloadTracedTabGenerator).mockReturnValue(
+            new Promise<void>((resolve) => { release = resolve; }),
+        );
+        vi.mocked(createNewGameAsync).mockResolvedValue(makeAsyncGenerationResult());
+        const picked = makeCandidateImage();
+
+        const promise = startNewGame({ cols: 2, rows: 2 }, { cutStyle: 'wavy', pickedImage: picked }, deps);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        expect(prefetchPhoto).toHaveBeenCalledWith(picked.imageUrl);
+        release();
+        await promise;
+    });
+
+    it('prefetches the resolved Unsplash photo', async () => {
+        vi.mocked(getImageProxyBaseUrl).mockReturnValue('https://proxy.example');
+        vi.mocked(resolveUnsplashImage).mockResolvedValue({ ...makeCandidateImage(), imageUrl: 'https://images.example/resolved.jpg' });
+        vi.mocked(createNewGameAsync).mockResolvedValue(makeAsyncGenerationResult());
+
+        await startNewGame({ cols: 2, rows: 2 }, { cutStyle: 'wavy' }, deps);
+
+        expect(prefetchPhoto).toHaveBeenCalledTimes(1);
+        expect(prefetchPhoto).toHaveBeenCalledWith('https://images.example/resolved.jpg');
+    });
+
+    it('prefetches nothing for a blank puzzle', async () => {
+        await startNewGame({ cols: 2, rows: 2 }, noTracedTabsOptions(), deps);
+
+        expect(prefetchPhoto).not.toHaveBeenCalled();
     });
 
     it('passes the query override through to the Unsplash resolve', async () => {
