@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { initAnalytics, track } from './umami.js';
+import { initAnalytics, track, whenAnalyticsReady } from './umami.js';
 
 describe('initAnalytics', () => {
     beforeEach(() => {
@@ -474,5 +474,65 @@ describe('track', () => {
             rows: 8,
             elapsedMs: 340,
         });
+    });
+});
+
+describe('whenAnalyticsReady', () => {
+    beforeEach(() => {
+        document.head.replaceChildren();
+        delete (window as unknown as { umami?: unknown }).umami;
+        vi.unstubAllEnvs();
+    });
+
+    afterEach(() => {
+        vi.unstubAllEnvs();
+        delete (window as unknown as { umami?: unknown }).umami;
+    });
+
+    function loadUmami(): void {
+        (window as unknown as { umami: { track: () => void } }).umami = { track: vi.fn() };
+        document.head.querySelector('script')!.dispatchEvent(new Event('load'));
+    }
+
+    it('runs at once when the analytics script has already loaded', () => {
+        (window as unknown as { umami: { track: () => void } }).umami = { track: vi.fn() };
+        const send = vi.fn();
+
+        whenAnalyticsReady(send);
+
+        expect(send).toHaveBeenCalledTimes(1);
+    });
+
+    it('waits for the analytics script to load', () => {
+        vi.stubEnv('VITE_UMAMI_WEBSITE_ID', 'abc-123');
+        initAnalytics();
+        const send = vi.fn();
+
+        whenAnalyticsReady(send);
+        expect(send).not.toHaveBeenCalled();
+
+        loadUmami();
+        expect(send).toHaveBeenCalledTimes(1);
+    });
+
+    it('drops the call when the analytics script fails to load', () => {
+        vi.stubEnv('VITE_UMAMI_WEBSITE_ID', 'abc-123');
+        initAnalytics();
+        const send = vi.fn();
+
+        whenAnalyticsReady(send);
+        document.head.querySelector('script')!.dispatchEvent(new Event('error'));
+
+        expect(send).not.toHaveBeenCalled();
+    });
+
+    it('drops the call when analytics is not configured', () => {
+        vi.stubEnv('VITE_UMAMI_WEBSITE_ID', '');
+        initAnalytics();
+        const send = vi.fn();
+
+        whenAnalyticsReady(send);
+
+        expect(send).not.toHaveBeenCalled();
     });
 });

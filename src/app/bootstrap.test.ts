@@ -109,7 +109,7 @@ vi.mock('./dev-hooks.js', async (importOriginal) => {
 // through untouched.
 vi.mock('../analytics/index.js', async (importOriginal) => {
     const actual = await importOriginal<typeof import('../analytics/index.js')>();
-    return { ...actual, track: vi.fn() };
+    return { ...actual, track: vi.fn(), whenAnalyticsReady: vi.fn((send: () => void) => send()) };
 });
 
 vi.mock('../move/move-receiver.js', async (importOriginal) => {
@@ -465,6 +465,15 @@ describe('bootstrap', () => {
             .toEqual([expect.objectContaining({ outcome: 'abandoned', trigger: 'resume' })]);
     });
 
+    it('applies the saved effects level to the root element at boot', () => {
+        localStorage.setItem('puzzle-effects', 'simple');
+        delete document.documentElement.dataset.effects;
+
+        bootstrap(root);
+
+        expect(document.documentElement.dataset.effects).toBe('simple');
+    });
+
     it('enables the renderer rings at boot when the effects level is Simple', () => {
         localStorage.setItem('puzzle-effects', 'simple');
         const setRingsEnabled = vi.spyOn(SvgDomRenderer.prototype, 'setRingsEnabled');
@@ -473,6 +482,16 @@ describe('bootstrap', () => {
         bootstrap(root);
 
         expect(setRingsEnabled).toHaveBeenLastCalledWith(true);
+    });
+
+    it('reports the resolved effects level once at boot', () => {
+        localStorage.setItem('puzzle-effects', 'simple');
+
+        bootstrap(root);
+
+        const calls = (vi.mocked(track).mock.calls as unknown as Array<[string, unknown]>)
+            .filter(([name]) => name === 'effects-resolved');
+        expect(calls).toEqual([['effects-resolved', { preference: 'simple', detected: 'full', applied: 'simple' }]]);
     });
 
     it('routes an Effects change from the info modal to the renderer', () => {

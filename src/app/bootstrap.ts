@@ -21,8 +21,10 @@ import { ViewportTransform, RotationFocus } from '../interaction/index.js';
 import {
     createAttributionElement,
     removeAttribution,
-    currentEffectsLevel,
+    applyEffects,
+    loadEffectsPreference,
     usesRings,
+    reportEffectsResolved,
 } from '../ui/index.js';
 import { SelectionManager } from '../interaction/selection-manager.js';
 import type { NewGameData, ReplacedGameData } from '../analytics/index.js';
@@ -89,7 +91,9 @@ export function bootstrap(
 
     const renderer = new SvgDomRenderer();
     renderer.init(root);
-    renderer.setRingsEnabled(usesRings(currentEffectsLevel()));
+    const effectsPreference = loadEffectsPreference();
+    renderer.setRingsEnabled(usesRings(applyEffects(effectsPreference)));
+    reportEffectsResolved(effectsPreference);
 
     const selectionManager = new SelectionManager();
 

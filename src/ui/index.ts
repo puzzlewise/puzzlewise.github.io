@@ -96,8 +96,8 @@ export {
     loadEffectsPreference,
     saveEffectsPreference,
     applyEffects,
-    currentEffectsLevel,
     usesRings,
+    reportEffectsResolved,
 } from './effects.js';
 export type { EffectsLevel, EffectsPreset } from './effects.js';
 
