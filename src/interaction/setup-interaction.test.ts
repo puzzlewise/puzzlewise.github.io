@@ -77,6 +77,7 @@ function createFakeRenderer(): Renderer {
         // Defaults to "no piece nearby"; probe tests override it.
         pieceIdAtPoint: vi.fn(() => null),
         photoSettled: vi.fn(() => new Promise<'loaded' | 'failed'>(() => {})),
+        prefetchPhoto: vi.fn(),
         destroy: vi.fn(),
     };
 }

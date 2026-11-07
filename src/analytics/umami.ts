@@ -835,10 +835,12 @@ export interface PhotoCreditOpenedData {
  * puzzle settled, once per installed puzzle with a photo (blank puzzles send
  * nothing). `trigger` is how the puzzle was installed: a fresh game, a resume
  * from the save, or a shared link. `ms` runs from install to settle; a cached
- * photo may settle almost at once. `outcome: 'abandoned'` means another
- * puzzle was installed before this one's photo settled, so it never counts as
- * a failure; a shared puzzle rolled back during its own install sends
- * nothing. A photo still loading when the page unloads sends no row either,
+ * photo may settle almost at once. Since #689, `trigger: 'new'` photos are
+ * prefetched during generation, so their `ms` is the wait left after install,
+ * not the download time, and is not comparable with earlier rows.
+ * `outcome: 'abandoned'` means another puzzle was installed before this one's
+ * photo settled, so it never counts as a failure; a shared puzzle rolled back
+ * during its own install sends nothing. A photo still loading when the page unloads sends no row either,
  * so `failed / (loaded + failed)` is a lower bound. `imageSource` is the same
  * classification as `new-game-started`. `imagePhotoId` is absent for shared,
  * bundled and blank puzzles, and for resumes of puzzles whose saved context

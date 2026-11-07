@@ -289,6 +289,10 @@ export class SvgDomRenderer implements Renderer {
         return this.photoSettle.promise;
     }
 
+    prefetchPhoto(url: string): void {
+        new Image().src = url;
+    }
+
     setRingsEnabled(enabled: boolean): void {
         this.ringsEnabled = enabled;
         for (const [groupId, groupEl] of this.groupElements) {

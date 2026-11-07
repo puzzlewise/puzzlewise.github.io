@@ -56,6 +56,27 @@ describe('SvgDomRenderer', () => {
         container.remove();
     });
 
+    describe('prefetchPhoto', () => {
+        afterEach(() => {
+            vi.restoreAllMocks();
+        });
+
+        it("makes the same no-cors request as the pieces' <image>", () => {
+            const prefetchSrc = vi.spyOn(HTMLImageElement.prototype, 'src', 'set');
+            const prefetchCrossOrigin = vi.spyOn(HTMLImageElement.prototype, 'crossOrigin', 'set');
+            const state = make2x2State();
+
+            renderer.prefetchPhoto(state.imageUrl!);
+            renderer.init(container);
+            renderer.renderState(state);
+
+            const image = container.querySelector('image')!;
+            expect(prefetchSrc).toHaveBeenCalledWith(image.getAttributeNS('http://www.w3.org/1999/xlink', 'href'));
+            expect(prefetchCrossOrigin).not.toHaveBeenCalled();
+            expect(image.hasAttribute('crossorigin')).toBe(false);
+        });
+    });
+
     describe('photoSettled', () => {
         it("resolves 'loaded' when the puzzle's photo loads", async () => {
             renderer.init(container);

@@ -319,6 +319,7 @@ export function bootstrap(
         // interaction, so `current()` can be set over a blank canvas — and
         // Cancel's "return to your current puzzle" is the interactive question.
         hasCurrentGame: () => session.hasGame(),
+        prefetchPhoto: (url) => renderer.prefetchPhoto(url),
     };
 
     /**
