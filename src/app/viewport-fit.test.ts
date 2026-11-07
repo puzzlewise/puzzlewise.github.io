@@ -5,7 +5,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi, type Mock } from 'vitest';
 import type { GameState, PieceGroup } from '../model/types.js';
 import { ViewportTransform } from '../interaction/index.js';
-import { computeGatheredPositions } from '../game/index.js';
+import { computeGatheredPositions, computeSplitGatheredPositions, splitGatherGutter } from '../game/index.js';
 import { createFakeRenderer, type FakeRenderer } from '../test-helpers/fake-renderer.js';
 import { makeGameState, makeCenteredGroup, makeRectPiece } from '../test-helpers/fixtures.js';
 import { VIEWPORT_TRANSITION_MS } from '../renderer/index.js';
@@ -95,6 +95,29 @@ describe('gatherAndZoomToFit', () => {
 
         const after = state.groups.map((g) => g.position);
         expect(after).not.toEqual(before);
+    });
+
+    it('gathers the selection apart from the rest and fits both in view', () => {
+        const state = makeMultiGroupState();
+        const selected = new Set([1]);
+        const aspectRatio = window.innerWidth / window.innerHeight;
+        const { positions, layoutBounds } = computeSplitGatheredPositions(
+            state.groups,
+            selected,
+            aspectRatio,
+            state.piecesById,
+            splitGatherGutter(state.imageSize, state.pieces.length),
+        );
+        const expectedScale = Math.min(
+            window.innerWidth / layoutBounds.width,
+            window.innerHeight / layoutBounds.height,
+        ) * 0.9;
+
+        gatherAndZoomToFit(state, { container, renderer, viewportTransform, applyTransform, renderCurrent }, selected);
+
+        expect(state.groupsById.get(1)!.position).toEqual(positions.get(1));
+        expect(state.groupsById.get(1)!.position.x).toBeLessThan(state.groupsById.get(0)!.position.x);
+        expect(viewportTransform.getState().scale).toBe(expectedScale);
     });
 });
 

@@ -8,8 +8,9 @@ import type { ViewportTransform } from '../interaction/index.js';
 import type { GameState, PieceGroup } from '../model/types.js';
 import { rotatePoint, signedAngularDelta } from '../model/helpers.js';
 import {
-    computeGatheredPositions,
+    computeSplitGatheredPositions,
     applyGatheredPositions,
+    splitGatherGutter,
     getGroupVisualBounds,
     getGroupImageCenter,
 } from '../game/index.js';
@@ -37,16 +38,22 @@ export interface ViewportFitDeps {
     renderCurrent: () => void;
 }
 
-export function gatherAndZoomToFit(state: GameState, deps: ViewportFitDeps): void {
+export function gatherAndZoomToFit(
+    state: GameState,
+    deps: ViewportFitDeps,
+    selectedGroupIds: ReadonlySet<number> = new Set(),
+): void {
     const { container, viewportTransform, applyTransform } = deps;
     const screenWidth = container.clientWidth || window.innerWidth;
     const screenHeight = container.clientHeight || window.innerHeight;
     const aspectRatio = screenWidth / screenHeight;
 
-    const { positions, layoutBounds } = computeGatheredPositions(
+    const { positions, layoutBounds } = computeSplitGatheredPositions(
         state.groups,
+        selectedGroupIds,
         aspectRatio,
         state.piecesById,
+        splitGatherGutter(state.imageSize, state.pieces.length),
     );
 
     applyGatheredPositions(state.groups, positions);

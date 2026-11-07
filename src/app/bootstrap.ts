@@ -282,10 +282,15 @@ export function bootstrap(
     }
 
     /**
-     * `fitView` folds gather-and-zoom-to-fit with a follow-up render:
+     * Folds gather-and-zoom-to-fit with a follow-up render:
      * `session.install` already rendered at pre-gather positions, so the
      * repositioning needs a second render to reach the screen.
      */
+    function fitView(state: GameState, selectedGroupIds?: ReadonlySet<number>): void {
+        gatherAndZoomToFit(state, viewportFitDeps, selectedGroupIds);
+        renderer.renderState(state);
+    }
+
     const startNewGameDeps: StartNewGameDeps = {
         container: root,
         session,
@@ -293,10 +298,7 @@ export function bootstrap(
             viewportTransform.reset();
             applyViewportTransform();
         },
-        fitView: (state) => {
-            gatherAndZoomToFit(state, viewportFitDeps);
-            renderer.renderState(state);
-        },
+        fitView,
         persistNewPuzzle: (state) => {
             if (saveCoordinator.persistNewPuzzle(state)) {
                 savedNewPuzzle = state;
@@ -364,7 +366,7 @@ export function bootstrap(
         container: root,
         session,
         selectionManager,
-        fitView: startNewGameDeps.fitView,
+        fitView,
         save: (state) => saveCoordinator.autoSave(state),
         onNewGame: () => openNewGameDialog({
             container: root,

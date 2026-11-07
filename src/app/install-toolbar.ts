@@ -33,7 +33,7 @@ export interface InstallToolbarDeps {
      */
     session: Pick<GameSession, 'current'>;
     selectionManager: SelectionManager;
-    fitView: (state: GameState) => void;
+    fitView: (state: GameState, selectedGroupIds: ReadonlySet<number>) => void;
     /** Debounced progress save. */
     save: (state: GameState) => void;
     onNewGame: () => void;
@@ -88,7 +88,7 @@ export function installToolbar(deps: InstallToolbarDeps): BackgroundColorControl
             // to gather with no game, so a no-op is the correct behavior.
             const state = session.current();
             if (!state) return;
-            fitView(state);
+            fitView(state, selectionManager.selectedGroupIds);
             save(state);
         },
     });
