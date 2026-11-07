@@ -8,7 +8,12 @@
 import { edgePathD } from '../model/build-shape.js';
 import { getPieceBounds } from '../model/derive.js';
 import type { GameState, Piece, PieceGroup, Point } from '../model/types.js';
+import { groupOutlinePath } from './group-outline.js';
+import { PathDataError, translatePath } from './translate-path.js';
 import { VIEWPORT_TRANSITION_MS, type Renderer } from './types.js';
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+const XLINK_NS = 'http://www.w3.org/1999/xlink';
 
 /** Accommodates tabs that extend beyond the base piece rectangle. */
 const PIECE_PADDING = 30;
@@ -347,7 +352,7 @@ export class SvgDomRenderer implements Renderer {
         const expectedPieceIds = new Set(group.pieces.keys());
 
         for (const child of Array.from(groupEl.children)) {
-            if (child.hasAttribute('data-outline-underlay')) continue;
+            if (!child.hasAttribute('data-piece-id')) continue;
             const pieceId = Number((child as HTMLElement).dataset.pieceId);
 
             if (!expectedPieceIds.has(pieceId)) {
@@ -373,7 +378,12 @@ export class SvgDomRenderer implements Renderer {
             this.positionPiece(svgEl, offset);
         }
 
-        this.syncOutlineUnderlay(groupEl, group, pieceLookup);
+        const layoutKey = [...group.pieces]
+            .map(([pieceId, offset]) => `${pieceId}:${offset.x},${offset.y}`)
+            .sort()
+            .join(' ');
+        const underlay = this.syncOutlineUnderlay(groupEl, group, pieceLookup, layoutKey);
+        this.syncSeamFill(groupEl, underlay, group, pieceLookup, imageUrl, layoutKey);
     }
 
     /** Edges between pieces of the same group are left out so joins stay seamless. */
@@ -381,37 +391,36 @@ export class SvgDomRenderer implements Renderer {
         groupEl: HTMLElement,
         group: PieceGroup,
         pieceLookup: Map<number, Piece>,
-    ): void {
-        const svgNS = 'http://www.w3.org/2000/svg';
+        layoutKey: string,
+    ): SVGSVGElement {
         const edgesId = `group-edges-${group.id}`;
         let underlay = groupEl.querySelector<SVGSVGElement>(':scope > svg[data-outline-underlay]');
         const created = underlay === null;
         if (!underlay) {
-            underlay = document.createElementNS(svgNS, 'svg');
+            underlay = document.createElementNS(SVG_NS, 'svg');
             underlay.setAttribute('data-outline-underlay', '');
             underlay.setAttribute('width', '1');
             underlay.setAttribute('height', '1');
             for (const name of RING_NAMES) {
-                const ring = document.createElementNS(svgNS, 'use');
+                const ring = document.createElementNS(SVG_NS, 'use');
                 ring.setAttribute('data-ring', name);
                 underlay.appendChild(ring);
             }
-            const outline = document.createElementNS(svgNS, 'g');
+            const outline = document.createElementNS(SVG_NS, 'g');
             outline.setAttribute('data-edge-outline', '');
-            const edges = document.createElementNS(svgNS, 'g');
+            const edges = document.createElementNS(SVG_NS, 'g');
             edges.id = edgesId;
             outline.appendChild(edges);
             underlay.appendChild(outline);
         }
-        if (groupEl.firstChild !== underlay) groupEl.insertBefore(underlay, groupEl.firstChild);
+        const firstPiece = groupEl.querySelector(':scope > svg[data-piece-id]');
+        if (underlay.parentNode !== groupEl || underlay.nextElementSibling !== firstPiece) {
+            groupEl.insertBefore(underlay, firstPiece);
+        }
         if (created) syncRingReferences(groupEl, group.id, this.ringsEnabled);
 
-        const key = [...group.pieces]
-            .map(([pieceId, offset]) => `${pieceId}:${offset.x},${offset.y}`)
-            .sort()
-            .join(' ');
-        if (underlay.dataset.pieces === key) return;
-        underlay.dataset.pieces = key;
+        if (underlay.dataset.pieces === layoutKey) return underlay;
+        underlay.dataset.pieces = layoutKey;
 
         const paths: SVGPathElement[] = [];
         for (const [pieceId, offset] of group.pieces) {
@@ -422,22 +431,136 @@ export class SvgDomRenderer implements Renderer {
                 .map(edgePathD)
                 .join(' ');
             if (!d) continue;
-            const path = document.createElementNS(svgNS, 'path');
+            const path = document.createElementNS(SVG_NS, 'path');
             path.setAttribute('d', d);
             path.setAttribute('transform', `translate(${offset.x} ${offset.y})`);
             paths.push(path);
         }
         underlay.querySelector(`#${edgesId}`)!.replaceChildren(...paths);
+        return underlay;
+    }
+
+    /**
+     * Separately clipped pieces each cover a shared edge's pixels only
+     * partially, so the table shows through as a hairline (#711). One fill
+     * clipped to the group's outline covers those pixels from below.
+     * Sits under the outline underlay, whose stroke hides the fill's
+     * anti-aliased fringe so outer edges look as they do on a lone piece.
+     */
+    private syncSeamFill(
+        groupEl: HTMLElement,
+        underlay: SVGSVGElement,
+        group: PieceGroup,
+        pieceLookup: Map<number, Piece>,
+        imageUrl: string | null,
+        layoutKey: string,
+    ): void {
+        let seamFill = groupEl.querySelector<SVGSVGElement>(':scope > svg[data-seam-fill]');
+        if (group.pieces.size < 2) {
+            seamFill?.remove();
+            return;
+        }
+        seamFill ??= this.createSeamFill(group.id, imageUrl);
+        if (seamFill.nextElementSibling !== underlay) groupEl.insertBefore(seamFill, underlay);
+
+        if (seamFill.dataset.pieces === layoutKey) return;
+        seamFill.dataset.pieces = layoutKey;
+
+        let photoOrigin: Point | null = null;
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        for (const [pieceId, offset] of group.pieces) {
+            const piece = pieceLookup.get(pieceId);
+            if (!piece) continue;
+            photoOrigin ??= { x: offset.x + piece.imageOffset.x, y: offset.y + piece.imageOffset.y };
+            minX = Math.min(minX, offset.x + piece.bounds.minX);
+            minY = Math.min(minY, offset.y + piece.bounds.minY);
+            maxX = Math.max(maxX, offset.x + piece.bounds.maxX);
+            maxY = Math.max(maxY, offset.y + piece.bounds.maxY);
+        }
+
+        const clip = seamFill.querySelector('clipPath > path')!;
+        if (!photoOrigin) {
+            clip.setAttribute('d', '');
+            return;
+        }
+        let d: string;
+        try {
+            d = groupOutlinePath(group.pieces, pieceLookup) ?? [...group.pieces]
+                .flatMap(([pieceId, offset]) => {
+                    const piece = pieceLookup.get(pieceId);
+                    return piece ? [translatePath(piece.shape, offset.x, offset.y)] : [];
+                })
+                .join(' ');
+        } catch (error) {
+            if (!(error instanceof PathDataError)) throw error;
+            d = '';
+        }
+        clip.setAttribute('d', d);
+
+        const fill = seamFill.lastElementChild!;
+        if (imageUrl === null) {
+            fill.setAttribute('x', String(minX));
+            fill.setAttribute('y', String(minY));
+            fill.setAttribute('width', String(maxX - minX));
+            fill.setAttribute('height', String(maxY - minY));
+        } else {
+            fill.setAttribute('x', String(photoOrigin.x));
+            fill.setAttribute('y', String(photoOrigin.y));
+        }
+    }
+
+    /**
+     * The clip is one path, not one child per piece: WebKit clips to several
+     * children through a mask that blends their shared edges just as the
+     * pieces do. It holds only the group outline, keeping each repaint
+     * proportional to the perimeter: the pieces' full shapes doubled a
+     * 768-piece group's merge frame on an iPad 6th gen. Built once per group
+     * and updated in place, so a merge doesn't reload the photo.
+     */
+    private createSeamFill(groupId: number, imageUrl: string | null): SVGSVGElement {
+        const clipId = `seam-clip-${groupId}`;
+        const clipPath = document.createElementNS(SVG_NS, 'clipPath');
+        clipPath.id = clipId;
+        clipPath.appendChild(document.createElementNS(SVG_NS, 'path'));
+        const defs = document.createElementNS(SVG_NS, 'defs');
+        defs.appendChild(clipPath);
+
+        const fill = imageUrl === null
+            ? document.createElementNS(SVG_NS, 'rect')
+            : this.createPhotoImage(imageUrl, { x: 0, y: 0 });
+        fill.setAttribute('clip-path', `url(#${clipId})`);
+
+        const seamFill = document.createElementNS(SVG_NS, 'svg');
+        seamFill.setAttribute('data-seam-fill', '');
+        seamFill.setAttribute('width', '1');
+        seamFill.setAttribute('height', '1');
+        seamFill.append(defs, fill);
+        return seamFill;
+    }
+
+    /**
+     * `slice` covers the puzzle rect and crops excess, so a puzzle whose aspect
+     * ratio differs from the image (fractal tile grid) is cropped uniformly,
+     * not stretched.
+     */
+    private createPhotoImage(imageUrl: string, origin: Point): SVGImageElement {
+        const image = document.createElementNS(SVG_NS, 'image');
+        image.setAttributeNS(XLINK_NS, 'href', imageUrl);
+        image.setAttribute('width', String(this.imageSize.width));
+        image.setAttribute('height', String(this.imageSize.height));
+        image.setAttribute('x', String(origin.x));
+        image.setAttribute('y', String(origin.y));
+        image.setAttribute('preserveAspectRatio', 'xMidYMid slice');
+        image.setAttribute('draggable', 'false');
+        image.setAttribute('pointer-events', 'none');
+        return image;
     }
 
     private createPieceSvg(piece: Piece, imageUrl: string | null): SVGSVGElement {
-        const svgNS = 'http://www.w3.org/2000/svg';
-        const xlinkNS = 'http://www.w3.org/1999/xlink';
-
         const svgWidth = this.pieceBaseWidth + PIECE_PADDING * 2;
         const svgHeight = this.pieceBaseHeight + PIECE_PADDING * 2;
 
-        const svg = document.createElementNS(svgNS, 'svg');
+        const svg = document.createElementNS(SVG_NS, 'svg');
         svg.setAttribute('width', String(svgWidth));
         svg.setAttribute('height', String(svgHeight));
         svg.setAttribute(
@@ -449,7 +572,7 @@ export class SvgDomRenderer implements Renderer {
         svg.dataset.pieceId = String(piece.id);
 
         if (imageUrl === null) {
-            const fill = document.createElementNS(svgNS, 'path');
+            const fill = document.createElementNS(SVG_NS, 'path');
             fill.setAttribute('d', piece.shape);
             fill.setAttribute('fill-rule', 'evenodd');
             fill.setAttribute('pointer-events', 'none');
@@ -458,30 +581,19 @@ export class SvgDomRenderer implements Renderer {
         } else {
             // Clip only needed on the image arm — the blank arm fills the shape
             // directly, and an unused clip would duplicate `piece.shape` per piece.
-            const defs = document.createElementNS(svgNS, 'defs');
-            const clipPath = document.createElementNS(svgNS, 'clipPath');
+            const defs = document.createElementNS(SVG_NS, 'defs');
+            const clipPath = document.createElementNS(SVG_NS, 'clipPath');
             clipPath.setAttribute('id', `clip-piece-${piece.id}`);
 
-            const path = document.createElementNS(svgNS, 'path');
+            const path = document.createElementNS(SVG_NS, 'path');
             path.setAttribute('d', piece.shape);
             path.setAttribute('fill-rule', 'evenodd');
             clipPath.appendChild(path);
             defs.appendChild(clipPath);
             svg.appendChild(defs);
 
-            // `slice` (preserveAspectRatio below) covers the puzzle rect and
-            // crops excess, so a puzzle whose aspect ratio differs from the
-            // image (fractal tile grid) is cropped uniformly, not stretched.
-            const image = document.createElementNS(svgNS, 'image');
-            image.setAttributeNS(xlinkNS, 'href', imageUrl);
-            image.setAttribute('width', String(this.imageSize.width));
-            image.setAttribute('height', String(this.imageSize.height));
-            image.setAttribute('x', String(piece.imageOffset.x));
-            image.setAttribute('y', String(piece.imageOffset.y));
-            image.setAttribute('preserveAspectRatio', 'xMidYMid slice');
+            const image = this.createPhotoImage(imageUrl, piece.imageOffset);
             image.setAttribute('clip-path', `url(#clip-piece-${piece.id})`);
-            image.setAttribute('draggable', 'false');
-            image.setAttribute('pointer-events', 'none');
             this.photoSettle.watch(image);
             svg.appendChild(image);
         }
@@ -490,7 +602,7 @@ export class SvgDomRenderer implements Renderer {
         // only inside the piece, not its SVG bounding box. Near-misses are
         // rescued by the screen-space probe (`interaction/hit-probe.ts`), so no
         // widened hit stroke is needed.
-        const hitArea = document.createElementNS(svgNS, 'path');
+        const hitArea = document.createElementNS(SVG_NS, 'path');
         hitArea.setAttribute('d', piece.shape);
         hitArea.setAttribute('fill', 'rgba(0,0,0,0)');
         hitArea.setAttribute('stroke', 'none');
@@ -502,7 +614,7 @@ export class SvgDomRenderer implements Renderer {
         // Debug overlay: mateless edge strokes, toggled via .show-mateless-edges on <html>.
         for (const edge of piece.edges) {
             if (edge.mateEdgeId !== -1) continue;
-            const edgePath = document.createElementNS(svgNS, 'path');
+            const edgePath = document.createElementNS(SVG_NS, 'path');
             edgePath.setAttribute('d', edgePathD(edge));
             edgePath.setAttribute('fill', 'none');
             edgePath.setAttribute('stroke', '#FF69B4');
@@ -531,9 +643,7 @@ export class SvgDomRenderer implements Renderer {
      * re-rendering. Defaults to hidden via CSS.
      */
     private appendDebugPieceOverlay(svg: SVGSVGElement, piece: Piece): void {
-        const svgNS = 'http://www.w3.org/2000/svg';
-
-        const fillPath = document.createElementNS(svgNS, 'path');
+        const fillPath = document.createElementNS(SVG_NS, 'path');
         fillPath.setAttribute('d', piece.shape);
         fillPath.setAttribute('fill', 'white');
         fillPath.setAttribute('fill-rule', 'evenodd');
@@ -547,7 +657,7 @@ export class SvgDomRenderer implements Renderer {
         const centerX = (minX + maxX) / 2;
         const centerY = (minY + maxY) / 2;
 
-        const label = document.createElementNS(svgNS, 'text');
+        const label = document.createElementNS(SVG_NS, 'text');
         label.setAttribute('x', String(centerX));
         label.setAttribute('y', String(centerY));
         label.setAttribute('text-anchor', 'middle');
@@ -565,7 +675,7 @@ export class SvgDomRenderer implements Renderer {
         const arrowHeight = 7;
         const arrowTipY = minY + 4;
         const arrowBaseY = arrowTipY + arrowHeight;
-        const arrow = document.createElementNS(svgNS, 'path');
+        const arrow = document.createElementNS(SVG_NS, 'path');
         arrow.setAttribute(
             'd',
             `M ${centerX} ${arrowTipY}` +

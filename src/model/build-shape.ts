@@ -28,7 +28,7 @@ export function edgePathD(edge: Edge): string {
 }
 
 /** Tolerance for matching consecutive edges' end→start in piece-local px. */
-const CHAIN_EPSILON = 0.5;
+export const CHAIN_EPSILON = 0.5;
 
 export function buildShape(edges: Edge[]): string {
     if (edges.length === 0) return '';

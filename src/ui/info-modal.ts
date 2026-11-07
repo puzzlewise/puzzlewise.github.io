@@ -68,6 +68,8 @@ export interface InfoModalOptions {
 /** HTML class toggled on <html> to switch pieces into debug (white) view. */
 const DEBUG_PIECES_CLASS = 'show-debug-pieces';
 
+const TRANSLUCENT_PIECES_CLASS = 'pieces-translucent';
+
 /** Keeps the static help-text builders compact without resorting to innerHTML. */
 type InlineNode = string | Node | [tag: string, text: string, attrs?: Record<string, string>];
 
@@ -781,6 +783,7 @@ function buildOpacitySetting(): HTMLElement {
     slider.addEventListener('input', () => {
         value.textContent = slider.value;
         document.documentElement.style.setProperty('--piece-opacity', slider.value);
+        document.documentElement.classList.toggle(TRANSLUCENT_PIECES_CLASS, Number(slider.value) < 1);
     });
 
     row.appendChild(slider);

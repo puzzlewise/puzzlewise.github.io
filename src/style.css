@@ -414,8 +414,17 @@ html, body {
   will-change: auto;
 }
 
-[data-piece-blank] {
+[data-piece-blank],
+[data-seam-fill] rect {
   fill: var(--piece-blank-fill);
+}
+
+[data-seam-fill] {
+  position: absolute;
+  left: 0;
+  top: 0;
+  overflow: visible;
+  pointer-events: none;
 }
 
 /* Debug piece opacity — controlled via the info-modal slider */
@@ -441,7 +450,9 @@ html, body {
 }
 
 .show-debug-pieces [data-piece-id] image,
-.show-debug-pieces [data-piece-blank] {
+.show-debug-pieces [data-piece-blank],
+.show-debug-pieces [data-seam-fill],
+.pieces-translucent [data-seam-fill] {
   display: none;
 }
 
