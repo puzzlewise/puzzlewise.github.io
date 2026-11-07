@@ -41,6 +41,7 @@ import { loadSharedPuzzle, type LoadSharedPuzzleDeps } from './load-shared-puzzl
 import { createShareLinkLoader } from './share-link-loader.js';
 import { runBootSequence } from './boot-sequence.js';
 import { createPuzzleImageLoadTracker } from './puzzle-image-load.js';
+import { prefetchPhoto } from './photo-prefetch.js';
 import { reportPuzzleCreditOpened } from './puzzle-credit.js';
 import { openNewGameDialog } from './new-game-flow.js';
 import { createCompletionPresenter } from './completion-presenter.js';
@@ -319,6 +320,7 @@ export function bootstrap(
         // interaction, so `current()` can be set over a blank canvas — and
         // Cancel's "return to your current puzzle" is the interactive question.
         hasCurrentGame: () => session.hasGame(),
+        prefetchPhoto,
     };
 
     /**

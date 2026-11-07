@@ -76,6 +76,8 @@ export interface StartNewGameDeps {
      * there's nothing to offer.
      */
     hasCurrentGame: () => boolean;
+    /** Must share the renderer's cache entry for `url`: same URL, no `crossOrigin`. */
+    prefetchPhoto: (url: string) => void;
 }
 
 /**
@@ -192,6 +194,10 @@ export async function startNewGame(
                 pageDraw = resolved.pageDraw;
             }
         }
+
+        // Before the chunk await, so the download overlaps the chunk, the worker
+        // and generation instead of starting at render (#689).
+        if (imageUrl !== null) deps.prefetchPhoto(imageUrl);
 
         // Collect the chunk outcome now the image has resolved — before the
         // download report, not after: a start about to throw must not report a
