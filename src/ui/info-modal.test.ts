@@ -376,28 +376,28 @@ describe('createInfoModal — Effects setting', () => {
         expect(desc).toBe('Full on this device');
     });
 
-    it('saves and applies a choice, and moves the selection', () => {
+    it('saves a choice and moves the selection, leaving applying it to the caller', () => {
         createInfoModal({ container });
 
         const simple = container.querySelector<HTMLButtonElement>('[data-testid="effects-simple"]')!;
         simple.click();
 
         expect(localStorage.getItem('puzzle-effects')).toBe('simple');
-        expect(document.documentElement.dataset.effects).toBe('simple');
+        expect(document.documentElement.dataset.effects).toBeUndefined();
         expect(simple.classList.contains('selected')).toBe(true);
         expect(
             container.querySelector('[data-testid="effects-auto"]')!.classList.contains('selected'),
         ).toBe(false);
     });
 
-    it('reports the applied level through onEffectsChanged', () => {
+    it('reports the chosen option through onEffectsChanged', () => {
         const onEffectsChanged = vi.fn();
         createInfoModal({ container, onEffectsChanged });
 
         container.querySelector<HTMLButtonElement>('[data-testid="effects-simple"]')!.click();
         container.querySelector<HTMLButtonElement>('[data-testid="effects-auto"]')!.click();
 
-        expect(onEffectsChanged.mock.calls).toEqual([['simple'], [getDetectedEffectsLevel()]]);
+        expect(onEffectsChanged.mock.calls).toEqual([['simple'], ['auto']]);
     });
 
     it('sits right after the Piece outline setting', () => {

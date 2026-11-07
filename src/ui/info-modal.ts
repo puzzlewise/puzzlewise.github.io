@@ -36,8 +36,6 @@ import {
     getDetectedEffectsLevel,
     loadEffectsPreference,
     saveEffectsPreference,
-    applyEffects,
-    type EffectsLevel,
 } from './effects.js';
 import {
     loadOutlineConstantWidthPreference,
@@ -59,7 +57,7 @@ export interface InfoModalOptions {
     container: HTMLElement;
     onDismiss?: () => void;
     onToleranceChanged?: (id: string) => void;
-    onEffectsChanged?: (level: EffectsLevel) => void;
+    onEffectsChanged?: (preference: string) => void;
     onSolve?: () => void;
     /** Used by the Debug panel's repro block; when absent the block is omitted. */
     getState?: () => GameState | null | undefined;
@@ -179,7 +177,7 @@ function buildHowToPlaySection(): HTMLElement {
 
 function buildSettingsSection(args: {
     onToleranceChanged?: (id: string) => void;
-    onEffectsChanged?: (level: EffectsLevel) => void;
+    onEffectsChanged?: (preference: string) => void;
 }): HTMLElement {
     const section = document.createElement('section');
     section.className = 'info-section';
@@ -347,7 +345,7 @@ function buildPieceOutlineSetting(): HTMLElement {
     return setting;
 }
 
-function buildEffectsSetting(onEffectsChanged?: (level: EffectsLevel) => void): HTMLElement {
+function buildEffectsSetting(onEffectsChanged?: (preference: string) => void): HTMLElement {
     const setting = document.createElement('div');
     setting.className = 'info-setting';
 
@@ -397,8 +395,7 @@ function buildEffectsSetting(onEffectsChanged?: (level: EffectsLevel) => void): 
                 detected: getDetectedEffectsLevel(),
             });
             saveEffectsPreference(preset.id);
-            const level = applyEffects(preset.id);
-            onEffectsChanged?.(level);
+            onEffectsChanged?.(preset.id);
             container
                 .querySelectorAll('.preset-option')
                 .forEach((btn) => btn.classList.remove('selected'));

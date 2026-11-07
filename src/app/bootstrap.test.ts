@@ -504,6 +504,7 @@ describe('bootstrap', () => {
         root.querySelector<HTMLButtonElement>('[data-testid="effects-simple"]')!.click();
 
         expect(setRingsEnabled).toHaveBeenLastCalledWith(true);
+        expect(document.documentElement.dataset.effects).toBe('simple');
     });
 
     it('keeps the background-color control between deselect and Info', () => {
