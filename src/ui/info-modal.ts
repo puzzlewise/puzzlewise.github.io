@@ -141,7 +141,7 @@ function buildHowToPlaySection(): HTMLElement {
     ]);
     appendInlineLi(buttons, [
         ['strong', 'Gather Pieces'],
-        ' — Organize all pieces in a compact grid',
+        ' — Organize all pieces in a compact grid. With pieces selected, the selection and the rest are gathered into two separate piles.',
     ]);
     appendInlineLi(buttons, ['🎨 ', ['strong', 'Background'], ' — Change table colour']);
     appendInlineLi(buttons, [

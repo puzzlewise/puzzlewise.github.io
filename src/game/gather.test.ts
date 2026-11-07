@@ -2,8 +2,12 @@ import { describe, it, expect } from 'vitest';
 import type { Piece, PieceGroup } from '../model/types.js';
 import {
     computeGatheredPositions,
+    computeSplitGatheredPositions,
     applyGatheredPositions,
+    splitGatherGutter,
+    GATHER_PADDING,
 } from './gather.js';
+import { getGroupVisualBounds } from './group-bounds.js';
 import { buildPiecesById, makeRectPiece } from '../test-helpers/fixtures.js';
 import { computePieceBounds } from '../model/derive.js';
 
@@ -149,5 +153,123 @@ describe('applyGatheredPositions', () => {
         applyGatheredPositions(groups, new Map([[1, { x: 50, y: 60 }]]));
         expect(groups[0].position).toEqual({ x: 50, y: 60 });
         expect(groups[1].position).toEqual({ x: 300, y: 400 });
+    });
+});
+
+describe('computeSplitGatheredPositions', () => {
+    const gutter = 350;
+
+    function makeSquares(count: number): { pieces: Piece[]; groups: PieceGroup[] } {
+        const pieces = Array.from({ length: count }, (_, i) => makeRectPiece({ id: i, width: 100, height: 100 }));
+        const groups = pieces.map(p => makeGroup(p.id, p.id * 37, p.id * 11));
+        return { pieces, groups };
+    }
+
+    function worldExtent(
+        groups: PieceGroup[],
+        positions: Map<number, { x: number; y: number }>,
+        piecesById: Map<number, Piece>,
+    ): { minX: number; maxX: number; minY: number; maxY: number } {
+        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+        for (const group of groups) {
+            const b = getGroupVisualBounds(group, piecesById);
+            const pos = positions.get(group.id)!;
+            minX = Math.min(minX, pos.x + b.minX);
+            maxX = Math.max(maxX, pos.x + b.minX + b.width);
+            minY = Math.min(minY, pos.y + b.minY);
+            maxY = Math.max(maxY, pos.y + b.minY + b.height);
+        }
+        return { minX, maxX, minY, maxY };
+    }
+
+    it('lays out like a plain gather when nothing is selected', () => {
+        const { pieces, groups } = makeSquares(10);
+        const piecesById = buildPiecesById(pieces);
+
+        const split = computeSplitGatheredPositions(groups, new Set(), landscapeAspect, piecesById, gutter);
+        const plain = computeGatheredPositions(groups, landscapeAspect, piecesById);
+
+        expect(split.positions.size).toBe(10);
+        expect(split.layoutBounds).toEqual(plain.layoutBounds);
+    });
+
+    it('lays out like a plain gather when everything is selected', () => {
+        const { pieces, groups } = makeSquares(10);
+        const piecesById = buildPiecesById(pieces);
+        const all = new Set(groups.map(g => g.id));
+
+        const split = computeSplitGatheredPositions(groups, all, landscapeAspect, piecesById, gutter);
+        const plain = computeGatheredPositions(groups, landscapeAspect, piecesById);
+
+        expect(split.positions.size).toBe(10);
+        expect(split.layoutBounds).toEqual(plain.layoutBounds);
+    });
+
+    it('ignores selected ids that are not among the groups', () => {
+        const { pieces, groups } = makeSquares(10);
+        const piecesById = buildPiecesById(pieces);
+
+        const split = computeSplitGatheredPositions(groups, new Set([999]), landscapeAspect, piecesById, gutter);
+        const plain = computeGatheredPositions(groups, landscapeAspect, piecesById);
+
+        expect(split.layoutBounds).toEqual(plain.layoutBounds);
+    });
+
+    it('puts the selected groups on the left, separated from the rest by the gutter', () => {
+        const { pieces, groups } = makeSquares(20);
+        const piecesById = buildPiecesById(pieces);
+        const selectedIds = new Set([0, 3, 7, 11, 15]);
+        const selected = groups.filter(g => selectedIds.has(g.id));
+        const rest = groups.filter(g => !selectedIds.has(g.id));
+
+        const { positions } = computeSplitGatheredPositions(groups, selectedIds, landscapeAspect, piecesById, gutter);
+
+        expect(positions.size).toBe(20);
+        const left = worldExtent(selected, positions, piecesById);
+        const right = worldExtent(rest, positions, piecesById);
+        expect(right.minX - left.maxX).toBeCloseTo(gutter);
+    });
+
+    it('shapes each side like a plain gather of that side alone', () => {
+        const { pieces, groups } = makeSquares(20);
+        const piecesById = buildPiecesById(pieces);
+        const selectedIds = new Set([0, 1, 2, 3, 4]);
+        const selected = groups.filter(g => selectedIds.has(g.id));
+        const rest = groups.filter(g => !selectedIds.has(g.id));
+
+        const { positions } = computeSplitGatheredPositions(groups, selectedIds, landscapeAspect, piecesById, gutter);
+
+        for (const side of [selected, rest]) {
+            const extent = worldExtent(side, positions, piecesById);
+            const alone = computeGatheredPositions(side, landscapeAspect, piecesById).layoutBounds;
+            expect(extent.maxX - extent.minX).toBeCloseTo(alone.width - 2 * GATHER_PADDING);
+            expect(extent.maxY - extent.minY).toBeCloseTo(alone.height - 2 * GATHER_PADDING);
+        }
+    });
+
+    it('returns layout bounds that frame both sides with the gather padding', () => {
+        const { pieces, groups } = makeSquares(20);
+        const piecesById = buildPiecesById(pieces);
+        const selectedIds = new Set([0, 1, 2, 3, 4]);
+
+        const { positions, layoutBounds } = computeSplitGatheredPositions(
+            groups, selectedIds, landscapeAspect, piecesById, gutter,
+        );
+
+        const extent = worldExtent(groups, positions, piecesById);
+        expect(layoutBounds.x).toBeCloseTo(extent.minX - GATHER_PADDING);
+        expect(layoutBounds.x + layoutBounds.width).toBeCloseTo(extent.maxX + GATHER_PADDING);
+        expect(layoutBounds.y).toBeCloseTo(extent.minY - GATHER_PADDING);
+        expect(layoutBounds.y + layoutBounds.height).toBeCloseTo(extent.maxY + GATHER_PADDING);
+    });
+});
+
+describe('splitGatherGutter', () => {
+    it('is 3.5 average piece widths', () => {
+        expect(splitGatherGutter({ width: 1000, height: 800 }, 80)).toBeCloseTo(350);
+    });
+
+    it('is zero for a puzzle with no pieces', () => {
+        expect(splitGatherGutter({ width: 1000, height: 800 }, 0)).toBe(0);
     });
 });

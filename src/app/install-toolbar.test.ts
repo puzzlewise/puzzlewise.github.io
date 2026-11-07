@@ -138,8 +138,22 @@ describe('installToolbar', () => {
 
         container.querySelector<HTMLButtonElement>('.gather-pieces-button')!.click();
 
-        expect(fitView).toHaveBeenCalledWith(state);
+        expect(fitView).toHaveBeenCalledWith(state, new Set());
         expect(save).toHaveBeenCalledWith(state);
+    });
+
+    it('gathers around the current selection and keeps it', () => {
+        const fitView = vi.fn();
+        const selectionManager = new SelectionManager();
+        selectionManager.toolActive = true;
+        selectionManager.selectMany([2, 5]);
+        const state = { pieces: [], groups: [] } as unknown as GameState;
+        installToolbar(deps({ session: makeSession(state), selectionManager, fitView }));
+
+        container.querySelector<HTMLButtonElement>('.gather-pieces-button')!.click();
+
+        expect(fitView).toHaveBeenCalledWith(state, new Set([2, 5]));
+        expect(selectionManager.selectedGroupIds).toEqual(new Set([2, 5]));
     });
 
     it('wires onEffectsChanged into the info modal Effects setting', () => {

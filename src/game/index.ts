@@ -54,7 +54,9 @@ export {
 
 export {
     computeGatheredPositions,
+    computeSplitGatheredPositions,
     applyGatheredPositions,
+    splitGatherGutter,
     GATHER_PADDING,
 } from './gather.js';
 export type { WorldRect } from './gather.js';

@@ -1,7 +1,9 @@
-import type { Point, Piece, PieceGroup } from '../model/types.js';
+import type { Point, Piece, PieceGroup, Size } from '../model/types.js';
 import { getGroupVisualBounds } from './group-bounds.js';
 
 export const GATHER_PADDING = 50;
+
+export const SPLIT_GATHER_GUTTER_PIECES = 3.5;
 
 export interface WorldRect {
     x: number;
@@ -180,6 +182,58 @@ export function computeGatheredPositions(
             y: startY - margin,
             width: maxRowWidth + margin * 2,
             height: totalHeight + margin * 2,
+        },
+    };
+}
+
+export function splitGatherGutter(imageSize: Size, pieceCount: number): number {
+    if (pieceCount <= 0) return 0;
+    return SPLIT_GATHER_GUTTER_PIECES * Math.sqrt((imageSize.width * imageSize.height) / pieceCount);
+}
+
+/**
+ * Each block gets the screen's aspect ratio on its own, so together they can't
+ * fill the screen. Intended (#708): the player zooms into one block and works it.
+ */
+export function computeSplitGatheredPositions(
+    groups: ReadonlyArray<Readonly<PieceGroup>>,
+    selectedGroupIds: ReadonlySet<number>,
+    screenAspectRatio: number,
+    piecesById: ReadonlyMap<number, Readonly<Piece>>,
+    gutter: number,
+): GatherResult {
+    const selected = groups.filter(group => selectedGroupIds.has(group.id));
+    if (selected.length === 0 || selected.length === groups.length) {
+        return computeGatheredPositions(groups, screenAspectRatio, piecesById);
+    }
+    const rest = groups.filter(group => !selectedGroupIds.has(group.id));
+
+    const left = computeGatheredPositions(selected, screenAspectRatio, piecesById);
+    const right = computeGatheredPositions(rest, screenAspectRatio, piecesById);
+
+    const margin = GATHER_PADDING;
+    const leftWidth = left.layoutBounds.width - 2 * margin;
+    const rightWidth = right.layoutBounds.width - 2 * margin;
+    const totalWidth = leftWidth + gutter + rightWidth;
+
+    const positions = new Map<number, Point>();
+    const place = (block: GatherResult, shiftX: number): void => {
+        for (const [id, pos] of block.positions) {
+            positions.set(id, { x: pos.x + shiftX, y: pos.y });
+        }
+    };
+    place(left, (leftWidth - totalWidth) / 2);
+    place(right, (totalWidth - rightWidth) / 2);
+
+    const height = Math.max(left.layoutBounds.height, right.layoutBounds.height);
+
+    return {
+        positions,
+        layoutBounds: {
+            x: -totalWidth / 2 - margin,
+            y: -height / 2,
+            width: totalWidth + 2 * margin,
+            height,
         },
     };
 }
