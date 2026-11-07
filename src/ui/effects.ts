@@ -1,4 +1,5 @@
 import { createIdPreferenceStore } from './preference-store.js';
+import { track, whenAnalyticsReady } from '../analytics/index.js';
 
 export type EffectsLevel = 'full' | 'simple';
 
@@ -84,10 +85,6 @@ export function resolveEffectsLevel(id: string, detectedLevel: EffectsLevel): Ef
     return detectedLevel;
 }
 
-export function currentEffectsLevel(): EffectsLevel {
-    return resolveEffectsLevel(loadEffectsPreference(), getDetectedEffectsLevel());
-}
-
 export function usesRings(level: EffectsLevel): boolean {
     switch (level) {
         case 'simple':
@@ -101,4 +98,14 @@ export function applyEffects(id: string): EffectsLevel {
     const level = resolveEffectsLevel(id, getDetectedEffectsLevel());
     document.documentElement.dataset.effects = level;
     return level;
+}
+
+export function reportEffectsResolved(preference: string): void {
+    const detectedLevel = getDetectedEffectsLevel();
+    const data = {
+        preference,
+        detected: detectedLevel,
+        applied: resolveEffectsLevel(preference, detectedLevel),
+    };
+    whenAnalyticsReady(() => track('effects-resolved', data));
 }

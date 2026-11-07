@@ -457,6 +457,19 @@ export type SettingChangedData =
     };
 
 /**
+ * Data attached to `effects-resolved`, sent once per page load once the
+ * analytics script has loaded (not at all if it is blocked or fails).
+ * `preference` is the saved Effects setting (`'auto'`, `'full'` or
+ * `'simple'`), `detected` what Auto resolves to on this device, and `applied`
+ * the level in effect: `detected` when `preference` is `'auto'`.
+ */
+export interface EffectsResolvedData {
+    preference: string;
+    detected: EffectsLevel;
+    applied: EffectsLevel;
+}
+
+/**
  * Data attached to `traced-chunk-preload-started`.
  *
  * Fired once per real import attempt (cached-promise calls don't
@@ -1819,6 +1832,23 @@ export function initAnalytics(): void {
         script.dataset.distinctId = distinctId;
     }
     document.head.appendChild(script);
+    analyticsScript = script;
+}
+
+let analyticsScript: HTMLScriptElement | null = null;
+
+/**
+ * Runs `send` once the Umami script has loaded, or at once if it has. For
+ * events sent during startup, which {@link track} would drop. Dropped when
+ * analytics isn't configured or the script fails to load.
+ */
+export function whenAnalyticsReady(send: () => void): void {
+    if (typeof window === 'undefined') return;
+    if (window.umami) {
+        send();
+        return;
+    }
+    analyticsScript?.addEventListener('load', send, { once: true });
 }
 
 /**
@@ -1837,6 +1867,7 @@ export function track(name: 'background-color-changed', data: BackgroundColorCha
 export function track(name: 'info-modal-opened', data: InfoModalOpenedData): void;
 export function track(name: 'info-modal-closed', data: InfoModalClosedData): void;
 export function track(name: 'setting-changed', data: SettingChangedData): void;
+export function track(name: 'effects-resolved', data: EffectsResolvedData): void;
 export function track(name: 'traced-chunk-preload-started', data: TracedChunkPreloadStartedData): void;
 export function track(name: 'traced-chunk-loaded', data: TracedChunkLoadedData): void;
 export function track(name: 'traced-chunk-load-failed', data: TracedChunkLoadFailedData): void;

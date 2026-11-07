@@ -15,8 +15,8 @@ import {
     saveEffectsPreference,
     resolveEffectsLevel,
     applyEffects,
-    currentEffectsLevel,
     usesRings,
+    reportEffectsResolved,
     type EffectsSignals,
 } from './effects.js';
 
@@ -164,22 +164,50 @@ describe('usesRings', () => {
     });
 });
 
-describe('currentEffectsLevel', () => {
+describe('applyEffects return value', () => {
+    it('returns the level it applied', () => {
+        expect(applyEffects('simple')).toBe('simple');
+        expect(applyEffects('full')).toBe('full');
+    });
+});
+
+describe('reportEffectsResolved', () => {
     beforeEach(() => {
         localStorage.clear();
         resetDetectedEffectsLevelForTests();
     });
 
-    it('resolves the saved preference against the detected level', () => {
-        expect(currentEffectsLevel()).toBe('full');
-        saveEffectsPreference('simple');
-        expect(currentEffectsLevel()).toBe('simple');
+    afterEach(() => {
+        delete (window as unknown as { umami?: unknown }).umami;
     });
-});
 
-describe('applyEffects return value', () => {
-    it('returns the level it applied', () => {
-        expect(applyEffects('simple')).toBe('simple');
-        expect(applyEffects('full')).toBe('full');
+    function stubUmami(): ReturnType<typeof vi.fn> {
+        const umamiTrack = vi.fn();
+        (window as unknown as { umami: { track: typeof umamiTrack } }).umami = { track: umamiTrack };
+        return umamiTrack;
+    }
+
+    it('sends the preference it is given, the detected level and the level that resolves to', () => {
+        const umamiTrack = stubUmami();
+
+        reportEffectsResolved('simple');
+
+        expect(umamiTrack).toHaveBeenCalledExactlyOnceWith('effects-resolved', {
+            preference: 'simple',
+            detected: 'full',
+            applied: 'simple',
+        });
+    });
+
+    it('reports the detected level as applied under Auto', () => {
+        const umamiTrack = stubUmami();
+
+        reportEffectsResolved('auto');
+
+        expect(umamiTrack).toHaveBeenCalledExactlyOnceWith('effects-resolved', {
+            preference: 'auto',
+            detected: 'full',
+            applied: 'full',
+        });
     });
 });
