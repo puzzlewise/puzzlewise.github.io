@@ -37,8 +37,6 @@ export interface Renderer {
 
     setGroupDragging(groupId: number, dragging: boolean): void;
 
-    flashMergePulse(groupId: number): void;
-
     setGroupSelected(groupId: number, selected: boolean): void;
 
     setRingsEnabled(enabled: boolean): void;

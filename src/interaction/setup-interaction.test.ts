@@ -69,7 +69,6 @@ function createFakeRenderer(): Renderer {
         enableViewportTransition: vi.fn(),
         disableViewportTransition: vi.fn(),
         setGroupDragging: vi.fn(),
-        flashMergePulse: vi.fn(),
         setGroupSelected: vi.fn(),
         setRingsEnabled: vi.fn(),
         pieceIdFromTarget: vi.fn((t: EventTarget | null) =>

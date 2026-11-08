@@ -498,15 +498,6 @@ html, body {
           drop-shadow(0 0 12px rgba(0, 0, 0, 0.45));
 }
 
-[data-group-id].merge-pulse {
-  animation: merge-pulse 0.25s ease-out;
-}
-
-@keyframes merge-pulse {
-  0%   { filter: brightness(1.2) var(--piece-edge-filter, opacity(1)); }
-  100% { filter: brightness(1) var(--piece-edge-filter, opacity(1)); }
-}
-
 .marquee-box {
   position: fixed;
   pointer-events: none;
