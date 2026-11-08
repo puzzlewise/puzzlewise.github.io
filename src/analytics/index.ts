@@ -13,6 +13,8 @@ export type {
     InfoModalClosedData,
     HelpModalOpenedData,
     HelpModalClosedData,
+    SettingsModalOpenedData,
+    SettingsModalClosedData,
     SettingChangedData,
     EffectsResolvedData,
     TracedChunkPreloadStartedData,

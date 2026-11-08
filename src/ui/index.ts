@@ -144,6 +144,8 @@ export { createInfoModal } from './info-modal.js';
 export type { InfoModalOptions } from './info-modal.js';
 export { createHelpModal } from './help-modal.js';
 export type { HelpModalOptions } from './help-modal.js';
+export { createSettingsModal } from './settings-modal.js';
+export type { SettingsModalOptions } from './settings-modal.js';
 
 export { createCutStylePicker } from './cut-style-picker.js';
 export type { CutStylePickerOptions } from './cut-style-picker.js';

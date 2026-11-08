@@ -82,6 +82,15 @@ describe('createHelpModal', () => {
         expect(firstSection?.classList.contains('share-section')).toBe(true);
     });
 
+    it('gives the share progress checkbox the shared form-checkbox accent class', () => {
+        createHelpModal({ container, state: makeState() });
+
+        const shareCheckbox = container.querySelector<HTMLInputElement>(
+            '[data-testid="share-include-progress"]',
+        );
+        expect(shareCheckbox!.classList.contains('form-checkbox')).toBe(true);
+    });
+
     it('opens without a game', () => {
         expect(() => createHelpModal({ container })).not.toThrow();
 
