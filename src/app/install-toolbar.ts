@@ -52,6 +52,7 @@ export interface InstallToolbarDeps {
     /** Solve the puzzle — the same reference `installDevHooks` assigns to `window.__solvePuzzle` (see the module doc). */
     solve: () => void;
     onEffectsChanged: (preference: string) => void;
+    onOutlineChanged: () => void;
 }
 
 export function installToolbar(deps: InstallToolbarDeps): BackgroundColorControl {
@@ -65,6 +66,7 @@ export function installToolbar(deps: InstallToolbarDeps): BackgroundColorControl
         installBackgroundColorControl,
         solve,
         onEffectsChanged,
+        onOutlineChanged,
     } = deps;
 
     createSelectToolButton({ container, selectionManager });
@@ -120,6 +122,7 @@ export function installToolbar(deps: InstallToolbarDeps): BackgroundColorControl
                 getState: () => session.current(),
                 onSolve: solve,
                 onEffectsChanged,
+                onOutlineChanged,
             });
         },
     });

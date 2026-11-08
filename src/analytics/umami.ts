@@ -472,7 +472,7 @@ export type SettingChangedData =
     | { setting: 'snap-distance' | 'piece-outline' | 'outline-color'; from: string; to: string }
     | { setting: 'effects'; from: string; to: string; detected: EffectsLevel }
     | {
-        setting: 'offset-drag' | 'enclose-to-select' | 'outline-constant-width';
+        setting: 'offset-drag' | 'enclose-to-select' | 'outline-constant-width' | 'outline-inside';
         from: boolean;
         to: boolean;
     };

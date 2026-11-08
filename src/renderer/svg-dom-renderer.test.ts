@@ -997,6 +997,112 @@ describe('SvgDomRenderer', () => {
         });
     });
 
+    describe('inner outline', () => {
+        function innerOutlineOf(groupId: number): SVGSVGElement | null {
+            return container.querySelector<SVGSVGElement>(
+                `[data-group-id="${groupId}"] > svg[data-inner-outline]`,
+            );
+        }
+
+        function innerClipD(groupId: number): string {
+            return innerOutlineOf(groupId)!
+                .querySelector(`clipPath#inner-outline-clip-${groupId} > path`)!
+                .getAttribute('d')!;
+        }
+
+        function makePairState(merged: boolean): GameState {
+            const state = make2x2State();
+            state.pieces[0].edges[1].matePieceId = 1;
+            state.pieces[1].edges[3].matePieceId = 0;
+            if (merged) {
+                state.groups = [makeGroup(0, [0, 1], 50, 50), ...state.groups.slice(2)];
+            }
+            return state;
+        }
+
+        it('builds none unless enabled', () => {
+            renderer.init(container);
+            renderer.renderState(make2x2State());
+
+            expect(container.querySelectorAll('[data-inner-outline]')).toHaveLength(0);
+        });
+
+        it('strokes the group edges above the pieces, clipped to the group outline', () => {
+            renderer.init(container);
+            renderer.setInnerOutlineEnabled(true);
+            renderer.renderState(makePairState(true));
+
+            const overlay = innerOutlineOf(0)!;
+            const groupEl = container.querySelector('[data-group-id="0"]')!;
+            expect(groupEl.lastElementChild).toBe(overlay);
+            const use = overlay.querySelector('use')!;
+            expect(use.getAttribute('href')).toBe('#group-edges-0');
+            expect(use.getAttribute('clip-path')).toBe('url(#inner-outline-clip-0)');
+            expect(innerClipD(0)).toBe('M 0 0 L 100 0 L 200 0 L 200 100 L 100 100 L 0 100 L 0 0 Z');
+        });
+
+        it('clips a lone piece to its own outline', () => {
+            renderer.init(container);
+            renderer.setInnerOutlineEnabled(true);
+            renderer.renderState(make2x2State());
+
+            expect(innerClipD(1)).toBe('M 0 0 L 100 0 L 100 100 L 0 100 L 0 0 Z');
+        });
+
+        it('stays above the pieces and follows the outline when groups merge', () => {
+            renderer.init(container);
+            renderer.setInnerOutlineEnabled(true);
+            renderer.renderState(makePairState(false));
+            renderer.renderState(makePairState(true));
+
+            const groupEl = container.querySelector('[data-group-id="0"]')!;
+            expect(groupEl.querySelectorAll('[data-inner-outline]')).toHaveLength(1);
+            expect(groupEl.lastElementChild).toBe(innerOutlineOf(0));
+            expect(innerClipD(0)).toBe('M 0 0 L 100 0 L 200 0 L 200 100 L 100 100 L 0 100 L 0 0 Z');
+        });
+
+        it('moves nothing on later renders of an unchanged group', () => {
+            renderer.init(container);
+            renderer.setInnerOutlineEnabled(true);
+            renderer.renderState(makePairState(true));
+            const groupEl = container.querySelector('[data-group-id="0"]')!;
+            const observer = new MutationObserver(() => {});
+            observer.observe(groupEl, { childList: true, subtree: true, attributes: true });
+
+            renderer.renderState(makePairState(true));
+
+            expect(observer.takeRecords()).toEqual([]);
+            observer.disconnect();
+        });
+
+        it('applies a change of the setting on the next render', () => {
+            renderer.init(container);
+            renderer.renderState(make2x2State());
+
+            renderer.setInnerOutlineEnabled(true);
+            renderer.renderState(make2x2State());
+            expect(container.querySelectorAll('[data-inner-outline]')).toHaveLength(4);
+
+            renderer.setInnerOutlineEnabled(false);
+            renderer.renderState(make2x2State());
+            expect(container.querySelectorAll('[data-inner-outline]')).toHaveLength(0);
+        });
+
+        it('marks the table while it draws inner outlines, so CSS hides the centered stroke', () => {
+            renderer.init(container);
+            const table = container.querySelector('[data-puzzle-table]')!;
+
+            renderer.setInnerOutlineEnabled(true);
+            expect(table.hasAttribute('data-outline-inside')).toBe(false);
+            renderer.renderState(make2x2State());
+            expect(table.hasAttribute('data-outline-inside')).toBe(true);
+
+            renderer.setInnerOutlineEnabled(false);
+            renderer.renderState(make2x2State());
+            expect(table.hasAttribute('data-outline-inside')).toBe(false);
+        });
+    });
+
     describe('outline underlay', () => {
         function underlayOf(groupId: number): SVGSVGElement {
             return container.querySelector<SVGSVGElement>(

@@ -395,14 +395,36 @@ html, body {
 
 /* Stroked on the wrapper, not the paths: rules matching the paths also apply
    inside each ring's <use>, which then couldn't set its own stroke. */
-[data-edge-outline] {
-  display: none;
+[data-edge-outline],
+[data-inner-outline] use {
   stroke: var(--piece-outline-color, #080808);
   stroke-width: calc(3px * var(--outline-stroke-scale, 1));
 }
 
+[data-edge-outline] {
+  display: none;
+}
+
 [data-piece-outline="outline"] [data-edge-outline] {
   display: inline;
+}
+
+[data-puzzle-table][data-outline-inside] [data-edge-outline] {
+  display: none;
+}
+
+[data-inner-outline] {
+  position: absolute;
+  left: 0;
+  top: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+[data-inner-outline] use {
+  fill: none;
+  stroke-linejoin: round;
+  stroke-linecap: round;
 }
 
 [data-outline-underlay] path {
@@ -418,7 +440,8 @@ html, body {
   stroke-linecap: round;
 }
 
-[data-outline-constant-width] [data-outline-underlay] {
+[data-outline-constant-width] [data-outline-underlay],
+[data-outline-constant-width] [data-inner-outline] {
   --outline-stroke-scale: var(--outline-zoom-comp, 1);
 }
 
@@ -1219,7 +1242,7 @@ html, body {
   display: none;
 }
 
-.outline-width-row {
+.outline-option-row {
   margin-top: 8px;
 }
 

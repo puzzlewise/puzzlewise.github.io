@@ -25,6 +25,8 @@ import {
     loadEffectsPreference,
     usesRings,
     reportEffectsResolved,
+    loadPieceOutlinePreference,
+    loadOutlineInsidePreference,
 } from '../ui/index.js';
 import { SelectionManager } from '../interaction/selection-manager.js';
 import type { NewGameData, ReplacedGameData } from '../analytics/index.js';
@@ -97,6 +99,12 @@ export function bootstrap(
     const effectsPreference = loadEffectsPreference();
     setEffects(effectsPreference);
     reportEffectsResolved(effectsPreference);
+    const syncInnerOutline = (): void => {
+        renderer.setInnerOutlineEnabled(
+            loadPieceOutlinePreference() === 'outline' && loadOutlineInsidePreference(),
+        );
+    };
+    syncInnerOutline();
 
     const selectionManager = new SelectionManager();
 
@@ -377,6 +385,10 @@ export function bootstrap(
         installBackgroundColorControl: (toolbar) => installBackgroundColor({ container: toolbar }),
         solve,
         onEffectsChanged: setEffects,
+        onOutlineChanged: () => {
+            syncInnerOutline();
+            viewportFitDeps.renderCurrent();
+        },
     });
 
     /**

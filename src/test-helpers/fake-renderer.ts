@@ -26,6 +26,7 @@ export interface FakeRenderer extends Renderer {
     setGroupDragging: Mock<Renderer['setGroupDragging']>;
     setGroupSelected: Mock<Renderer['setGroupSelected']>;
     setRingsEnabled: Mock<Renderer['setRingsEnabled']>;
+    setInnerOutlineEnabled: Mock<Renderer['setInnerOutlineEnabled']>;
     pieceIdFromTarget: Mock<Renderer['pieceIdFromTarget']>;
     pieceIdAtPoint: Mock<Renderer['pieceIdAtPoint']>;
     photoSettled: Mock<Renderer['photoSettled']>;
@@ -44,6 +45,7 @@ export function createFakeRenderer(): FakeRenderer {
         setGroupDragging: vi.fn(),
         setGroupSelected: vi.fn(),
         setRingsEnabled: vi.fn(),
+        setInnerOutlineEnabled: vi.fn(),
         pieceIdFromTarget: vi.fn<Renderer['pieceIdFromTarget']>(() => null),
         pieceIdAtPoint: vi.fn<Renderer['pieceIdAtPoint']>(() => null),
         photoSettled: vi.fn(() => new Promise<'loaded' | 'failed'>(() => {})),

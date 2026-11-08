@@ -223,6 +223,32 @@ describe('outline underlay CSS', () => {
         expect(styleCss.match(/stroke-width:[^;]*3px/g)).toHaveLength(1);
     });
 
+    it('strokes the inner outline like the underlay, unfilled and ignoring pointers', () => {
+        expect(declarationsFor(styleCss, '[data-inner-outline] use')).toMatch(
+            /stroke-width:\s*calc\(3px \* var\(--outline-stroke-scale, 1\)\)/,
+        );
+        expect(declarationsFor(styleCss, '[data-inner-outline] use')).toMatch(
+            /stroke:\s*var\(--piece-outline-color, #080808\)/,
+        );
+        expect(declarationsFor(styleCss, '[data-inner-outline] use')).toMatch(/fill:\s*none/);
+        const body = declarationsFor(styleCss, '[data-inner-outline]');
+        expect(body).toMatch(/overflow:\s*visible/);
+        expect(body).toMatch(/pointer-events:\s*none/);
+        expect(body).toMatch(/position:\s*absolute/);
+    });
+
+    it('hides the underlay stroke while the outline is drawn inside', () => {
+        expect(
+            declarationsFor(styleCss, '[data-puzzle-table][data-outline-inside] [data-edge-outline]'),
+        ).toMatch(/display:\s*none/);
+    });
+
+    it('scales the inner outline by the zoom compensation in constant-width mode', () => {
+        expect(
+            declarationsFor(styleCss, '[data-outline-constant-width] [data-inner-outline]'),
+        ).toMatch(/--outline-stroke-scale:\s*var\(--outline-zoom-comp, 1\)/);
+    });
+
     it('scales the stroke by the zoom compensation only in constant-width mode', () => {
         expect(declarationsFor(styleCss, '[data-outline-underlay]')).not.toMatch(
             /--outline-zoom-comp/,

@@ -507,6 +507,44 @@ describe('bootstrap', () => {
         expect(document.documentElement.dataset.effects).toBe('simple');
     });
 
+    it.each([
+        ['outline', true],
+        ['shadow', false],
+    ])('with %s drawn inside, sets the renderer inner outline to %s at boot', (style, expected) => {
+        localStorage.setItem('puzzle-piece-outline', style);
+        localStorage.setItem('puzzle-outline-inside', 'true');
+        const setInnerOutlineEnabled = vi.spyOn(SvgDomRenderer.prototype, 'setInnerOutlineEnabled');
+        onTestFinished(() => setInnerOutlineEnabled.mockRestore());
+
+        bootstrap(root);
+
+        expect(setInnerOutlineEnabled).toHaveBeenLastCalledWith(expected);
+    });
+
+    it('applies a draw-inside change from the settings modal to the current game', () => {
+        localStorage.setItem('puzzle-piece-outline', 'outline');
+        const setInnerOutlineEnabled = vi.spyOn(SvgDomRenderer.prototype, 'setInnerOutlineEnabled');
+        const renderState = vi.spyOn(SvgDomRenderer.prototype, 'renderState');
+        onTestFinished(() => {
+            setInnerOutlineEnabled.mockRestore();
+            renderState.mockRestore();
+        });
+        bootstrap(root);
+        const state = makeGameState();
+        createdSession().install(state);
+        renderState.mockClear();
+
+        root.querySelector<HTMLButtonElement>('.settings-button')!.click();
+        const toggle = root.querySelector<HTMLInputElement>('[data-testid="outline-inside-toggle"]')!;
+        toggle.checked = true;
+        toggle.dispatchEvent(new Event('change'));
+
+        expect(setInnerOutlineEnabled).toHaveBeenLastCalledWith(true);
+        expect(renderState).toHaveBeenLastCalledWith(state);
+        expect(setInnerOutlineEnabled.mock.invocationCallOrder.at(-1)!)
+            .toBeLessThan(renderState.mock.invocationCallOrder.at(-1)!);
+    });
+
     it('puts the background-color control in the right-hand toolbar, between Gather and Help', () => {
         // `install-toolbar.test.ts` pins the full order with a stand-in
         // control; this checks the real picker lands in the toolbar.
