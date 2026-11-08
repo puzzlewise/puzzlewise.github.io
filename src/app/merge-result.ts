@@ -61,7 +61,6 @@ export function applyMergeResult(
     }
 
     renderer.renderState(state);
-    renderer.flashMergePulse(result.group.id);
     for (const selectedId of selectionManager.selectedGroupIds) {
         renderer.setGroupSelected(selectedId, true);
     }

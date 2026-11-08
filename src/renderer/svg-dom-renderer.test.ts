@@ -643,27 +643,6 @@ describe('SvgDomRenderer', () => {
         });
     });
 
-    describe('flashMergePulse', () => {
-        it('adds the merge-pulse class to the group element', () => {
-            renderer.init(container);
-            const state = make2x2State();
-            renderer.renderState(state);
-
-            renderer.flashMergePulse(0);
-
-            const groupEl = container.querySelector('[data-group-id="0"]')!;
-            expect(groupEl.classList.contains('merge-pulse')).toBe(true);
-        });
-
-        it('is a no-op for non-existent group ids', () => {
-            renderer.init(container);
-            const state = make2x2State();
-            renderer.renderState(state);
-
-            renderer.flashMergePulse(999);
-        });
-    });
-
     describe('pieceIdFromTarget', () => {
         it('returns the piece id when target is the SVG element itself', () => {
             renderer.init(container);

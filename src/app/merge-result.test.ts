@@ -157,14 +157,13 @@ describe('applyMergeResult', () => {
         expect(rotationFocus.focusedGroupId).toBe(otherGroup.id);
     });
 
-    it('re-renders and pulses the merged group', () => {
+    it('re-renders the merged group', () => {
         const state = makeTwoGroupState();
         const survivor = state.groups[0];
 
         applyMergeResult(state, { group: survivor, mergeCount: 1 }, [survivor.id], deps());
 
         expect(renderer.renderState).toHaveBeenCalledWith(state);
-        expect(renderer.flashMergePulse).toHaveBeenCalledWith(survivor.id);
     });
 
     it('re-applies the selection highlight for every surviving selected group after the re-render', () => {

@@ -259,22 +259,6 @@ export class SvgDomRenderer implements Renderer {
         }
     }
 
-    flashMergePulse(groupId: number): void {
-        const el = this.groupElements.get(groupId);
-        if (!el) return;
-
-        el.classList.remove('merge-pulse');
-        // Force a reflow so re-adding the class restarts the animation.
-        void el.offsetWidth;
-        el.classList.add('merge-pulse');
-
-        el.addEventListener(
-            'animationend',
-            () => el.classList.remove('merge-pulse'),
-            { once: true },
-        );
-    }
-
     pieceIdFromTarget(target: EventTarget | null): number | null {
         if (!(target instanceof Element)) return null;
         const svg = target.closest('svg[data-piece-id]') as SVGElement | null;

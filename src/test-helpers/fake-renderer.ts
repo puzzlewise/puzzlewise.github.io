@@ -24,7 +24,6 @@ export interface FakeRenderer extends Renderer {
     enableViewportTransition: Mock<Renderer['enableViewportTransition']>;
     disableViewportTransition: Mock<Renderer['disableViewportTransition']>;
     setGroupDragging: Mock<Renderer['setGroupDragging']>;
-    flashMergePulse: Mock<Renderer['flashMergePulse']>;
     setGroupSelected: Mock<Renderer['setGroupSelected']>;
     setRingsEnabled: Mock<Renderer['setRingsEnabled']>;
     pieceIdFromTarget: Mock<Renderer['pieceIdFromTarget']>;
@@ -43,7 +42,6 @@ export function createFakeRenderer(): FakeRenderer {
         enableViewportTransition: vi.fn(),
         disableViewportTransition: vi.fn(),
         setGroupDragging: vi.fn(),
-        flashMergePulse: vi.fn(),
         setGroupSelected: vi.fn(),
         setRingsEnabled: vi.fn(),
         pieceIdFromTarget: vi.fn<Renderer['pieceIdFromTarget']>(() => null),
