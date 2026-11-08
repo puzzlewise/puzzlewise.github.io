@@ -300,8 +300,8 @@ describe('seam fill CSS', () => {
     });
 });
 
-function pxValue(selector: string, property: string): number {
-    const match = new RegExp(`\\s${property}:\\s*(\\d+)(?:px)?\\s*;`).exec(declarationsFor(styleCss, selector));
+function pxValue(selector: string, property: string, css = styleCss): number {
+    const match = new RegExp(`\\s${property}:\\s*(\\d+)(?:px)?\\s*;`).exec(declarationsFor(css, selector));
     expect(match, `${selector} ${property}`).not.toBeNull();
     return Number(match![1]);
 }
@@ -311,6 +311,24 @@ describe('overlay stacking', () => {
         const completion = pxValue('.completion-overlay', 'z-index');
         expect(completion).toBeGreaterThanOrEqual(pxValue('.info-modal-overlay', 'z-index'));
         expect(completion).toBeGreaterThanOrEqual(pxValue('.size-picker-overlay', 'z-index'));
+    });
+});
+
+function mediaBody(query: string): string {
+    const start = styleCss.indexOf(`@media ${query}`);
+    expect(start, query).toBeGreaterThanOrEqual(0);
+    const open = styleCss.indexOf('{', start);
+    return styleCss.slice(open + 1, matchingBrace(styleCss, open));
+}
+
+describe('toolbar stack', () => {
+    it.each([
+        ['the default layout', styleCss],
+        ['short landscape', mediaBody('(max-height: 400px)')],
+    ])('stacks the settings button below help in %s', (_, css) => {
+        expect(pxValue('.settings-button', 'top', css)).toBeGreaterThanOrEqual(
+            pxValue('.help-button', 'top', css) + pxValue('.help-button', 'height', css),
+        );
     });
 });
 

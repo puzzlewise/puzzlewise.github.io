@@ -3,60 +3,68 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { createInfoButton } from './info-button.js';
+import { createHelpButton } from './help-button.js';
 
-describe('createInfoButton', () => {
+describe('createHelpButton', () => {
     let container: HTMLElement;
-    let onShowInfo: ReturnType<typeof vi.fn<() => void>>;
+    let onShowHelp: ReturnType<typeof vi.fn<() => void>>;
 
     beforeEach(() => {
         container = document.createElement('div');
-        onShowInfo = vi.fn<() => void>();
+        onShowHelp = vi.fn<() => void>();
     });
 
     it('should add a button to the container', () => {
-        createInfoButton({ container, onShowInfo });
+        createHelpButton({ container, onShowHelp });
 
         const button = container.querySelector('button');
         expect(button).not.toBeNull();
     });
 
     it('should have the correct class name', () => {
-        createInfoButton({ container, onShowInfo });
+        createHelpButton({ container, onShowHelp });
 
         const button = container.querySelector('button');
-        expect(button!.className).toBe('info-button');
+        expect(button!.className).toBe('help-button');
+    });
+
+    it('shows ❓ with the title Help', () => {
+        createHelpButton({ container, onShowHelp });
+
+        const button = container.querySelector('button')!;
+        expect(button.textContent).toBe('❓');
+        expect(button.title).toBe('Help');
     });
 
     it('should have type="button"', () => {
-        createInfoButton({ container, onShowInfo });
+        createHelpButton({ container, onShowHelp });
 
         const button = container.querySelector('button')!;
         expect(button.type).toBe('button');
     });
 
-    it('should call onShowInfo when clicked', () => {
-        createInfoButton({ container, onShowInfo });
+    it('should call onShowHelp when clicked', () => {
+        createHelpButton({ container, onShowHelp });
 
         const button = container.querySelector('button')!;
         button.click();
 
-        expect(onShowInfo).toHaveBeenCalledOnce();
+        expect(onShowHelp).toHaveBeenCalledOnce();
     });
 
-    it('should call onShowInfo on each click', () => {
-        createInfoButton({ container, onShowInfo });
+    it('should call onShowHelp on each click', () => {
+        createHelpButton({ container, onShowHelp });
 
         const button = container.querySelector('button')!;
         button.click();
         button.click();
         button.click();
 
-        expect(onShowInfo).toHaveBeenCalledTimes(3);
+        expect(onShowHelp).toHaveBeenCalledTimes(3);
     });
 
     it('should remove button on cleanup', () => {
-        const cleanup = createInfoButton({ container, onShowInfo });
+        const cleanup = createHelpButton({ container, onShowHelp });
 
         expect(container.querySelector('button')).not.toBeNull();
 
@@ -66,13 +74,13 @@ describe('createInfoButton', () => {
     });
 
     it('should not respond to clicks after cleanup', () => {
-        const cleanup = createInfoButton({ container, onShowInfo });
+        const cleanup = createHelpButton({ container, onShowHelp });
 
         const button = container.querySelector('button')!;
         cleanup();
 
         button.click();
 
-        expect(onShowInfo).not.toHaveBeenCalled();
+        expect(onShowHelp).not.toHaveBeenCalled();
     });
 });

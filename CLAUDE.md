@@ -178,14 +178,16 @@ that work — all of it waste, and it crowded out the genuine findings.
 
 ## Keep the in-app help text correct
 
-The info modal (`src/ui/info-modal.ts`) is the only in-app place where the
+The help modal (`src/ui/help-modal.ts`) is the only in-app place where the
 player learns how the app works — there is no separate README shown in the
-UI. The goal is a **short, useful** modal: explain the things a player might
-actually need explained, and leave out what they'd already expect.
+UI — and each setting in the settings modal (`src/ui/settings-modal.ts`)
+carries its own description. The goal is a **short, useful** modal: explain
+the things a player might actually need explained, and leave out what they'd
+already expect.
 
 The requirement is that the help text stays **correct**, not that every
 user-visible behaviour is documented. When a change makes an existing
-sentence in the **How to Play** or **Settings** sections
+sentence in the **How to Play** section or a setting's description
 wrong or misleading, fix it in the same PR. When a change removes a feature
 the modal describes, remove that description too.
 

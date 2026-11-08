@@ -9,8 +9,6 @@ export type {
     PuzzleSolvedData,
     PuzzleSharedData,
     BackgroundColorChangedData,
-    InfoModalOpenedData,
-    InfoModalClosedData,
     HelpModalOpenedData,
     HelpModalClosedData,
     SettingsModalOpenedData,
