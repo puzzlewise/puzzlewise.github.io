@@ -134,14 +134,14 @@ export type {
     SwatchPickerHandle,
 } from './swatch-picker.js';
 
-export { createInfoButton } from './info-button.js';
-export type { InfoButtonOptions } from './info-button.js';
+export { createHelpButton } from './help-button.js';
+export type { HelpButtonOptions } from './help-button.js';
+export { createSettingsButton } from './settings-button.js';
+export type { SettingsButtonOptions } from './settings-button.js';
 
 export { createToolbarButton } from './toolbar-button.js';
 export type { ToolbarButtonOptions } from './toolbar-button.js';
 
-export { createInfoModal } from './info-modal.js';
-export type { InfoModalOptions } from './info-modal.js';
 export { createHelpModal } from './help-modal.js';
 export type { HelpModalOptions } from './help-modal.js';
 export { createSettingsModal } from './settings-modal.js';

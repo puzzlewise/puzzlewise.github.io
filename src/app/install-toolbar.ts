@@ -3,7 +3,7 @@
  * by explicit `top`/`right`), so keyboard tab order comes from append order,
  * not visual position — see `installBackgroundColorControl` for the constraint.
  *
- * The info modal's Solve button receives `solve` as a dependency instead of a
+ * The settings modal's Solve button receives `solve` as a dependency instead of a
  * `window.__solvePuzzle` lookup at click time (the one sanctioned behavior
  * change in this refactor). `bootstrap` binds `dev-hooks.ts`'s `solvePuzzle`
  * once and passes it here and to `installDevHooks`, so the button and console
@@ -17,8 +17,10 @@ import {
     createSelectToolButton,
     createMarqueeToolButton,
     createDeselectButton,
-    createInfoButton,
-    createInfoModal,
+    createHelpButton,
+    createHelpModal,
+    createSettingsButton,
+    createSettingsModal,
 } from '../ui/index.js';
 import type { SelectionManager } from '../interaction/selection-manager.js';
 import type { BackgroundColorControl } from './install-background-color.js';
@@ -28,7 +30,7 @@ export interface InstallToolbarDeps {
     container: HTMLElement;
     /**
      * Read-only slice of {@link GameSession}: the toolbar reports on the
-     * installed game and hands the info modal a getter, but never installs one
+     * installed game and hands the settings modal a getter, but never installs one
      * — starting a game is `onNewGame`'s business.
      */
     session: Pick<GameSession, 'current'>;
@@ -40,7 +42,7 @@ export interface InstallToolbarDeps {
     /**
      * Install the 🎨 background-color control (bound by the caller — this
      * module owns *when* the picker's DOM lands, not the picker). Invoked
-     * between deselect and Info so DOM order matches the on-screen top-to-bottom
+     * between deselect and Help so DOM order matches the on-screen top-to-bottom
      * stack and Tab visits the controls in reaching order.
      *
      * Its handle is returned from {@link installToolbar} rather than captured
@@ -101,13 +103,19 @@ export function installToolbar(deps: InstallToolbarDeps): BackgroundColorControl
 
     const backgroundColor = installBackgroundColorControl();
 
-    createInfoButton({
+    createHelpButton({
         container,
-        onShowInfo: () => {
-            createInfoModal({
+        onShowHelp: () => {
+            createHelpModal({ container, state: session.current() });
+        },
+    });
+
+    createSettingsButton({
+        container,
+        onShowSettings: () => {
+            createSettingsModal({
                 container,
                 getState: () => session.current(),
-                state: session.current(),
                 onSolve: solve,
                 onEffectsChanged,
             });

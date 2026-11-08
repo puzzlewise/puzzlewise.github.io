@@ -1,6 +1,6 @@
 /**
  * Derives from `buildReproParams`, not `GameState` directly, so the event and
- * the info modal's repro block cannot drift — a Umami row pastes straight into
+ * the settings modal's repro block cannot drift — a Umami row pastes straight into
  * `__reproPuzzle`. Three divergences from the modal, all documented on
  * `PieceCountMismatchData`: `imageUrl` dropped; `seed` normalized to uint32;
  * `imageWidth`/`imageHeight` rounded to Umami's 4-decimal precision.

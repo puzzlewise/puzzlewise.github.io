@@ -90,7 +90,7 @@ export interface DevHooksDeps {
     start: (gridSize: GridSize, options: StartNewGameOptions) => Promise<void>;
     loadShared: (payload: SharePayload, savedState: GameState | undefined) => Promise<void>;
     /**
-     * Injected, not built here, so `window.__solvePuzzle` and the info modal's
+     * Injected, not built here, so `window.__solvePuzzle` and the settings modal's
      * Solve button are the same reference — otherwise an edit to either
      * `onSolved` would silently desync them.
      */
@@ -98,7 +98,7 @@ export interface DevHooksDeps {
 }
 
 export function installDevHooks(deps: DevHooksDeps): void {
-    // The same reference the info modal's Solve button calls.
+    // The same reference the settings modal's Solve button calls.
     (window as { __solvePuzzle?: unknown }).__solvePuzzle = deps.solve;
 
     /**
@@ -176,7 +176,7 @@ export function installDevHooks(deps: DevHooksDeps): void {
     };
 
     /**
-     * Dev-console hook: regenerate a puzzle from the info modal's
+     * Dev-console hook: regenerate a puzzle from the settings modal's
      * "Reproduction parameters" JSON. The params run through the share codec's
      * validation and clamps and the share-link load path, so semantics match a
      * share link exactly. `imageUrl: 'blank'` (or absent) renders blank at the

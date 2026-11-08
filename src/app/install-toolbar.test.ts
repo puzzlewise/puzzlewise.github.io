@@ -47,7 +47,7 @@ describe('installToolbar', () => {
         };
     }
 
-    it('creates all six toolbar entries in the container', () => {
+    it('creates all seven toolbar entries in the container', () => {
         installToolbar(deps());
         const selectors = [
             '.new-game-button',
@@ -55,14 +55,15 @@ describe('installToolbar', () => {
             '.select-tool-button',
             '.marquee-tool-button',
             '.deselect-button',
-            '.info-button',
+            '.help-button',
+            '.settings-button',
         ];
         for (const selector of selectors) {
             expect(container.querySelector(selector), selector).not.toBeNull();
         }
     });
 
-    it('keeps the background-color control between deselect and Info in DOM order', () => {
+    it('keeps the background-color control between deselect and Help in DOM order', () => {
         // These controls are absolutely positioned in one stack (src/style.css),
         // so DOM order alone sets keyboard tab order; it must match the visual
         // top-to-bottom order asserted below.
@@ -82,13 +83,14 @@ describe('installToolbar', () => {
             'marquee-tool-button',
             'deselect-button',
             'background-color-marker',
-            'info-button',
+            'help-button',
+            'settings-button',
         ]);
     });
 
     it('hands back the background-color handle it installed', () => {
         // The root needs the handle for the share path but wants the picker's
-        // DOM here, between deselect and Info. Returning it lets the root use a
+        // DOM here, between deselect and Help. Returning it lets the root use a
         // plain `const` — a callback-assigned binding would need a
         // definite-assignment assertion and be silently `undefined` if this
         // call stopped invoking the dependency.
@@ -156,21 +158,29 @@ describe('installToolbar', () => {
         expect(selectionManager.selectedGroupIds).toEqual(new Set([2, 5]));
     });
 
-    it('wires onEffectsChanged into the info modal Effects setting', () => {
+    it('opens the help modal from the help button', () => {
+        installToolbar(deps());
+
+        container.querySelector<HTMLButtonElement>('.help-button')!.click();
+
+        expect(container.querySelector('.info-modal-title')!.textContent).toBe('Help');
+    });
+
+    it('wires onEffectsChanged into the settings modal Effects setting', () => {
         const onEffectsChanged = vi.fn();
         installToolbar(deps({ onEffectsChanged }));
 
-        container.querySelector<HTMLButtonElement>('.info-button')!.click();
+        container.querySelector<HTMLButtonElement>('.settings-button')!.click();
         container.querySelector<HTMLButtonElement>('[data-testid="effects-simple"]')!.click();
 
         expect(onEffectsChanged).toHaveBeenCalledExactlyOnceWith('simple');
     });
 
-    it('wires solve into the info modal Solve button rather than a window lookup', () => {
+    it('wires solve into the settings modal Solve button rather than a window lookup', () => {
         const solve = vi.fn();
         installToolbar(deps({ solve }));
 
-        container.querySelector<HTMLButtonElement>('.info-button')!.click();
+        container.querySelector<HTMLButtonElement>('.settings-button')!.click();
         const solveBtn = container.querySelector<HTMLButtonElement>('.info-modal-solve-btn');
         expect(solveBtn).not.toBeNull();
         solveBtn!.click();

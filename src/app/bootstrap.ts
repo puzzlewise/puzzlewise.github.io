@@ -323,7 +323,7 @@ export function bootstrap(
     };
 
     /**
-     * One solve binding, shared by `window.__solvePuzzle` and the info modal's
+     * One solve binding, shared by `window.__solvePuzzle` and the settings modal's
      * Solve button and handed to both `installDevHooks` and `installToolbar`.
      * While each owned its own `solvePuzzle` call an edit to either `onSolved`
      * would silently desync the console hook from the button.

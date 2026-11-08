@@ -494,20 +494,20 @@ describe('bootstrap', () => {
         expect(calls).toEqual([['effects-resolved', { preference: 'simple', detected: 'full', applied: 'simple' }]]);
     });
 
-    it('routes an Effects change from the info modal to the renderer', () => {
+    it('routes an Effects change from the settings modal to the renderer', () => {
         const setRingsEnabled = vi.spyOn(SvgDomRenderer.prototype, 'setRingsEnabled');
         onTestFinished(() => setRingsEnabled.mockRestore());
         bootstrap(root);
         expect(setRingsEnabled).toHaveBeenLastCalledWith(false);
 
-        root.querySelector<HTMLButtonElement>('.info-button')!.click();
+        root.querySelector<HTMLButtonElement>('.settings-button')!.click();
         root.querySelector<HTMLButtonElement>('[data-testid="effects-simple"]')!.click();
 
         expect(setRingsEnabled).toHaveBeenLastCalledWith(true);
         expect(document.documentElement.dataset.effects).toBe('simple');
     });
 
-    it('keeps the background-color control between deselect and Info', () => {
+    it('keeps the background-color control between deselect and Help, then Settings', () => {
         // The controls are absolutely positioned in one stack, so DOM order
         // sets keyboard tab order (WCAG 2.4.3). `install-toolbar.test.ts` pins
         // the full order; this checks the DOM `bootstrap` builds.
@@ -516,10 +516,12 @@ describe('bootstrap', () => {
         const classNames = [...root.children].map((el) => el.className);
         const deselect = classNames.indexOf('deselect-button');
         const picker = classNames.indexOf('bg-color-button');
-        const info = classNames.indexOf('info-button');
+        const help = classNames.indexOf('help-button');
+        const settings = classNames.indexOf('settings-button');
         expect(deselect, 'deselect button').toBeGreaterThanOrEqual(0);
         expect(picker, 'background-color button').toBeGreaterThan(deselect);
-        expect(info, 'info button').toBeGreaterThan(picker);
+        expect(help, 'help button').toBeGreaterThan(picker);
+        expect(settings, 'settings button').toBeGreaterThan(help);
     });
 
     it('hands the background-color handle to the share-link load path', () => {
@@ -1053,7 +1055,8 @@ describe('bootstrap', () => {
         bootstrap(root);
 
         expect(root.querySelector('.new-game-button')).not.toBeNull();
-        expect(root.querySelector('.info-button')).not.toBeNull();
+        expect(root.querySelector('.help-button')).not.toBeNull();
+        expect(root.querySelector('.settings-button')).not.toBeNull();
     });
 
     it('falls back to #app when no root is given', () => {

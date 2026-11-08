@@ -427,13 +427,13 @@ html, body {
   pointer-events: none;
 }
 
-/* Debug piece opacity — controlled via the info-modal slider */
+/* Debug piece opacity */
 [data-piece-id] image,
 [data-piece-blank] {
   opacity: var(--piece-opacity);
 }
 
-/* Debug mateless edge overlay — hidden by default, toggled via info-modal */
+/* Debug mateless edge overlay — hidden by default */
 [data-mateless-edge] {
   display: none;
 }
@@ -442,7 +442,7 @@ html, body {
   display: block;
 }
 
-/* Debug piece view — hidden by default, toggled via info-modal */
+/* Debug piece view — hidden by default */
 [data-piece-fill],
 [data-piece-label],
 [data-piece-up] {
@@ -999,7 +999,7 @@ html, body {
 
 /*
  * Shared checkbox styling for form controls across dialogs (New Game dialog
- * and info modal). A single class governs both size and accent so checkboxes
+ * and help and settings modals). A single class governs both size and accent so checkboxes
  * match everywhere. Uses the same purple accent as the other dialog inputs so
  * the native check contrasts clearly in both light and dark UI schemes.
  */
@@ -1200,7 +1200,7 @@ html, body {
   border-color: var(--ui-accent);
 }
 
-/* Piece-outline color picker — lives inline inside the info modal's
+/* Piece-outline color picker — lives inline inside the settings modal's
    Piece-outline setting (unlike the toolbar background button, so it is
    NOT absolutely positioned). The trigger button previews the current
    outline color as its own background; the popover anchors to the row. */
@@ -1248,9 +1248,9 @@ html, body {
   z-index: 10000;
 }
 
-.info-button {
+.help-button,
+.settings-button {
   position: absolute;
-  top: 135px;
   right: 12px;
   z-index: 9999;
   width: 36px;
@@ -1272,12 +1272,17 @@ html, body {
   -webkit-user-select: none;
 }
 
-.info-button:hover {
+.help-button { top: 135px; }
+.settings-button { top: 178px; }
+
+.help-button:hover,
+.settings-button:hover {
   background: var(--ui-control-scrim-hover);
   border-color: var(--ui-border-hover);
 }
 
-.info-button:active {
+.help-button:active,
+.settings-button:active {
   background: var(--ui-control-scrim-active);
 }
 
@@ -1601,14 +1606,17 @@ details.info-section[open] > .info-section-summary {
   .bg-color-button { top: 64px; right: 8px; }
   .bg-color-panel { top: 64px; right: 8px; }
 
-  .info-button {
-    top: 88px;
+  .help-button,
+  .settings-button {
     right: 8px;
     width: 32px;
     height: 32px;
     font-size: 0.9rem;
     line-height: 32px;
   }
+
+  .help-button { top: 88px; }
+  .settings-button { top: 124px; }
 
   .select-tool-button {
     top: 8px;

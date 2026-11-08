@@ -422,26 +422,6 @@ export interface BackgroundColorChangedData {
     to: string;
 }
 
-export type InfoModalOpenedData = Record<string, never>;
-
-/**
- * Not sent when the page unloads or the app is killed with the modal open,
- * so `info-modal-opened` minus this counts those.
- *
- * `seenPercent` (0–100) is how far down the content was on screen at some
- * point, as a share of its height: the share visible on open if never
- * scrolled, 100 once the bottom was reached. An expanded Debug section
- * counts toward the height from then on.
- */
-export interface InfoModalClosedData {
-    closedBy: 'button' | 'backdrop' | 'escape' | 'solve';
-    /** Wall-clock, background time included. */
-    openMs: number;
-    seenPercent: number;
-    scrolled: boolean;
-    debugOpened: boolean;
-}
-
 export type HelpModalOpenedData = Record<string, never>;
 
 /**
@@ -687,7 +667,7 @@ export interface CspViolationData {
  * `source` separates the two producers, whose base rates differ sharply.
  * `'shared'` is a real recipient opening a `#p=` link and seeing a
  * "Couldn't load shared puzzle" toast — the signal that watches for
- * share-format regressions. `'repro'` is a developer replaying an info-modal
+ * share-format regressions. `'repro'` is a developer replaying a
  * repro block through `__reproPuzzle` in the console, where a generation
  * failure is often the very thing being investigated, so it is an expected
  * outcome rather than user-facing breakage. Without the discriminator the
@@ -1084,7 +1064,7 @@ export interface NewGameFailedData {
  *
  * The event exists to be ACTED on, not just counted: `seed`, `cutStyle`,
  * `cols`, `rows`, `imageWidth`, `imageHeight`, `rotationMode` and
- * `styleConfig` are exactly the repro params the info modal prints — and
+ * `styleConfig` are exactly the repro params the settings modal prints — and
  * that `cutStyle` is not attribution-only: `reproParamsToPayload` throws
  * without it (`repro-params.ts`), so a row missing it from this list would
  * lead an operator to reassemble a `__reproPuzzle` call that fails. A row
@@ -1275,7 +1255,7 @@ export interface PieceCountMismatchData {
      * Umami would round or reject. The normalization is a no-op for every real
      * seed and preserves the PRNG stream for the crafted ones, so the value
      * here always replays the puzzle it describes. It is therefore NOT
-     * guaranteed to equal the seed the info modal's "Reproduction parameters"
+     * guaranteed to equal the seed the settings modal's "Reproduction parameters"
      * block prints for the same puzzle — the modal prints `state.seed` raw.
      * They agree on every real and every legitimate share-link seed; they can
      * disagree only on a crafted one, and both still replay the same puzzle.
@@ -1907,8 +1887,6 @@ export function track(name: 'puzzle-completed', data: PuzzleCompletedData): void
 export function track(name: 'puzzle-solved', data: PuzzleSolvedData): void;
 export function track(name: 'puzzle-shared', data: PuzzleSharedData): void;
 export function track(name: 'background-color-changed', data: BackgroundColorChangedData): void;
-export function track(name: 'info-modal-opened', data: InfoModalOpenedData): void;
-export function track(name: 'info-modal-closed', data: InfoModalClosedData): void;
 export function track(name: 'help-modal-opened', data: HelpModalOpenedData): void;
 export function track(name: 'help-modal-closed', data: HelpModalClosedData): void;
 export function track(name: 'settings-modal-opened', data: SettingsModalOpenedData): void;

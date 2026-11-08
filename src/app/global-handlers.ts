@@ -11,7 +11,7 @@ export function installGlobalHandlers(container: HTMLElement): void {
     // Suppress the context menu on the puzzle table only: on touch (esp. iPad)
     // a long-press would trigger it mid-drag. The table is created later by
     // renderer.init, so delegate from #app and check the target — context
-    // menus in the info modal / debug panels must still reach the browser for
+    // menus in the help and settings modals must still reach the browser for
     // long-press copy of share links and repro params.
     container.addEventListener('contextmenu', (e) => {
         const target = e.target as Element | null;

@@ -1,5 +1,5 @@
 /**
- * The info modal's "Reproduction parameters" block and the `__reproPuzzle`
+ * The settings modal's "Reproduction parameters" block and the `__reproPuzzle`
  * console helper share this contract: the modal prints a `ReproParams` as JSON,
  * the helper accepts that object. `imageSize` is part of the contract, not
  * decoration — generators inscribe the puzzle into the image rect, so the same
