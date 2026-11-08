@@ -9,11 +9,7 @@ import { showToast } from './toast.js';
 import { track, sanitizeErrorReason } from '../analytics/index.js';
 import { loadColorPreference } from './background-color.js';
 
-export function attachShareSection(
-    parent: HTMLElement,
-    state: GameState,
-    baseUrl: string,
-): void {
+export function buildShareSection(state: GameState, baseUrl: string): HTMLElement {
     const webShareAvailable = isWebShareAvailable();
 
     const section = document.createElement('section');
@@ -94,7 +90,7 @@ export function attachShareSection(
 
     button.addEventListener('click', () => {
         const includesProgress = checkbox.checked && !checkbox.disabled;
-        track('puzzle-shared', { source: 'info-modal', includesProgress });
+        track('puzzle-shared', { source: 'help-modal', includesProgress });
         void sharePuzzle({
             url: currentUrl(),
             title: 'Puzzle',
@@ -102,7 +98,7 @@ export function attachShareSection(
             onClipboardFallback: () => showToast('Link copied to clipboard'),
             onError: (e) => {
                 track('share-failed', {
-                    source: 'info-modal',
+                    source: 'help-modal',
                     reason: sanitizeErrorReason(e),
                 });
                 showToast(`Couldn't share: ${e.message}`);
@@ -110,5 +106,5 @@ export function attachShareSection(
         });
     });
 
-    parent.appendChild(section);
+    return section;
 }

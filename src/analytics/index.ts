@@ -11,6 +11,8 @@ export type {
     BackgroundColorChangedData,
     InfoModalOpenedData,
     InfoModalClosedData,
+    HelpModalOpenedData,
+    HelpModalClosedData,
     SettingChangedData,
     EffectsResolvedData,
     TracedChunkPreloadStartedData,
