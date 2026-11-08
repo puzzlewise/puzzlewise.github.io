@@ -32,7 +32,6 @@ import {
 import { createPieceOutlineColorPicker } from './piece-outline-color-picker.js';
 import {
     EFFECTS_PRESETS,
-    describeAuto,
     getDetectedEffectsLevel,
     loadEffectsPreference,
     saveEffectsPreference,
@@ -197,89 +196,43 @@ function buildSettingsSection(args: {
     return section;
 }
 
-function buildToleranceSetting(
-    onToleranceChanged?: (id: string) => void,
-): HTMLElement {
-    const setting = document.createElement('div');
-    setting.className = 'info-setting';
-
-    const label = document.createElement('label');
-    label.className = 'info-setting-label';
-    label.textContent = 'Snap distance';
-    setting.appendChild(label);
-
-    const desc = document.createElement('p');
-    desc.className = 'info-setting-description';
-    desc.textContent = 'How close pieces need to be before they snap together.';
-    setting.appendChild(desc);
-
-    const tolContainer = document.createElement('div');
-    tolContainer.className = 'preset-options';
-    tolContainer.dataset.testid = 'tolerance-options';
-
-    const currentToleranceId = loadTolerancePreference();
-    getSortedPresets().forEach((preset) => {
-        const button = document.createElement('button');
-        button.className = 'preset-option';
-        button.type = 'button';
-        button.dataset.testid = `tolerance-${preset.label.toLowerCase()}`;
-        if (preset.id === currentToleranceId) {
-            button.classList.add('selected');
-        }
-
-        const labelSpan = document.createElement('span');
-        labelSpan.className = 'preset-option-label';
-        labelSpan.textContent = preset.label;
-        button.appendChild(labelSpan);
-
-        const descSpan = document.createElement('span');
-        descSpan.className = 'preset-option-desc';
-        descSpan.textContent = preset.description;
-        button.appendChild(descSpan);
-
-        button.addEventListener('click', () => {
-            trackSettingChange({ setting: 'snap-distance', from: loadTolerancePreference(), to: preset.id });
-            saveTolerancePreference(preset.id);
-            tolContainer
-                .querySelectorAll('.preset-option')
-                .forEach((btn) => btn.classList.remove('selected'));
-            button.classList.add('selected');
-            onToleranceChanged?.(preset.id);
-        });
-
-        tolContainer.appendChild(button);
-    });
-
-    setting.appendChild(tolContainer);
-    return setting;
+interface SettingPreset {
+    id: string;
+    label: string;
+    description: string | (() => string);
 }
 
-function buildPieceOutlineSetting(): HTMLElement {
+function buildPresetSetting(opts: {
+    label: string;
+    description: string;
+    testidPrefix: string;
+    presets: readonly SettingPreset[];
+    load: () => string;
+    onSelect: (id: string) => void;
+}): HTMLElement {
     const setting = document.createElement('div');
     setting.className = 'info-setting';
 
     const label = document.createElement('label');
     label.className = 'info-setting-label';
-    label.textContent = 'Piece outline';
+    label.textContent = opts.label;
     setting.appendChild(label);
 
     const desc = document.createElement('p');
     desc.className = 'info-setting-description';
-    desc.textContent =
-        'The visual edge drawn around each piece group. With "Outline" ' +
-        'selected, pick its colour below.';
+    desc.textContent = opts.description;
     setting.appendChild(desc);
 
     const container = document.createElement('div');
     container.className = 'preset-options';
-    container.dataset.testid = 'piece-outline-options';
+    container.dataset.testid = `${opts.testidPrefix}-options`;
 
-    const currentId = loadPieceOutlinePreference();
-    for (const preset of PIECE_OUTLINE_PRESETS) {
+    const currentId = opts.load();
+    for (const preset of opts.presets) {
         const button = document.createElement('button');
         button.className = 'preset-option';
         button.type = 'button';
-        button.dataset.testid = `piece-outline-${preset.id}`;
+        button.dataset.testid = `${opts.testidPrefix}-${preset.id}`;
         if (preset.id === currentId) {
             button.classList.add('selected');
         }
@@ -291,26 +244,60 @@ function buildPieceOutlineSetting(): HTMLElement {
 
         const descSpan = document.createElement('span');
         descSpan.className = 'preset-option-desc';
-        descSpan.textContent = preset.description;
+        descSpan.textContent = typeof preset.description === 'function'
+            ? preset.description()
+            : preset.description;
         button.appendChild(descSpan);
 
         button.addEventListener('click', () => {
-            trackSettingChange({ setting: 'piece-outline', from: loadPieceOutlinePreference(), to: preset.id });
-            savePieceOutlinePreference(preset.id);
-            applyPieceOutline(preset.id);
+            opts.onSelect(preset.id);
             container
                 .querySelectorAll('.preset-option')
                 .forEach((btn) => btn.classList.remove('selected'));
             button.classList.add('selected');
-            updateOutlineOnlyRows(preset.id);
         });
 
         container.appendChild(button);
     }
 
     setting.appendChild(container);
+    return setting;
+}
 
-    // Outline-color picker — only meaningful for the "Outline" style, so toggled with it.
+function buildToleranceSetting(
+    onToleranceChanged?: (id: string) => void,
+): HTMLElement {
+    return buildPresetSetting({
+        label: 'Snap distance',
+        description: 'How close pieces need to be before they snap together.',
+        testidPrefix: 'tolerance',
+        presets: getSortedPresets(),
+        load: loadTolerancePreference,
+        onSelect: (id) => {
+            trackSettingChange({ setting: 'snap-distance', from: loadTolerancePreference(), to: id });
+            saveTolerancePreference(id);
+            onToleranceChanged?.(id);
+        },
+    });
+}
+
+function buildPieceOutlineSetting(): HTMLElement {
+    const setting = buildPresetSetting({
+        label: 'Piece outline',
+        description:
+            'The visual edge drawn around each piece group. With "Outline" ' +
+            'selected, pick its colour below.',
+        testidPrefix: 'piece-outline',
+        presets: PIECE_OUTLINE_PRESETS,
+        load: loadPieceOutlinePreference,
+        onSelect: (id) => {
+            trackSettingChange({ setting: 'piece-outline', from: loadPieceOutlinePreference(), to: id });
+            savePieceOutlinePreference(id);
+            applyPieceOutline(id);
+            updateOutlineOnlyRows(id);
+        },
+    });
+
     const colorRow = document.createElement('div');
     colorRow.className = 'outline-color-row';
     colorRow.dataset.testid = 'piece-outline-color-row';
@@ -340,7 +327,7 @@ function buildPieceOutlineSetting(): HTMLElement {
         colorRow.hidden = styleId !== 'outline';
         widthRow.hidden = styleId !== 'outline';
     }
-    updateOutlineOnlyRows(currentId);
+    updateOutlineOnlyRows(loadPieceOutlinePreference());
 
     setting.appendChild(colorRow);
     setting.appendChild(widthRow);
@@ -348,67 +335,25 @@ function buildPieceOutlineSetting(): HTMLElement {
 }
 
 function buildEffectsSetting(onEffectsChanged?: (preference: string) => void): HTMLElement {
-    const setting = document.createElement('div');
-    setting.className = 'info-setting';
-
-    const label = document.createElement('label');
-    label.className = 'info-setting-label';
-    label.textContent = 'Effects';
-    setting.appendChild(label);
-
-    const desc = document.createElement('p');
-    desc.className = 'info-setting-description';
-    desc.textContent =
-        'Simple draws shadows and the selection glow as plain rings, ' +
-        'which is much lighter work for older devices.';
-    setting.appendChild(desc);
-
-    const container = document.createElement('div');
-    container.className = 'preset-options';
-    container.dataset.testid = 'effects-options';
-
-    const currentId = loadEffectsPreference();
-    for (const preset of EFFECTS_PRESETS) {
-        const button = document.createElement('button');
-        button.className = 'preset-option';
-        button.type = 'button';
-        button.dataset.testid = `effects-${preset.id}`;
-        if (preset.id === currentId) {
-            button.classList.add('selected');
-        }
-
-        const labelSpan = document.createElement('span');
-        labelSpan.className = 'preset-option-label';
-        labelSpan.textContent = preset.label;
-        button.appendChild(labelSpan);
-
-        const descSpan = document.createElement('span');
-        descSpan.className = 'preset-option-desc';
-        descSpan.textContent = preset.id === 'auto'
-            ? describeAuto(getDetectedEffectsLevel())
-            : preset.description;
-        button.appendChild(descSpan);
-
-        button.addEventListener('click', () => {
+    return buildPresetSetting({
+        label: 'Effects',
+        description:
+            'Simple draws shadows and the selection glow as plain rings, ' +
+            'which is much lighter work for older devices.',
+        testidPrefix: 'effects',
+        presets: EFFECTS_PRESETS,
+        load: loadEffectsPreference,
+        onSelect: (id) => {
             trackSettingChange({
                 setting: 'effects',
                 from: loadEffectsPreference(),
-                to: preset.id,
+                to: id,
                 detected: getDetectedEffectsLevel(),
             });
-            saveEffectsPreference(preset.id);
-            onEffectsChanged?.(preset.id);
-            container
-                .querySelectorAll('.preset-option')
-                .forEach((btn) => btn.classList.remove('selected'));
-            button.classList.add('selected');
-        });
-
-        container.appendChild(button);
-    }
-
-    setting.appendChild(container);
-    return setting;
+            saveEffectsPreference(id);
+            onEffectsChanged?.(id);
+        },
+    });
 }
 
 function buildOutlineConstantWidthToggle(): HTMLElement {

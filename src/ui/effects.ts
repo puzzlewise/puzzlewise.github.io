@@ -13,11 +13,11 @@ export interface EffectsSignals {
 export interface EffectsPreset {
     id: 'auto' | 'full' | 'simple';
     label: string;
-    description: string;
+    description: string | (() => string);
 }
 
 export const EFFECTS_PRESETS: readonly EffectsPreset[] = [
-    { id: 'auto', label: 'Auto', description: '' },
+    { id: 'auto', label: 'Auto', description: () => describeAuto(getDetectedEffectsLevel()) },
     { id: 'full', label: 'Full', description: 'Soft shadows and glow' },
     { id: 'simple', label: 'Simple', description: 'Lighter on older devices' },
 ] as const;
