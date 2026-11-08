@@ -96,10 +96,26 @@ html, body {
   -webkit-touch-callout: none;
 }
 
-.new-game-button {
+/* The bottom inset keeps clear of `.app-version`. No z-index, so the
+   buttons and the 🎨 panel keep their places in the root stacking order. */
+.right-toolbar {
+  --toolbar-inset: 12px;
   position: absolute;
-  top: 12px;
-  right: 12px;
+  inset: var(--toolbar-inset) var(--toolbar-inset) calc(var(--toolbar-inset) + 20px);
+  display: flex;
+  flex-direction: column;
+  flex-wrap: wrap-reverse;
+  align-content: flex-start;
+  align-items: flex-start;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.right-toolbar > * {
+  pointer-events: auto;
+}
+
+.new-game-button {
   z-index: 9999;
   padding: 8px 16px;
   font-size: 0.875rem;
@@ -128,9 +144,6 @@ html, body {
 }
 
 .gather-pieces-button {
-  position: absolute;
-  top: 52px;
-  right: 12px;
   z-index: 9999;
   padding: 8px 16px;
   font-size: 0.875rem;
@@ -1112,9 +1125,7 @@ html, body {
 }
 
 .bg-color-button {
-  position: absolute;
-  top: 92px;
-  right: 12px;
+  position: relative;
   z-index: 9999;
   width: 36px;
   height: 36px;
@@ -1162,11 +1173,16 @@ html, body {
   animation: fade-in 0.15s ease-out;
 }
 
-/* Background-picker popover position (anchored under its toolbar button). */
+.swatch-anchor {
+  position: relative;
+  display: flex;
+}
+
 .bg-color-panel {
   position: absolute;
-  top: 92px;
-  right: 8px;
+  top: 0;
+  right: 0;
+  width: min(440px, calc(100vw - 2 * var(--toolbar-inset)));
   z-index: 10000;
 }
 
@@ -1200,16 +1216,11 @@ html, body {
   border-color: var(--ui-accent);
 }
 
-/* Piece-outline color picker — lives inline inside the settings modal's
-   Piece-outline setting (unlike the toolbar background button, so it is
-   NOT absolutely positioned). The trigger button previews the current
-   outline color as its own background; the popover anchors to the row. */
 .outline-color-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  position: relative; /* anchor for the absolutely-positioned popover */
   margin-top: 8px;
 }
 
@@ -1239,7 +1250,6 @@ html, body {
   border-color: var(--ui-border-hover);
 }
 
-/* Outline-picker popover, anchored under its button within the row. */
 .outline-color-panel {
   position: absolute;
   top: 100%;
@@ -1250,8 +1260,6 @@ html, body {
 
 .help-button,
 .settings-button {
-  position: absolute;
-  right: 12px;
   z-index: 9999;
   width: 36px;
   height: 36px;
@@ -1271,9 +1279,6 @@ html, body {
   user-select: none;
   -webkit-user-select: none;
 }
-
-.help-button { top: 135px; }
-.settings-button { top: 178px; }
 
 .help-button:hover,
 .settings-button:hover {
@@ -1600,23 +1605,19 @@ details.info-section[open] > .info-section-summary {
     font-size: 0.75rem;
   }
 
-  .new-game-button { top: 8px; right: 8px; }
-  .gather-pieces-button { top: 40px; right: 8px; }
+  .right-toolbar {
+    --toolbar-inset: 8px;
+    gap: 4px;
+  }
 
-  .bg-color-button { top: 64px; right: 8px; }
-  .bg-color-panel { top: 64px; right: 8px; }
-
+  .bg-color-button,
   .help-button,
   .settings-button {
-    right: 8px;
     width: 32px;
     height: 32px;
     font-size: 0.9rem;
     line-height: 32px;
   }
-
-  .help-button { top: 88px; }
-  .settings-button { top: 124px; }
 
   .select-tool-button {
     top: 8px;

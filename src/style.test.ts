@@ -300,8 +300,8 @@ describe('seam fill CSS', () => {
     });
 });
 
-function pxValue(selector: string, property: string, css = styleCss): number {
-    const match = new RegExp(`\\s${property}:\\s*(\\d+)(?:px)?\\s*;`).exec(declarationsFor(css, selector));
+function pxValue(selector: string, property: string): number {
+    const match = new RegExp(`\\s${property}:\\s*(\\d+)(?:px)?\\s*;`).exec(declarationsFor(styleCss, selector));
     expect(match, `${selector} ${property}`).not.toBeNull();
     return Number(match![1]);
 }
@@ -321,14 +321,53 @@ function mediaBody(query: string): string {
     return styleCss.slice(open + 1, matchingBrace(styleCss, open));
 }
 
-describe('toolbar stack', () => {
-    it.each([
-        ['the default layout', styleCss],
-        ['short landscape', mediaBody('(max-height: 400px)')],
-    ])('stacks the settings button below help in %s', (_, css) => {
-        expect(pxValue('.settings-button', 'top', css)).toBeGreaterThanOrEqual(
-            pxValue('.help-button', 'top', css) + pxValue('.help-button', 'height', css),
+describe('right-hand toolbar', () => {
+    const shortScreen = mediaBody('(max-height: 400px)');
+
+    it('wraps into new columns to the left instead of overlapping', () => {
+        const body = declarationsFor(styleCss, '.right-toolbar');
+        expect(body).toMatch(/flex-direction:\s*column/);
+        expect(body).toMatch(/flex-wrap:\s*wrap-reverse/);
+        expect(body).toMatch(/pointer-events:\s*none/);
+    });
+
+    it('opens the 🎨 panel on its own button, wherever the column puts it', () => {
+        const anchor = declarationsFor(styleCss, '.swatch-anchor');
+        expect(anchor).toMatch(/position:\s*relative/);
+        expect(anchor, 'no line box around the button').toMatch(/display:\s*flex/);
+        const panel = declarationsFor(styleCss, '.bg-color-panel');
+        expect(panel).toMatch(/(^|[\s;])top:\s*0;/);
+        expect(panel).toMatch(/(^|[\s;])right:\s*0;/);
+        expect(shortScreen).not.toContain('.bg-color-panel');
+    });
+
+    it('gives the 🎨 panel the toolbar inset as its margin on both sides', () => {
+        expect(declarationsFor(styleCss, '.right-toolbar')).toMatch(/--toolbar-inset:\s*12px/);
+        expect(declarationsFor(shortScreen, '.right-toolbar')).toMatch(/--toolbar-inset:\s*8px/);
+        expect(declarationsFor(styleCss, '.right-toolbar')).toMatch(/inset:\s*var\(--toolbar-inset\)/);
+        expect(declarationsFor(styleCss, '.bg-color-panel')).toMatch(
+            /width:\s*min\(440px,\s*calc\(100vw - 2 \* var\(--toolbar-inset\)\)\)/,
         );
+    });
+
+    it('positions the 🎨 button so its z-index applies inside the anchor', () => {
+        const body = declarationsFor(styleCss, '.bg-color-button');
+        expect(body).toMatch(/z-index:\s*9999/);
+        expect(body).toMatch(/position:\s*relative/);
+    });
+
+    it.each([
+        '.new-game-button',
+        '.gather-pieces-button',
+        '.bg-color-button',
+        '.help-button',
+        '.settings-button',
+    ])('leaves %s to the flex layout, at any screen height', (selector) => {
+        for (const css of [styleCss, shortScreen]) {
+            const body = declarationsFor(css, selector);
+            expect(body).not.toMatch(/position:\s*absolute/);
+            expect(body).not.toMatch(/(^|[\s;])top:/);
+        }
     });
 });
 
