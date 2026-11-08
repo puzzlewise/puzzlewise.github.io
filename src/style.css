@@ -1236,6 +1236,7 @@ html, body {
   justify-content: space-between;
   gap: 8px;
   margin-top: 8px;
+  container-type: inline-size;
 }
 
 .outline-color-row[hidden] {
@@ -1268,6 +1269,8 @@ html, body {
   position: absolute;
   top: 100%;
   right: 0;
+  width: min(440px, 100cqw);
+  gap: 2px;
   margin-top: 4px;
   z-index: 10000;
 }
