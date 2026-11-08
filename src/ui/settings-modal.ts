@@ -36,6 +36,10 @@ import {
     saveOutlineConstantWidthPreference,
     applyOutlineConstantWidth,
 } from './outline-constant-width.js';
+import {
+    loadOutlineInsidePreference,
+    saveOutlineInsidePreference,
+} from './outline-inside.js';
 import { buildDebugSection } from './debug-section.js';
 import { track } from '../analytics/index.js';
 import type { SettingChangedData } from '../analytics/index.js';
@@ -43,6 +47,7 @@ import type { SettingChangedData } from '../analytics/index.js';
 export interface SettingsModalOptions {
     container: HTMLElement;
     onEffectsChanged?: (preference: string) => void;
+    onOutlineChanged?: () => void;
     onSolve?: () => void;
     /** Used by the Debug panel's repro block; when absent the block is omitted. */
     getState?: () => GameState | null | undefined;
@@ -54,12 +59,15 @@ function trackSettingChange(data: SettingChangedData): void {
     }
 }
 
-function buildSettingsSection(onEffectsChanged?: (preference: string) => void): HTMLElement {
+function buildSettingsSection(
+    onEffectsChanged?: (preference: string) => void,
+    onOutlineChanged?: () => void,
+): HTMLElement {
     const section = document.createElement('section');
     section.className = 'info-section';
 
     section.appendChild(buildToleranceSetting());
-    section.appendChild(buildPieceOutlineSetting());
+    section.appendChild(buildPieceOutlineSetting(onOutlineChanged));
     section.appendChild(buildEffectsSetting(onEffectsChanged));
     section.appendChild(buildOffsetDragSetting());
     section.appendChild(buildMarqueeContainSetting());
@@ -149,7 +157,7 @@ function buildToleranceSetting(): HTMLElement {
     });
 }
 
-function buildPieceOutlineSetting(): HTMLElement {
+function buildPieceOutlineSetting(onOutlineChanged?: () => void): HTMLElement {
     const setting = buildPresetSetting({
         label: 'Piece outline',
         description:
@@ -163,6 +171,7 @@ function buildPieceOutlineSetting(): HTMLElement {
             savePieceOutlinePreference(id);
             applyPieceOutline(id);
             updateOutlineOnlyRows(id);
+            onOutlineChanged?.();
         },
     });
 
@@ -190,15 +199,14 @@ function buildPieceOutlineSetting(): HTMLElement {
     });
 
     const widthRow = buildOutlineConstantWidthToggle();
+    const insideRow = buildOutlineInsideToggle(onOutlineChanged);
 
     function updateOutlineOnlyRows(styleId: string): void {
-        colorRow.hidden = styleId !== 'outline';
-        widthRow.hidden = styleId !== 'outline';
+        for (const row of [colorRow, widthRow, insideRow]) row.hidden = styleId !== 'outline';
     }
     updateOutlineOnlyRows(loadPieceOutlinePreference());
 
-    setting.appendChild(colorRow);
-    setting.appendChild(widthRow);
+    setting.append(colorRow, widthRow, insideRow);
     return setting;
 }
 
@@ -237,8 +245,27 @@ function buildOutlineConstantWidthToggle(): HTMLElement {
             applyOutlineConstantWidth(on);
         },
     });
-    row.className = 'outline-width-row';
+    row.className = 'outline-option-row';
     row.dataset.testid = 'outline-constant-width-row';
+    return row;
+}
+
+function buildOutlineInsideToggle(onOutlineChanged?: () => void): HTMLElement {
+    const row = buildCheckboxSetting({
+        testid: 'outline-inside-toggle',
+        label: 'Draw inside the edge',
+        description:
+            'Draw the outline over the edge of the picture instead of around it, ' +
+            'so tabs look their true size.',
+        setting: 'outline-inside',
+        load: loadOutlineInsidePreference,
+        save: (on) => {
+            saveOutlineInsidePreference(on);
+            onOutlineChanged?.();
+        },
+    });
+    row.className = 'outline-option-row';
+    row.dataset.testid = 'outline-inside-row';
     return row;
 }
 
@@ -307,7 +334,7 @@ function buildCheckboxSetting(opts: {
 }
 
 export function createSettingsModal(options: SettingsModalOptions): void {
-    const { container, onEffectsChanged, getState, onSolve } = options;
+    const { container, onEffectsChanged, onOutlineChanged, getState, onSolve } = options;
     let debugOpened = false;
 
     createModalShell<'solve'>({
@@ -326,7 +353,7 @@ export function createSettingsModal(options: SettingsModalOptions): void {
                     debugOpened = true;
                 }
             });
-            return [buildSettingsSection(onEffectsChanged), debugSection];
+            return [buildSettingsSection(onEffectsChanged, onOutlineChanged), debugSection];
         },
         onClosed: (closedBy, stats) => track('settings-modal-closed', { closedBy, ...stats, debugOpened }),
     });

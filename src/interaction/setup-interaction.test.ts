@@ -71,6 +71,7 @@ function createFakeRenderer(): Renderer {
         setGroupDragging: vi.fn(),
         setGroupSelected: vi.fn(),
         setRingsEnabled: vi.fn(),
+        setInnerOutlineEnabled: vi.fn(),
         pieceIdFromTarget: vi.fn((t: EventTarget | null) =>
             (t as { _pieceId?: number } | null)?._pieceId ?? null),
         // Defaults to "no piece nearby"; probe tests override it.

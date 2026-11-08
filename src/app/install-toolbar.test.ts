@@ -43,6 +43,7 @@ describe('installToolbar', () => {
             installBackgroundColorControl: vi.fn(makeBackgroundColor),
             solve: vi.fn(),
             onEffectsChanged: vi.fn(),
+            onOutlineChanged: vi.fn(),
             ...overrides,
         };
     }
@@ -176,6 +177,16 @@ describe('installToolbar', () => {
         container.querySelector<HTMLButtonElement>('[data-testid="effects-simple"]')!.click();
 
         expect(onEffectsChanged).toHaveBeenCalledExactlyOnceWith('simple');
+    });
+
+    it('wires onOutlineChanged into the settings modal Piece outline setting', () => {
+        const onOutlineChanged = vi.fn();
+        installToolbar(deps({ onOutlineChanged }));
+
+        container.querySelector<HTMLButtonElement>('.settings-button')!.click();
+        container.querySelector<HTMLButtonElement>('[data-testid="piece-outline-shadow"]')!.click();
+
+        expect(onOutlineChanged).toHaveBeenCalledOnce();
     });
 
     it('wires solve into the settings modal Solve button rather than a window lookup', () => {

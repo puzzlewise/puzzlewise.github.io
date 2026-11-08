@@ -108,6 +108,11 @@ export {
 } from './outline-constant-width.js';
 
 export {
+    loadOutlineInsidePreference,
+    saveOutlineInsidePreference,
+} from './outline-inside.js';
+
+export {
     PIECE_OUTLINE_COLOR_PRESETS,
     DEFAULT_PIECE_OUTLINE_COLOR_ID,
     getPieceOutlineColorPreset,

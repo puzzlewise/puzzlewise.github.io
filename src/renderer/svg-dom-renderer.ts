@@ -70,6 +70,40 @@ function syncRingReferences(groupEl: HTMLElement, groupId: number, enabled: bool
     }
 }
 
+function groupClipPathD(group: PieceGroup, pieceLookup: Map<number, Piece>): string {
+    try {
+        return groupOutlinePath(group.pieces, pieceLookup) ?? [...group.pieces]
+            .flatMap(([pieceId, offset]) => {
+                const piece = pieceLookup.get(pieceId);
+                return piece ? [translatePath(piece.shape, offset.x, offset.y)] : [];
+            })
+            .join(' ');
+    } catch (error) {
+        if (!(error instanceof PathDataError)) throw error;
+        return '';
+    }
+}
+
+function createInnerOutline(groupId: number): SVGSVGElement {
+    const clipId = `inner-outline-clip-${groupId}`;
+    const clipPath = document.createElementNS(SVG_NS, 'clipPath');
+    clipPath.id = clipId;
+    clipPath.appendChild(document.createElementNS(SVG_NS, 'path'));
+    const defs = document.createElementNS(SVG_NS, 'defs');
+    defs.appendChild(clipPath);
+
+    const edges = document.createElementNS(SVG_NS, 'use');
+    edges.setAttribute('href', `#group-edges-${groupId}`);
+    edges.setAttribute('clip-path', `url(#${clipId})`);
+
+    const overlay = document.createElementNS(SVG_NS, 'svg');
+    overlay.setAttribute('data-inner-outline', '');
+    overlay.setAttribute('width', '1');
+    overlay.setAttribute('height', '1');
+    overlay.append(defs, edges);
+    return overlay;
+}
+
 interface PhotoSettle {
     promise: Promise<'loaded' | 'failed'>;
     watch(image: SVGImageElement): void;
@@ -108,6 +142,7 @@ export class SvgDomRenderer implements Renderer {
     private transitionActive = false;
     private settleAfterTransition = false;
     private ringsEnabled = false;
+    private innerOutlineEnabled = false;
 
     init(container: HTMLElement): void {
         const table = document.createElement('div');
@@ -140,6 +175,7 @@ export class SvgDomRenderer implements Renderer {
             this.currentShapeFingerprint = shapeFingerprint;
         }
 
+        this.tableEl.toggleAttribute('data-outline-inside', this.innerOutlineEnabled);
         this.imageSize = gameState.imageSize;
         this.pieceBaseWidth = this.imageSize.width / gameState.gridSize.cols;
         this.pieceBaseHeight = this.imageSize.height / gameState.gridSize.rows;
@@ -289,6 +325,10 @@ export class SvgDomRenderer implements Renderer {
         }
     }
 
+    setInnerOutlineEnabled(enabled: boolean): void {
+        this.innerOutlineEnabled = enabled;
+    }
+
     destroy(): void {
         if (this.relayerTimer !== null) clearTimeout(this.relayerTimer);
         this.relayerTimer = null;
@@ -367,7 +407,34 @@ export class SvgDomRenderer implements Renderer {
             .sort()
             .join(' ');
         const underlay = this.syncOutlineUnderlay(groupEl, group, pieceLookup, layoutKey);
-        this.syncSeamFill(groupEl, underlay, group, pieceLookup, imageUrl, layoutKey);
+        let outlineD: string | undefined;
+        const outline = (): string => (outlineD ??= groupClipPathD(group, pieceLookup));
+        this.syncSeamFill(groupEl, underlay, group, pieceLookup, imageUrl, layoutKey, outline);
+        this.syncInnerOutline(groupEl, group.id, layoutKey, outline);
+    }
+
+    /**
+     * SVG strokes can't be aligned inside a path, so the inner outline is the
+     * underlay's centered stroke drawn above the pieces and clipped to the
+     * group, keeping only its inner half (#722).
+     */
+    private syncInnerOutline(
+        groupEl: HTMLElement,
+        groupId: number,
+        layoutKey: string,
+        outline: () => string,
+    ): void {
+        let overlay = groupEl.querySelector<SVGSVGElement>(':scope > svg[data-inner-outline]');
+        if (!this.innerOutlineEnabled) {
+            overlay?.remove();
+            return;
+        }
+        overlay ??= createInnerOutline(groupId);
+        if (groupEl.lastElementChild !== overlay) groupEl.appendChild(overlay);
+
+        if (overlay.dataset.pieces === layoutKey) return;
+        overlay.dataset.pieces = layoutKey;
+        overlay.querySelector('clipPath > path')!.setAttribute('d', outline());
     }
 
     /** Edges between pieces of the same group are left out so joins stay seamless. */
@@ -438,6 +505,7 @@ export class SvgDomRenderer implements Renderer {
         pieceLookup: Map<number, Piece>,
         imageUrl: string | null,
         layoutKey: string,
+        outline: () => string,
     ): void {
         let seamFill = groupEl.querySelector<SVGSVGElement>(':scope > svg[data-seam-fill]');
         if (group.pieces.size < 2) {
@@ -467,19 +535,7 @@ export class SvgDomRenderer implements Renderer {
             clip.setAttribute('d', '');
             return;
         }
-        let d: string;
-        try {
-            d = groupOutlinePath(group.pieces, pieceLookup) ?? [...group.pieces]
-                .flatMap(([pieceId, offset]) => {
-                    const piece = pieceLookup.get(pieceId);
-                    return piece ? [translatePath(piece.shape, offset.x, offset.y)] : [];
-                })
-                .join(' ');
-        } catch (error) {
-            if (!(error instanceof PathDataError)) throw error;
-            d = '';
-        }
-        clip.setAttribute('d', d);
+        clip.setAttribute('d', outline());
 
         const fill = seamFill.lastElementChild!;
         if (imageUrl === null) {

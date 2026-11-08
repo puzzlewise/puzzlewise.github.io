@@ -469,6 +469,42 @@ describe('createSettingsModal — Piece outline setting', () => {
         ).toBe(true);
     });
 
+    it('offers an unchecked draw-inside toggle, shown only with Outline', () => {
+        createSettingsModal({ container });
+        const toggle = container.querySelector<HTMLInputElement>(
+            '[data-testid="outline-inside-toggle"]',
+        )!;
+        const row = toggle.closest<HTMLElement>('[data-testid="outline-inside-row"]')!;
+        expect(toggle.checked).toBe(false);
+        expect(row.hidden).toBe(false);
+
+        container.querySelector<HTMLButtonElement>('[data-testid="piece-outline-shadow"]')!.click();
+        expect(row.hidden).toBe(true);
+    });
+
+    it('checking the draw-inside toggle persists it and reports the change', () => {
+        const onOutlineChanged = vi.fn();
+        createSettingsModal({ container, onOutlineChanged });
+        const toggle = container.querySelector<HTMLInputElement>(
+            '[data-testid="outline-inside-toggle"]',
+        )!;
+
+        toggle.checked = true;
+        toggle.dispatchEvent(new Event('change'));
+
+        expect(localStorage.getItem('puzzle-outline-inside')).toBe('true');
+        expect(onOutlineChanged).toHaveBeenCalledOnce();
+    });
+
+    it('reports a Piece outline style change through onOutlineChanged, after saving it', () => {
+        const onOutlineChanged = vi.fn(() => localStorage.getItem('puzzle-piece-outline'));
+        createSettingsModal({ container, onOutlineChanged });
+
+        container.querySelector<HTMLButtonElement>('[data-testid="piece-outline-shadow"]')!.click();
+
+        expect(onOutlineChanged.mock.results.map((r) => r.value as unknown)).toEqual(['shadow']);
+    });
+
     it('selecting a swatch persists the colour and sets the CSS variable', () => {
         localStorage.setItem('puzzle-piece-outline', 'outline');
         createSettingsModal({ container });
@@ -838,6 +874,7 @@ describe('createSettingsModal — analytics', () => {
         ['offset-drag', 'offset-drag-toggle'],
         ['enclose-to-select', 'marquee-contain-toggle'],
         ['outline-constant-width', 'outline-constant-width-toggle'],
+        ['outline-inside', 'outline-inside-toggle'],
     ])('sends setting-changed for %s', (setting, testid) => {
         createSettingsModal({ container });
         const checkbox = container.querySelector<HTMLInputElement>(`[data-testid="${testid}"]`)!;

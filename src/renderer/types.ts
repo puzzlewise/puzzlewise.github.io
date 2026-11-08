@@ -41,6 +41,9 @@ export interface Renderer {
 
     setRingsEnabled(enabled: boolean): void;
 
+    /** Takes effect on the next `renderState`. */
+    setInnerOutlineEnabled(enabled: boolean): void;
+
     /**
      * Lets PointerRouter classify pointer events without per-piece
      * listeners.
