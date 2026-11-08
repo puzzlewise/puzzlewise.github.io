@@ -1,7 +1,6 @@
 /**
- * DOM order matters: these controls are absolutely positioned (`src/style.css`
- * by explicit `top`/`right`), so keyboard tab order comes from append order,
- * not visual position — see `installBackgroundColorControl` for the constraint.
+ * DOM order matters: Tab follows append order, which must match the visual
+ * order — the left-hand tools, then the right-hand column top to bottom.
  *
  * The settings modal's Solve button receives `solve` as a dependency instead of a
  * `window.__solvePuzzle` lookup at click time (the one sanctioned behavior
@@ -40,17 +39,16 @@ export interface InstallToolbarDeps {
     save: (state: GameState) => void;
     onNewGame: () => void;
     /**
-     * Install the 🎨 background-color control (bound by the caller — this
-     * module owns *when* the picker's DOM lands, not the picker). Invoked
-     * between deselect and Help so DOM order matches the on-screen top-to-bottom
-     * stack and Tab visits the controls in reaching order.
+     * Install the 🎨 background-color control into `toolbar` (bound by the
+     * caller — this module owns *where and when* the picker's DOM lands, not
+     * the picker). Invoked between Gather and Help, its on-screen position.
      *
      * Its handle is returned from {@link installToolbar} rather than captured
      * from the callback: the composition root needs it for the share path, and
      * a captured binding could only be typed with a definite-assignment
      * assertion where a return value is checked.
      */
-    installBackgroundColorControl: () => BackgroundColorControl;
+    installBackgroundColorControl: (toolbar: HTMLElement) => BackgroundColorControl;
     /** Solve the puzzle — the same reference `installDevHooks` assigns to `window.__solvePuzzle` (see the module doc). */
     solve: () => void;
     onEffectsChanged: (preference: string) => void;
@@ -69,8 +67,18 @@ export function installToolbar(deps: InstallToolbarDeps): BackgroundColorControl
         onEffectsChanged,
     } = deps;
 
+    createSelectToolButton({ container, selectionManager });
+
+    createMarqueeToolButton({ container, selectionManager });
+
+    createDeselectButton({ container, selectionManager });
+
+    const toolbar = document.createElement('div');
+    toolbar.className = 'right-toolbar';
+    container.appendChild(toolbar);
+
     createNewGameButton({
-        container,
+        container: toolbar,
         // Guarded reads: these run synchronously on click, so an unguarded
         // read threw and swallowed it whenever boot left no game behind (#488)
         // — making the New Game dialog, a player's one escape from an
@@ -84,7 +92,7 @@ export function installToolbar(deps: InstallToolbarDeps): BackgroundColorControl
     });
 
     createGatherPiecesButton({
-        container,
+        container: toolbar,
         onGatherPieces: () => {
             // Same synchronous session read as New Game above (#488). Nothing
             // to gather with no game, so a no-op is the correct behavior.
@@ -95,23 +103,17 @@ export function installToolbar(deps: InstallToolbarDeps): BackgroundColorControl
         },
     });
 
-    createSelectToolButton({ container, selectionManager });
-
-    createMarqueeToolButton({ container, selectionManager });
-
-    createDeselectButton({ container, selectionManager });
-
-    const backgroundColor = installBackgroundColorControl();
+    const backgroundColor = installBackgroundColorControl(toolbar);
 
     createHelpButton({
-        container,
+        container: toolbar,
         onShowHelp: () => {
             createHelpModal({ container, state: session.current() });
         },
     });
 
     createSettingsButton({
-        container,
+        container: toolbar,
         onShowSettings: () => {
             createSettingsModal({
                 container,

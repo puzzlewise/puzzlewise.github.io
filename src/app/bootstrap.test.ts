@@ -507,21 +507,18 @@ describe('bootstrap', () => {
         expect(document.documentElement.dataset.effects).toBe('simple');
     });
 
-    it('keeps the background-color control between deselect and Help, then Settings', () => {
-        // The controls are absolutely positioned in one stack, so DOM order
-        // sets keyboard tab order (WCAG 2.4.3). `install-toolbar.test.ts` pins
-        // the full order; this checks the DOM `bootstrap` builds.
+    it('puts the background-color control in the right-hand toolbar, between Gather and Help', () => {
+        // `install-toolbar.test.ts` pins the full order with a stand-in
+        // control; this checks the real picker lands in the toolbar.
         bootstrap(root);
 
-        const classNames = [...root.children].map((el) => el.className);
-        const deselect = classNames.indexOf('deselect-button');
-        const picker = classNames.indexOf('bg-color-button');
-        const help = classNames.indexOf('help-button');
-        const settings = classNames.indexOf('settings-button');
-        expect(deselect, 'deselect button').toBeGreaterThanOrEqual(0);
-        expect(picker, 'background-color button').toBeGreaterThan(deselect);
+        const children = [...root.querySelector('.right-toolbar')!.children];
+        const gather = children.findIndex((el) => el.matches('.gather-pieces-button'));
+        const picker = children.findIndex((el) => el.querySelector('.bg-color-button'));
+        const help = children.findIndex((el) => el.matches('.help-button'));
+        expect(gather, 'gather button').toBeGreaterThanOrEqual(0);
+        expect(picker, 'background-color button').toBeGreaterThan(gather);
         expect(help, 'help button').toBeGreaterThan(picker);
-        expect(settings, 'settings button').toBeGreaterThan(help);
     });
 
     it('hands the background-color handle to the share-link load path', () => {

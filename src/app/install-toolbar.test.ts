@@ -63,25 +63,27 @@ describe('installToolbar', () => {
         }
     });
 
-    it('keeps the background-color control between deselect and Help in DOM order', () => {
-        // These controls are absolutely positioned in one stack (src/style.css),
-        // so DOM order alone sets keyboard tab order; it must match the visual
-        // top-to-bottom order asserted below.
-        const installBackgroundColorControl = vi.fn(() => {
+    it('stacks the right-hand controls in one toolbar, after the left-hand tools in DOM order', () => {
+        // Tab order follows DOM order, so it must match the visual order:
+        // the left-hand tools, then the right-hand column top to bottom.
+        const installBackgroundColorControl = vi.fn((toolbar: HTMLElement) => {
             const marker = document.createElement('div');
             marker.className = 'background-color-marker';
-            container.appendChild(marker);
+            toolbar.appendChild(marker);
             return makeBackgroundColor();
         });
         installToolbar(deps({ installBackgroundColorControl }));
 
-        const classNames = [...container.children].map((el) => el.className);
-        expect(classNames).toEqual([
-            'new-game-button',
-            'gather-pieces-button',
+        const classNames = (el: Element): string[] => [...el.children].map((child) => child.className);
+        expect(classNames(container)).toEqual([
             'select-tool-button',
             'marquee-tool-button',
             'deselect-button',
+            'right-toolbar',
+        ]);
+        expect(classNames(container.querySelector('.right-toolbar')!)).toEqual([
+            'new-game-button',
+            'gather-pieces-button',
             'background-color-marker',
             'help-button',
             'settings-button',
@@ -90,7 +92,7 @@ describe('installToolbar', () => {
 
     it('hands back the background-color handle it installed', () => {
         // The root needs the handle for the share path but wants the picker's
-        // DOM here, between deselect and Help. Returning it lets the root use a
+        // DOM here, between Gather and Help. Returning it lets the root use a
         // plain `const` — a callback-assigned binding would need a
         // definite-assignment assertion and be silently `undefined` if this
         // call stopped invoking the dependency.

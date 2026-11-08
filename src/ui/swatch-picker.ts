@@ -21,9 +21,8 @@ export interface SwatchPickerOptions {
     button: { icon: string; title: string; className: string };
     ariaLabel: string;
     /**
-     * Extra class on the grid panel (alongside `swatch-grid`). Base `.swatch-grid`
-     * carries only generic appearance; each instance supplies its own positioning
-     * here so multiple pickers anchor independently instead of stacking.
+     * Extra class on the grid panel (alongside `swatch-grid`), positioning it
+     * against the `.swatch-anchor` around the button.
      */
     panelClassName?: string;
     swatches: readonly SwatchEntry[];
@@ -101,6 +100,9 @@ export function createSwatchPicker(options: SwatchPickerOptions): SwatchPickerHa
         options;
     let currentId = options.selectedId;
 
+    const anchor = document.createElement('div');
+    anchor.className = 'swatch-anchor';
+
     const button = document.createElement('button');
     button.className = options.button.className;
     button.type = 'button';
@@ -154,7 +156,8 @@ export function createSwatchPicker(options: SwatchPickerOptions): SwatchPickerHa
         showPanel();
     });
 
-    container.appendChild(button);
+    anchor.appendChild(button);
+    container.appendChild(anchor);
 
     return {
         setSelected(id) {
@@ -164,7 +167,7 @@ export function createSwatchPicker(options: SwatchPickerOptions): SwatchPickerHa
         },
         dispose() {
             dismissPanel();
-            button.remove();
+            anchor.remove();
         },
     };
 }

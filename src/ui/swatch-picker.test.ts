@@ -128,13 +128,26 @@ describe('createSwatchPicker', () => {
         picker.dispose();
     });
 
-    it('dispose removes the button and any open grid', () => {
+    it('dispose removes the button, its anchor and any open grid', () => {
         const { button, picker } = open();
         button.click();
         expect(container.querySelector('.swatch-grid')).toBeTruthy();
         picker.dispose();
         expect(container.querySelector('button.bg-color-button')).toBeNull();
         expect(container.querySelector('.swatch-grid')).toBeNull();
+        expect(container.children).toHaveLength(0);
+    });
+
+    it('opens the grid inside an anchor around its button', () => {
+        const { button, picker } = open();
+
+        button.click();
+
+        expect([...container.children].map((el) => el.className)).toEqual(['swatch-anchor']);
+        const anchor = container.firstElementChild!;
+        expect(button.parentElement).toBe(anchor);
+        expect(container.querySelector('.swatch-grid')!.parentElement).toBe(anchor);
+        picker.dispose();
     });
 });
 

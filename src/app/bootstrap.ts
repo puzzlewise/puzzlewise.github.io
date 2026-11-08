@@ -354,8 +354,8 @@ export function bootstrap(
     });
 
     /**
-     * `installToolbar` invokes `installBackgroundColorControl` between the
-     * deselect and Info buttons and hands the handle back. The installer is
+     * `installToolbar` invokes `installBackgroundColorControl` with its
+     * right-hand toolbar and hands the handle back. The installer is
      * passed as a dependency (not reached for) so `install-toolbar.test.ts`
      * can substitute a marker div without touching localStorage and an SVG
      * filter. Returned rather than assigned to an outer binding to keep
@@ -374,7 +374,7 @@ export function bootstrap(
             start: (gridSize, options) => startNewGame(gridSize, options, startNewGameDeps),
             currentGame: () => session.current(),
         }),
-        installBackgroundColorControl: () => installBackgroundColor({ container: root }),
+        installBackgroundColorControl: (toolbar) => installBackgroundColor({ container: toolbar }),
         solve,
         onEffectsChanged: setEffects,
     });
