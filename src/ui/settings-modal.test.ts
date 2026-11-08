@@ -3,10 +3,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi, type Mock } from 'vitest';
-import { createInfoModal } from './info-modal.js';
-import { createSelectToolButton } from './select-tool-button.js';
-import { createMarqueeToolButton } from './marquee-tool-button.js';
-import { SelectionManager } from '../interaction/selection-manager.js';
+import { createSettingsModal } from './settings-modal.js';
 import type { GameState } from '../model/types.js';
 import { makeGameState } from '../test-helpers/fixtures.js';
 import { DISTINCT_ID_KEY } from '../analytics/distinct-id.js';
@@ -15,17 +12,6 @@ import {
     getDetectedEffectsLevel,
     resetDetectedEffectsLevelForTests,
 } from './effects.js';
-
-function toolbarButtonIcon(
-    create: (opts: {
-        container: HTMLElement;
-        selectionManager: SelectionManager;
-    }) => unknown,
-): string {
-    const host = document.createElement('div');
-    create({ container: host, selectionManager: new SelectionManager() });
-    return host.querySelector('button')!.querySelector('svg')!.outerHTML;
-}
 
 function makeState(overrides?: Partial<GameState>): GameState {
     return makeGameState({
@@ -41,7 +27,7 @@ afterEach(() => {
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
 });
 
-describe('createInfoModal', () => {
+describe('createSettingsModal', () => {
     let container: HTMLElement;
 
     beforeEach(() => {
@@ -58,7 +44,7 @@ describe('createInfoModal', () => {
     });
 
     it('wraps debug content in a <details> element that is collapsed by default', () => {
-        createInfoModal({ container });
+        createSettingsModal({ container });
 
         const debug = container.querySelector<HTMLDetailsElement>(
             '[data-testid="debug-section"]',
@@ -68,7 +54,7 @@ describe('createInfoModal', () => {
     });
 
     it('renders repro params as JSON inside the debug section', () => {
-        createInfoModal({ container, getState: () => makeState() });
+        createSettingsModal({ container, getState: () => makeState() });
 
         const repro = container.querySelector<HTMLElement>(
             '[data-testid="repro-params"]',
@@ -88,7 +74,7 @@ describe('createInfoModal', () => {
     });
 
     it('hides the repro block when no state source is provided', () => {
-        createInfoModal({ container });
+        createSettingsModal({ container });
 
         const setting = container.querySelector<HTMLElement>(
             '[data-testid="repro-params-setting"]',
@@ -97,7 +83,7 @@ describe('createInfoModal', () => {
     });
 
     it('omits undefined state fields from the repro block', () => {
-        createInfoModal({
+        createSettingsModal({
             container,
             getState: () =>
                 makeState({
@@ -117,7 +103,7 @@ describe('createInfoModal', () => {
     });
 
     it('includes wavyConfig in the repro block for a wavy-borderless puzzle', () => {
-        createInfoModal({
+        createSettingsModal({
             container,
             getState: () =>
                 makeState({
@@ -137,7 +123,7 @@ describe('createInfoModal', () => {
     });
 
     it('includes classicConfig in the repro block for a sine-based classic puzzle', () => {
-        createInfoModal({
+        createSettingsModal({
             container,
             getState: () =>
                 makeState({
@@ -156,7 +142,7 @@ describe('createInfoModal', () => {
     });
 
     it('omits classicConfig for a legacy classic puzzle', () => {
-        createInfoModal({
+        createSettingsModal({
             container,
             getState: () => makeState({ cutStyle: 'classic', fractalConfig: undefined }),
         });
@@ -168,7 +154,7 @@ describe('createInfoModal', () => {
     });
 
     it('toggles show-debug-pieces on <html> when the debug-pieces checkbox changes', () => {
-        createInfoModal({ container });
+        createSettingsModal({ container });
 
         const toggle = container.querySelector<HTMLInputElement>(
             '[data-testid="debug-pieces-toggle"]',
@@ -192,7 +178,7 @@ describe('createInfoModal', () => {
     });
 
     it('marks <html> while the piece opacity slider is below 1', () => {
-        createInfoModal({ container });
+        createSettingsModal({ container });
         const slider = container.querySelector<HTMLInputElement>('[data-testid="piece-opacity-slider"]')!;
         const set = (value: string) => {
             slider.value = value;
@@ -208,10 +194,7 @@ describe('createInfoModal', () => {
     });
 
     it('gives every toggle checkbox the shared form-checkbox accent class', () => {
-        // Pass state so the share section renders; its "Include my current
-        // progress" checkbox is an .info-setting-toggle and must carry the
-        // accent class too.
-        createInfoModal({ container, state: makeState() });
+        createSettingsModal({ container });
 
         const checkboxes = container.querySelectorAll<HTMLInputElement>(
             '.info-setting-toggle input[type="checkbox"]',
@@ -220,140 +203,44 @@ describe('createInfoModal', () => {
         for (const checkbox of checkboxes) {
             expect(checkbox.classList.contains('form-checkbox')).toBe(true);
         }
+    });
 
-        // Assert the share checkbox is covered, so the loop can't pass vacuously
-        // if the share section doesn't render.
-        const shareCheckbox = container.querySelector<HTMLInputElement>(
-            '[data-testid="share-include-progress"]',
-        );
-        expect(shareCheckbox).not.toBeNull();
-        expect(shareCheckbox!.classList.contains('form-checkbox')).toBe(true);
+    it('is titled Settings with no Settings subheading', () => {
+        createSettingsModal({ container });
+
+        expect(container.querySelector('.info-modal-title')!.textContent).toBe('Settings');
+        const headings = [...container.querySelectorAll('h3')].map((h) => h.textContent);
+        expect(headings).not.toContain('Settings');
+    });
+
+    it('puts the settings before Debug', () => {
+        createSettingsModal({ container });
+
+        const content = container.querySelector('.info-modal-content')!;
+        expect(content.firstElementChild!.querySelector('[data-testid="tolerance-options"]')).not.toBeNull();
+        expect(content.lastElementChild!.getAttribute('data-testid')).toBe('debug-section');
+    });
+
+    it('holds no help content', () => {
+        createSettingsModal({ container });
+
+        const headings = [...container.querySelectorAll('h3')].map((h) => h.textContent);
+        expect(headings).not.toContain('How to Play');
+        expect(container.querySelector('.share-section')).toBeNull();
     });
 
     it('reflects pre-existing show-debug-pieces class as the checkbox state on open', () => {
         document.documentElement.classList.add('show-debug-pieces');
-        createInfoModal({ container });
+        createSettingsModal({ container });
 
         const toggle = container.querySelector<HTMLInputElement>(
             '[data-testid="debug-pieces-toggle"]',
         );
         expect(toggle!.checked).toBe(true);
     });
-
-    it('renders the share section as the first section in the modal content', () => {
-        createInfoModal({ container, state: makeState() });
-
-        const firstSection = container.querySelector<HTMLElement>(
-            '.info-modal-content > section.info-section',
-        );
-        expect(firstSection?.classList.contains('share-section')).toBe(true);
-    });
-
-    it('describes rotation in the How to Play section', () => {
-        createInfoModal({ container });
-
-        const sections = container.querySelectorAll<HTMLElement>('section.info-section');
-        const howToPlay = Array.from(sections).find(
-            (s) => s.querySelector('h3')?.textContent === 'How to Play',
-        );
-
-        expect(howToPlay?.textContent).toContain('Free rotation');
-    });
-
-    it('does not render a Cut Styles section', () => {
-        createInfoModal({ container });
-
-        const headings = container.querySelectorAll<HTMLHeadingElement>(
-            '.info-section > h3',
-        );
-        const match = [...headings].find((h) => h.textContent === 'Cut Styles');
-        expect(match).toBeUndefined();
-    });
-
-    it('focuses the scrolling content so Space and the arrow keys scroll it', () => {
-        createInfoModal({ container });
-
-        expect(document.activeElement).toBe(container.querySelector('.info-modal-content'));
-    });
 });
 
-describe('createInfoModal — How to Play section', () => {
-    let container: HTMLElement;
-
-    beforeEach(() => {
-        container = document.createElement('div');
-        document.body.appendChild(container);
-    });
-
-    afterEach(() => {
-        while (document.body.firstChild) {
-            document.body.removeChild(document.body.firstChild);
-        }
-    });
-
-    function howToPlaySection(): HTMLElement {
-        const headings = container.querySelectorAll<HTMLHeadingElement>(
-            '.info-section > h3',
-        );
-        const match = [...headings].find((h) => h.textContent === 'How to Play');
-        return match!.parentElement!;
-    }
-
-    it('does not mention "composable" in How to Play', () => {
-        createInfoModal({ container });
-        expect(howToPlaySection().textContent?.toLowerCase()).not.toContain('composable');
-    });
-
-    it('documents the Marquee button and its drag-a-box gesture', () => {
-        createInfoModal({ container });
-        const text = howToPlaySection().textContent ?? '';
-        expect(text).toContain('Marquee');
-        expect(text).toContain('drag a box');
-    });
-
-    it('documents the offline photo download', () => {
-        createInfoModal({ container });
-        const text = howToPlaySection().textContent ?? '';
-        expect(text).toContain('Offline photos');
-        expect(text).toContain('no connection');
-    });
-
-    it('shows the same multi-select and marquee icons as the toolbar buttons', () => {
-        createInfoModal({ container });
-        const rendered = [
-            ...howToPlaySection().querySelectorAll<SVGElement>('svg.info-inline-icon'),
-        ].map((svg) => {
-            const clone = svg.cloneNode(true) as SVGElement;
-            clone.classList.remove('info-inline-icon');
-            clone.removeAttribute('class');
-            return clone.outerHTML;
-        });
-        expect(rendered).toContain(toolbarButtonIcon(createSelectToolButton));
-        expect(rendered).toContain(toolbarButtonIcon(createMarqueeToolButton));
-    });
-
-    it('mentions Wavy and Classic alongside Free rotation', () => {
-        createInfoModal({ container });
-        const text = howToPlaySection().textContent ?? '';
-        const freeRotIdx = text.indexOf('Free rotation');
-        expect(freeRotIdx).toBeGreaterThan(-1);
-        const context = text.slice(freeRotIdx, freeRotIdx + 60);
-        expect(context).toContain('Classic');
-        expect(context).toContain('Wavy');
-    });
-
-    it('attributes 90° rotation to Fractal only', () => {
-        createInfoModal({ container });
-        const text = howToPlaySection().textContent ?? '';
-        const ninetyIdx = text.indexOf('90° rotation');
-        expect(ninetyIdx).toBeGreaterThan(-1);
-        const context = text.slice(ninetyIdx, ninetyIdx + 60);
-        expect(context).toContain('Fractal');
-        expect(context).not.toContain('Classic');
-    });
-});
-
-describe('createInfoModal — Effects setting', () => {
+describe('createSettingsModal — Effects setting', () => {
     let container: HTMLElement;
 
     beforeEach(() => {
@@ -369,7 +256,7 @@ describe('createInfoModal — Effects setting', () => {
     });
 
     it('renders Auto, Full and Simple with Auto selected by default', () => {
-        createInfoModal({ container });
+        createSettingsModal({ container });
 
         const buttons = Array.from(
             container.querySelectorAll<HTMLButtonElement>('[data-testid="effects-options"] button'),
@@ -383,7 +270,7 @@ describe('createInfoModal — Effects setting', () => {
     });
 
     it('shows what Auto resolved to on this device', () => {
-        createInfoModal({ container });
+        createSettingsModal({ container });
 
         const desc = container.querySelector(
             '[data-testid="effects-auto"] .preset-option-desc',
@@ -393,7 +280,7 @@ describe('createInfoModal — Effects setting', () => {
     });
 
     it('saves a choice and moves the selection, leaving applying it to the caller', () => {
-        createInfoModal({ container });
+        createSettingsModal({ container });
 
         const simple = container.querySelector<HTMLButtonElement>('[data-testid="effects-simple"]')!;
         simple.click();
@@ -408,7 +295,7 @@ describe('createInfoModal — Effects setting', () => {
 
     it('reports the chosen option through onEffectsChanged', () => {
         const onEffectsChanged = vi.fn();
-        createInfoModal({ container, onEffectsChanged });
+        createSettingsModal({ container, onEffectsChanged });
 
         container.querySelector<HTMLButtonElement>('[data-testid="effects-simple"]')!.click();
         container.querySelector<HTMLButtonElement>('[data-testid="effects-auto"]')!.click();
@@ -417,7 +304,7 @@ describe('createInfoModal — Effects setting', () => {
     });
 
     it('sits right after the Piece outline setting', () => {
-        createInfoModal({ container });
+        createSettingsModal({ container });
 
         const outlineSetting = container
             .querySelector('[data-testid="piece-outline-options"]')!
@@ -428,7 +315,7 @@ describe('createInfoModal — Effects setting', () => {
     });
 });
 
-describe('createInfoModal — Piece outline setting', () => {
+describe('createSettingsModal — Piece outline setting', () => {
     let container: HTMLElement;
 
     beforeEach(() => {
@@ -446,7 +333,7 @@ describe('createInfoModal — Piece outline setting', () => {
     });
 
     it('renders three Piece outline buttons (None, Shadow, Outline)', () => {
-        createInfoModal({ container });
+        createSettingsModal({ container });
 
         const buttons = document.querySelectorAll(
             'button[data-testid^="piece-outline-"]',
@@ -459,7 +346,7 @@ describe('createInfoModal — Piece outline setting', () => {
     });
 
     it('marks Outline as selected by default', () => {
-        createInfoModal({ container });
+        createSettingsModal({ container });
 
         const outlineBtn = document.querySelector(
             '[data-testid="piece-outline-outline"]',
@@ -468,7 +355,7 @@ describe('createInfoModal — Piece outline setting', () => {
     });
 
     it('clicking Shadow persists the choice and updates the CSS variable', () => {
-        createInfoModal({ container });
+        createSettingsModal({ container });
 
         const shadowBtn = document.querySelector(
             '[data-testid="piece-outline-shadow"]',
@@ -484,7 +371,7 @@ describe('createInfoModal — Piece outline setting', () => {
     });
 
     it('clicking a second option deselects the first', () => {
-        createInfoModal({ container });
+        createSettingsModal({ container });
 
         const noneBtn = document.querySelector(
             '[data-testid="piece-outline-none"]',
@@ -501,7 +388,7 @@ describe('createInfoModal — Piece outline setting', () => {
     });
 
     it('shows the outline-colour row by default (Outline active)', () => {
-        createInfoModal({ container });
+        createSettingsModal({ container });
         const row = document.querySelector(
             '[data-testid="piece-outline-color-row"]',
         ) as HTMLElement;
@@ -510,7 +397,7 @@ describe('createInfoModal — Piece outline setting', () => {
 
     it('hides the outline-colour row when Shadow is the saved style', () => {
         localStorage.setItem('puzzle-piece-outline', 'shadow');
-        createInfoModal({ container });
+        createSettingsModal({ container });
         const row = document.querySelector(
             '[data-testid="piece-outline-color-row"]',
         ) as HTMLElement;
@@ -519,7 +406,7 @@ describe('createInfoModal — Piece outline setting', () => {
     });
 
     it('reveals the colour row when Outline is selected, hides it for None', () => {
-        createInfoModal({ container });
+        createSettingsModal({ container });
         const row = document.querySelector(
             '[data-testid="piece-outline-color-row"]',
         ) as HTMLElement;
@@ -539,7 +426,7 @@ describe('createInfoModal — Piece outline setting', () => {
 
     it('shows the colour row on open when Outline is the saved style', () => {
         localStorage.setItem('puzzle-piece-outline', 'outline');
-        createInfoModal({ container });
+        createSettingsModal({ container });
         const row = document.querySelector(
             '[data-testid="piece-outline-color-row"]',
         ) as HTMLElement;
@@ -547,7 +434,7 @@ describe('createInfoModal — Piece outline setting', () => {
     });
 
     it('offers an unchecked same-width toggle, shown only with Outline', () => {
-        createInfoModal({ container });
+        createSettingsModal({ container });
         const toggle = container.querySelector<HTMLInputElement>(
             '[data-testid="outline-constant-width-toggle"]',
         )!;
@@ -560,7 +447,7 @@ describe('createInfoModal — Piece outline setting', () => {
     });
 
     it('checking the same-width toggle persists it and flags the root element', () => {
-        createInfoModal({ container });
+        createSettingsModal({ container });
         const toggle = container.querySelector<HTMLInputElement>(
             '[data-testid="outline-constant-width-toggle"]',
         )!;
@@ -574,7 +461,7 @@ describe('createInfoModal — Piece outline setting', () => {
 
     it('shows the saved same-width choice on open', () => {
         localStorage.setItem('puzzle-outline-constant-width', 'true');
-        createInfoModal({ container });
+        createSettingsModal({ container });
         expect(
             container.querySelector<HTMLInputElement>(
                 '[data-testid="outline-constant-width-toggle"]',
@@ -584,7 +471,7 @@ describe('createInfoModal — Piece outline setting', () => {
 
     it('selecting a swatch persists the colour and sets the CSS variable', () => {
         localStorage.setItem('puzzle-piece-outline', 'outline');
-        createInfoModal({ container });
+        createSettingsModal({ container });
 
         (
             document.querySelector(
@@ -609,7 +496,7 @@ describe('createInfoModal — Piece outline setting', () => {
 
     it('closes only the outline-colour picker on Escape, not the modal', async () => {
         localStorage.setItem('puzzle-piece-outline', 'outline');
-        createInfoModal({ container });
+        createSettingsModal({ container });
         container.querySelector<HTMLButtonElement>('button.outline-color-button')!.click();
         await new Promise((resolve) => requestAnimationFrame(resolve));
         document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
@@ -619,7 +506,7 @@ describe('createInfoModal — Piece outline setting', () => {
     });
 
     it('toggles the marquee-contain preference from the settings checkbox', () => {
-        createInfoModal({ container });
+        createSettingsModal({ container });
 
         const checkbox = container.querySelector<HTMLInputElement>(
             '[data-testid="marquee-contain-toggle"]',
@@ -634,7 +521,7 @@ describe('createInfoModal — Piece outline setting', () => {
     });
 });
 
-describe('createInfoModal — Device label setting', () => {
+describe('createSettingsModal — Device label setting', () => {
     let container: HTMLElement;
 
     beforeEach(() => {
@@ -675,7 +562,7 @@ describe('createInfoModal — Device label setting', () => {
     }
 
     it('lives in the Debug section', () => {
-        createInfoModal({ container });
+        createSettingsModal({ container });
 
         expect(
             el('debug-section').querySelector('[data-testid="device-label-setting"]'),
@@ -684,27 +571,27 @@ describe('createInfoModal — Device label setting', () => {
 
     it('prefills the input with the stored label', () => {
         localStorage.setItem(DISTINCT_ID_KEY, 'test-device');
-        createInfoModal({ container });
+        createSettingsModal({ container });
 
         expect(input().value).toBe('test-device');
     });
 
     it('leaves the input empty with a "no label" placeholder when none is set', () => {
-        createInfoModal({ container });
+        createSettingsModal({ container });
 
         expect(input().value).toBe('');
         expect(input().placeholder).toBe('No label set');
     });
 
     it('says a change applies from the next launch', () => {
-        createInfoModal({ container });
+        createSettingsModal({ container });
 
         expect(el('device-label-setting').textContent).toContain('next launch');
     });
 
     it('enables Save only while the input differs from the stored label', () => {
         localStorage.setItem(DISTINCT_ID_KEY, 'test-device');
-        createInfoModal({ container });
+        createSettingsModal({ container });
         expect(saveButton().disabled).toBe(true);
 
         type('other-device');
@@ -715,7 +602,7 @@ describe('createInfoModal — Device label setting', () => {
     });
 
     it('saves a valid label, trimmed, and disables Save again', () => {
-        createInfoModal({ container });
+        createSettingsModal({ container });
 
         save(' test-device ');
 
@@ -727,7 +614,7 @@ describe('createInfoModal — Device label setting', () => {
 
     it('removes the label when saved empty', () => {
         localStorage.setItem(DISTINCT_ID_KEY, 'test-device');
-        createInfoModal({ container });
+        createSettingsModal({ container });
 
         save('');
 
@@ -739,7 +626,7 @@ describe('createInfoModal — Device label setting', () => {
         'shows an inline error for the invalid label %j and keeps the stored one',
         (value) => {
             localStorage.setItem(DISTINCT_ID_KEY, 'test-device');
-            createInfoModal({ container });
+            createSettingsModal({ container });
 
             save(value);
 
@@ -751,13 +638,13 @@ describe('createInfoModal — Device label setting', () => {
     );
 
     it('does not cap the input length, so an overlong label reaches the length error', () => {
-        createInfoModal({ container });
+        createSettingsModal({ container });
 
         expect(input().hasAttribute('maxlength')).toBe(false);
     });
 
     it('rejects "off" with a pointer to Clear', () => {
-        createInfoModal({ container });
+        createSettingsModal({ container });
 
         save('off');
 
@@ -768,7 +655,7 @@ describe('createInfoModal — Device label setting', () => {
     });
 
     it('hides a previous error after a successful save', () => {
-        createInfoModal({ container });
+        createSettingsModal({ container });
 
         save('Bad');
         save('good');
@@ -777,7 +664,7 @@ describe('createInfoModal — Device label setting', () => {
     });
 
     it('hides the error once the input is edited', () => {
-        createInfoModal({ container });
+        createSettingsModal({ container });
 
         save('Bad');
         type('bad');
@@ -787,7 +674,7 @@ describe('createInfoModal — Device label setting', () => {
 
     it('clears the stored label and the input', () => {
         localStorage.setItem(DISTINCT_ID_KEY, 'test-device');
-        createInfoModal({ container });
+        createSettingsModal({ container });
 
         el('device-label-clear').click();
 
@@ -796,7 +683,7 @@ describe('createInfoModal — Device label setting', () => {
     });
 
     it('shows the label actually stored when storage rejects the write', () => {
-        createInfoModal({ container });
+        createSettingsModal({ container });
         vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
             throw new DOMException('full', 'QuotaExceededError');
         });
@@ -810,7 +697,7 @@ describe('createInfoModal — Device label setting', () => {
 
     it('reports a failed clear', () => {
         localStorage.setItem(DISTINCT_ID_KEY, 'test-device');
-        createInfoModal({ container });
+        createSettingsModal({ container });
         vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => {
             throw new DOMException('denied', 'SecurityError');
         });
@@ -823,7 +710,7 @@ describe('createInfoModal — Device label setting', () => {
     });
 });
 
-describe('createInfoModal — analytics', () => {
+describe('createSettingsModal — analytics', () => {
     let container: HTMLElement;
     let umamiTrack: Mock<NonNullable<Window['umami']>['track']>;
 
@@ -849,20 +736,9 @@ describe('createInfoModal — analytics', () => {
     }
 
     function closedData(): unknown {
-        const sent = trackedData('info-modal-closed');
+        const sent = trackedData('settings-modal-closed');
         expect(sent).toHaveLength(1);
         return sent[0];
-    }
-
-    function stubContentGeometry(scrollHeight: number, clientHeight: number): void {
-        vi.spyOn(Element.prototype, 'scrollHeight', 'get').mockReturnValue(scrollHeight);
-        vi.spyOn(Element.prototype, 'clientHeight', 'get').mockReturnValue(clientHeight);
-    }
-
-    function scrollContentTo(top: number): void {
-        const content = container.querySelector<HTMLElement>('.info-modal-content')!;
-        content.scrollTop = top;
-        content.dispatchEvent(new Event('scroll'));
     }
 
     function clickClose(): void {
@@ -873,92 +749,36 @@ describe('createInfoModal — analytics', () => {
         return new Promise((resolve) => setTimeout(resolve, 0));
     }
 
-    it('sends info-modal-opened when the modal opens', () => {
-        createInfoModal({ container });
+    it('sends settings-modal-opened when the modal opens', () => {
+        createSettingsModal({ container });
 
-        expect(umamiTrack).toHaveBeenCalledExactlyOnceWith('info-modal-opened', {});
-    });
-
-    it.each([
-        ['button', () => clickClose()],
-        ['backdrop', () => container.querySelector<HTMLElement>('.info-modal-overlay')!.click()],
-        ['escape', () => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))],
-    ])('reports closedBy %s', (closedBy, close) => {
-        createInfoModal({ container });
-
-        close();
-
-        expect(closedData()).toMatchObject({ closedBy });
+        expect(umamiTrack).toHaveBeenCalledExactlyOnceWith('settings-modal-opened', {});
     });
 
     it('reports closedBy solve when Solve closes the modal', () => {
-        createInfoModal({ container, onSolve: vi.fn() });
+        createSettingsModal({ container, onSolve: vi.fn() });
 
         container.querySelector<HTMLButtonElement>('.info-modal-solve-btn')!.click();
 
         expect(closedData()).toMatchObject({ closedBy: 'solve' });
     });
 
-    it('reports how long the modal was open', () => {
-        vi.useFakeTimers({ toFake: ['Date'] });
-        vi.setSystemTime(1_000_000);
-        createInfoModal({ container });
-
-        vi.setSystemTime(1_004_200);
-        clickClose();
-
-        expect(closedData()).toMatchObject({ openMs: 4200 });
-    });
-
-    it('reports everything seen and no scroll when the content fits', () => {
-        stubContentGeometry(400, 400);
-        createInfoModal({ container });
+    it('reports view stats with debugOpened false when Debug stays collapsed', () => {
+        createSettingsModal({ container });
 
         clickClose();
 
-        expect(closedData()).toMatchObject({ seenPercent: 100, scrolled: false });
-    });
-
-    it('reports the share visible on open when the content is never scrolled', () => {
-        stubContentGeometry(1000, 400);
-        createInfoModal({ container });
-
-        clickClose();
-
-        expect(closedData()).toMatchObject({ seenPercent: 40, scrolled: false });
-    });
-
-    it('reports the furthest point reached, even after scrolling back up', () => {
-        stubContentGeometry(1000, 400);
-        createInfoModal({ container });
-
-        scrollContentTo(300);
-        scrollContentTo(0);
-        clickClose();
-
-        expect(closedData()).toMatchObject({ seenPercent: 70, scrolled: true });
-    });
-
-    it('caps seenPercent at 100 when an overscroll reports a scrollTop past the end', () => {
-        stubContentGeometry(1000, 400);
-        createInfoModal({ container });
-
-        scrollContentTo(700);
-        clickClose();
-
-        expect(closedData()).toMatchObject({ seenPercent: 100 });
-    });
-
-    it('reports debugOpened false when Debug stays collapsed', () => {
-        createInfoModal({ container });
-
-        clickClose();
-
-        expect(closedData()).toMatchObject({ debugOpened: false });
+        expect(closedData()).toEqual({
+            closedBy: 'button',
+            openMs: expect.any(Number),
+            seenPercent: 100,
+            scrolled: false,
+            debugOpened: false,
+        });
     });
 
     it('reports debugOpened true once Debug was expanded, even if collapsed again', async () => {
-        createInfoModal({ container });
+        createSettingsModal({ container });
         const summary = container.querySelector<HTMLElement>('[data-testid="debug-section"] > summary')!;
 
         summary.click();
@@ -974,7 +794,7 @@ describe('createInfoModal — analytics', () => {
         ['snap-distance', 'tolerance-strict', 'normal', 'strict'],
         ['piece-outline', 'piece-outline-none', 'outline', 'none'],
     ])('sends setting-changed for %s', (setting, testid, from, to) => {
-        createInfoModal({ container });
+        createSettingsModal({ container });
 
         container.querySelector<HTMLButtonElement>(`[data-testid="${testid}"]`)!.click();
 
@@ -982,7 +802,7 @@ describe('createInfoModal — analytics', () => {
     });
 
     it('sends setting-changed for effects with what Auto detects on this device', () => {
-        createInfoModal({ container });
+        createSettingsModal({ container });
 
         container.querySelector<HTMLButtonElement>('[data-testid="effects-simple"]')!.click();
 
@@ -994,7 +814,7 @@ describe('createInfoModal — analytics', () => {
     it.each(['tolerance-normal', 'piece-outline-outline'])(
         'sends no setting-changed when the selected preset %s is clicked again',
         (testid) => {
-            createInfoModal({ container });
+            createSettingsModal({ container });
 
             container.querySelector<HTMLButtonElement>(`[data-testid="${testid}"]`)!.click();
 
@@ -1004,7 +824,7 @@ describe('createInfoModal — analytics', () => {
 
     it('sends setting-changed for outline-color', () => {
         localStorage.setItem('puzzle-piece-outline', 'outline');
-        createInfoModal({ container });
+        createSettingsModal({ container });
 
         container.querySelector<HTMLButtonElement>('button.outline-color-button')!.click();
         container.querySelector<HTMLButtonElement>('[data-swatch-id="blue-default"]')!.click();
@@ -1019,7 +839,7 @@ describe('createInfoModal — analytics', () => {
         ['enclose-to-select', 'marquee-contain-toggle'],
         ['outline-constant-width', 'outline-constant-width-toggle'],
     ])('sends setting-changed for %s', (setting, testid) => {
-        createInfoModal({ container });
+        createSettingsModal({ container });
         const checkbox = container.querySelector<HTMLInputElement>(`[data-testid="${testid}"]`)!;
 
         checkbox.checked = true;

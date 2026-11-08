@@ -463,6 +463,26 @@ export interface HelpModalClosedData {
     scrolled: boolean;
 }
 
+export type SettingsModalOpenedData = Record<string, never>;
+
+/**
+ * Not sent when the page unloads or the app is killed with the modal open,
+ * so `settings-modal-opened` minus this counts those.
+ *
+ * `seenPercent` is defined as on `help-modal-closed`; an expanded Debug
+ * section counts toward the height from then on.
+ *
+ * `info-modal-closed` carried `debugOpened` and `'solve'` before #723.
+ */
+export interface SettingsModalClosedData {
+    closedBy: 'button' | 'backdrop' | 'escape' | 'solve';
+    /** Wall-clock, background time included. */
+    openMs: number;
+    seenPercent: number;
+    scrolled: boolean;
+    debugOpened: boolean;
+}
+
 /**
  * `detected` (effects only) is the level Auto resolves to on this device,
  * sent whatever `from` and `to` are, so `from: 'auto'` with `to` other than
@@ -1891,6 +1911,8 @@ export function track(name: 'info-modal-opened', data: InfoModalOpenedData): voi
 export function track(name: 'info-modal-closed', data: InfoModalClosedData): void;
 export function track(name: 'help-modal-opened', data: HelpModalOpenedData): void;
 export function track(name: 'help-modal-closed', data: HelpModalClosedData): void;
+export function track(name: 'settings-modal-opened', data: SettingsModalOpenedData): void;
+export function track(name: 'settings-modal-closed', data: SettingsModalClosedData): void;
 export function track(name: 'setting-changed', data: SettingChangedData): void;
 export function track(name: 'effects-resolved', data: EffectsResolvedData): void;
 export function track(name: 'traced-chunk-preload-started', data: TracedChunkPreloadStartedData): void;
