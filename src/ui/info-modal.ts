@@ -41,7 +41,7 @@ import {
     saveOutlineConstantWidthPreference,
     applyOutlineConstantWidth,
 } from './outline-constant-width.js';
-import { attachShareSection } from './share-section.js';
+import { buildShareSection } from './share-section.js';
 import { createSelectToolIcon, createMarqueeToolIcon } from './tool-icons.js';
 import { buildReproParams } from '../sharing/index.js';
 import {
@@ -838,7 +838,7 @@ export function createInfoModal(options: InfoModalOptions): void {
     content.tabIndex = -1;
 
     if (options.state) {
-        attachShareSection(content, options.state, window.location.href);
+        content.appendChild(buildShareSection(options.state, window.location.href));
     }
 
     content.appendChild(buildHowToPlaySection());

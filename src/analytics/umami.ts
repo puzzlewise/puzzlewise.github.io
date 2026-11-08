@@ -408,9 +408,9 @@ export interface PuzzleSolvedData {
     elapsedMs?: number;
 }
 
-/** Data attached to `puzzle-shared`. */
+/** Data attached to `puzzle-shared`. `'help-modal'` was `'info-modal'` before #723. */
 export interface PuzzleSharedData {
-    source: 'completion-overlay' | 'info-modal';
+    source: 'completion-overlay' | 'help-modal';
     includesProgress: boolean;
 }
 
@@ -440,6 +440,27 @@ export interface InfoModalClosedData {
     seenPercent: number;
     scrolled: boolean;
     debugOpened: boolean;
+}
+
+export type HelpModalOpenedData = Record<string, never>;
+
+/**
+ * Not sent when the page unloads or the app is killed with the modal open,
+ * so `help-modal-opened` minus this counts those.
+ *
+ * `seenPercent` (0–100) is how far down the content was on screen at some
+ * point, as a share of its height: the share visible on open if never
+ * scrolled, 100 once the bottom was reached.
+ *
+ * Replaced `info-modal-*` in #723; that modal's content also held Settings
+ * and Debug, so its `seenPercent` is not comparable.
+ */
+export interface HelpModalClosedData {
+    closedBy: 'button' | 'backdrop' | 'escape';
+    /** Wall-clock, background time included. */
+    openMs: number;
+    seenPercent: number;
+    scrolled: boolean;
 }
 
 /**
@@ -1421,10 +1442,10 @@ export interface PieceCountMismatchData {
  * path (clipboard write failed, or no share mechanism was available) and the
  * user saw a "Couldn't share" toast. User cancellation of the native share
  * sheet (`AbortError`) is NOT a failure and is never tracked. `source` mirrors
- * `puzzle-shared`: the info-modal share section or the completion overlay.
+ * `puzzle-shared`, including its pre-#723 `'info-modal'`.
  */
 export interface ShareFailedData {
-    source: 'info-modal' | 'completion-overlay';
+    source: 'help-modal' | 'completion-overlay';
     reason: string;
 }
 
@@ -1868,6 +1889,8 @@ export function track(name: 'puzzle-shared', data: PuzzleSharedData): void;
 export function track(name: 'background-color-changed', data: BackgroundColorChangedData): void;
 export function track(name: 'info-modal-opened', data: InfoModalOpenedData): void;
 export function track(name: 'info-modal-closed', data: InfoModalClosedData): void;
+export function track(name: 'help-modal-opened', data: HelpModalOpenedData): void;
+export function track(name: 'help-modal-closed', data: HelpModalClosedData): void;
 export function track(name: 'setting-changed', data: SettingChangedData): void;
 export function track(name: 'effects-resolved', data: EffectsResolvedData): void;
 export function track(name: 'traced-chunk-preload-started', data: TracedChunkPreloadStartedData): void;

@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { attachShareSection } from './share-section.js';
+import { buildShareSection } from './share-section.js';
 import type { GameState } from '../model/types.js';
 import { makeGameState } from '../test-helpers/fixtures.js';
 
@@ -22,7 +22,7 @@ function state(overrides: Partial<GameState> = {}): GameState {
     });
 }
 
-describe('attachShareSection', () => {
+describe('buildShareSection', () => {
     let host: HTMLElement;
     beforeEach(() => {
         host = document.createElement('div');
@@ -34,7 +34,7 @@ describe('attachShareSection', () => {
     });
 
     it('renders a heading, checkbox, primary button, and URL preview', () => {
-        attachShareSection(host, state(), 'https://example.com/');
+        host.appendChild(buildShareSection(state(), 'https://example.com/'));
         expect(host.querySelector('h3')?.textContent).toBe('Share this puzzle');
         expect(host.querySelector<HTMLInputElement>('[data-testid="share-include-progress"]')).not.toBeNull();
         expect(host.querySelector<HTMLButtonElement>('[data-testid="share-primary-btn"]')).not.toBeNull();
@@ -42,7 +42,7 @@ describe('attachShareSection', () => {
     });
 
     it('renders the URL preview as a single-line readonly input with the URL as its value', () => {
-        attachShareSection(host, state(), 'https://example.com/');
+        host.appendChild(buildShareSection(state(), 'https://example.com/'));
         const preview = host.querySelector<HTMLInputElement>('[data-testid="share-url-preview"]')!;
         expect(preview.tagName.toLowerCase()).toBe('input');
         expect(preview.type).toBe('text');
@@ -51,7 +51,7 @@ describe('attachShareSection', () => {
     });
 
     it('selects the full URL when the preview input receives focus', () => {
-        attachShareSection(host, state(), 'https://example.com/');
+        host.appendChild(buildShareSection(state(), 'https://example.com/'));
         const preview = host.querySelector<HTMLInputElement>('[data-testid="share-url-preview"]')!;
         document.body.appendChild(preview);
         preview.focus();
@@ -60,7 +60,7 @@ describe('attachShareSection', () => {
     });
 
     it('disables the progress checkbox when no pieces are merged', () => {
-        attachShareSection(host, state(), 'https://example.com/');
+        host.appendChild(buildShareSection(state(), 'https://example.com/'));
         const cb = host.querySelector<HTMLInputElement>('[data-testid="share-include-progress"]')!;
         expect(cb.disabled).toBe(true);
         expect(host.querySelector('[data-testid="share-progress-hint"]')?.textContent)
@@ -69,7 +69,7 @@ describe('attachShareSection', () => {
 
     it('disables the progress checkbox when the puzzle is complete', () => {
         const s = state({ completed: true });
-        attachShareSection(host, s, 'https://example.com/');
+        host.appendChild(buildShareSection(s, 'https://example.com/'));
         const cb = host.querySelector<HTMLInputElement>('[data-testid="share-include-progress"]')!;
         expect(cb.disabled).toBe(true);
         expect(host.querySelector('[data-testid="share-progress-hint"]')?.textContent)
@@ -85,7 +85,7 @@ describe('attachShareSection', () => {
                   position: { x: 0, y: 0 }, rotation: 0 },
             ],
         });
-        attachShareSection(host, s, 'https://example.com/');
+        host.appendChild(buildShareSection(s, 'https://example.com/'));
         const cb = host.querySelector<HTMLInputElement>('[data-testid="share-include-progress"]')!;
         expect(cb.disabled).toBe(false);
     });
@@ -97,7 +97,7 @@ describe('attachShareSection', () => {
                   position: { x: 0, y: 0 }, rotation: 0 },
             ],
         });
-        attachShareSection(host, s, 'https://example.com/');
+        host.appendChild(buildShareSection(s, 'https://example.com/'));
         const preview = host.querySelector<HTMLInputElement>('[data-testid="share-url-preview"]')!;
         const urlBefore = preview.value;
 
@@ -116,12 +116,12 @@ describe('attachShareSection', () => {
         // No native share, no clipboard => onError fires with 'No share mechanism available'.
         vi.stubGlobal('navigator', {});
 
-        attachShareSection(host, state(), 'https://example.com/');
+        host.appendChild(buildShareSection(state(), 'https://example.com/'));
         host.querySelector<HTMLButtonElement>('[data-testid="share-primary-btn"]')!.click();
 
         await vi.waitFor(() => {
             expect(umamiTrack).toHaveBeenCalledWith('share-failed', {
-                source: 'info-modal',
+                source: 'help-modal',
                 reason: 'No share mechanism available',
             });
         });
@@ -139,12 +139,12 @@ describe('attachShareSection', () => {
             },
         });
 
-        attachShareSection(host, state(), 'https://example.com/');
+        host.appendChild(buildShareSection(state(), 'https://example.com/'));
         host.querySelector<HTMLButtonElement>('[data-testid="share-primary-btn"]')!.click();
 
         await vi.waitFor(() => {
             expect(umamiTrack).toHaveBeenCalledWith('share-failed', {
-                source: 'info-modal',
+                source: 'help-modal',
                 reason: 'copy failed at <url>',
             });
         });
@@ -152,14 +152,14 @@ describe('attachShareSection', () => {
 
     it('primary button label is "Share…" when navigator.share is available', () => {
         vi.stubGlobal('navigator', { share: () => {} });
-        attachShareSection(host, state(), 'https://example.com/');
+        host.appendChild(buildShareSection(state(), 'https://example.com/'));
         expect(host.querySelector<HTMLButtonElement>('[data-testid="share-primary-btn"]')!.textContent)
             .toMatch(/Share/);
     });
 
     it('primary button label is "Copy link" when navigator.share is unavailable', () => {
         vi.stubGlobal('navigator', {});
-        attachShareSection(host, state(), 'https://example.com/');
+        host.appendChild(buildShareSection(state(), 'https://example.com/'));
         expect(host.querySelector<HTMLButtonElement>('[data-testid="share-primary-btn"]')!.textContent)
             .toBe('Copy link');
     });
