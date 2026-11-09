@@ -45,10 +45,9 @@ describe('showCompletionOverlay', () => {
         delete window.umami;
     });
 
-    it('appends a .completion-overlay to the container and glows it', () => {
+    it('appends a .completion-overlay to the container', () => {
         showCompletionOverlay({ container, state: makeState() });
         expect(container.querySelector('.completion-overlay')).not.toBeNull();
-        expect(container.classList.contains('completion-glow')).toBe(true);
     });
 
     it('renders the heading, well-done line, share button, and dismiss hint', () => {
@@ -71,12 +70,11 @@ describe('showCompletionOverlay', () => {
         expect(hintIdx).toBeGreaterThan(shareIdx);
     });
 
-    it('returns a hide function that removes the overlay and glow', () => {
+    it('returns a hide function that removes the overlay', () => {
         const hide = showCompletionOverlay({ container, state: makeState() });
         expect(container.querySelector('.completion-overlay')).not.toBeNull();
         hide();
         expect(container.querySelector('.completion-overlay')).toBeNull();
-        expect(container.classList.contains('completion-glow')).toBe(false);
     });
 
     it('hide is idempotent', () => {
@@ -99,7 +97,6 @@ describe('showCompletionOverlay', () => {
         const overlay = container.querySelector<HTMLElement>('.completion-overlay')!;
         overlay.click();
         expect(container.querySelector('.completion-overlay')).toBeNull();
-        expect(container.classList.contains('completion-glow')).toBe(false);
         expect(onDismiss).toHaveBeenCalledTimes(1);
     });
 
@@ -108,7 +105,6 @@ describe('showCompletionOverlay', () => {
         showCompletionOverlay({ container, state: makeState(), onDismiss });
         document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
         expect(container.querySelector('.completion-overlay')).toBeNull();
-        expect(container.classList.contains('completion-glow')).toBe(false);
         expect(onDismiss).toHaveBeenCalledTimes(1);
     });
 

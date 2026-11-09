@@ -589,14 +589,8 @@ html, body {
   100% { background-position: 200% center; }
 }
 
-.completion-glow [data-group-id] {
-  filter: drop-shadow(0 0 20px color-mix(in srgb, var(--color-amber-default) 60%, transparent))
-          drop-shadow(0 2px 4px rgba(0, 0, 0, 0.35));
-  transition: filter 1s ease-out;
-}
-
-/* Simple effects (#703). Must follow the group state rules and the completion
-   glow, which it overrides at equal specificity. Opacity sits on each ring's
+/* Simple effects (#703). Must follow the group state rules, which it
+   overrides at equal specificity. Opacity sits on each ring's
    <use>, not in its stroke color, so overlapping piece paths flatten into one
    ring instead of darkening where pieces meet. */
 [data-effects="simple"] [data-outline-underlay] {
@@ -613,14 +607,8 @@ html, body {
   filter: none;
 }
 
-[data-effects="simple"] .completion-glow [data-group-id] {
-  filter: none;
-  transition: none;
-}
-
 [data-effects="simple"][data-piece-outline="shadow"] [data-ring^="edge-"],
 [data-effects="simple"] [data-group-id].dragging [data-ring^="lift-"],
-[data-effects="simple"] .completion-glow [data-ring^="completion-"],
 [data-effects="simple"] [data-group-id].selected [data-ring^="glow-"] {
   display: inline;
 }
@@ -634,15 +622,6 @@ html, body {
 [data-ring="lift-1"] { stroke-width: 24px; }
 [data-ring="lift-2"] { stroke-width: 16px; }
 [data-ring="lift-3"] { stroke-width: 8px; }
-
-[data-ring="completion-shadow"] {
-  stroke: #000;
-  stroke-width: 8px;
-  opacity: 0.2;
-  transform: translate(0, 2px);
-}
-[data-ring="completion-1"] { stroke: var(--color-amber-default); stroke-width: 40px; opacity: 0.35; }
-[data-ring="completion-2"] { stroke: var(--color-amber-default); stroke-width: 16px; opacity: 0.5; }
 
 [data-ring^="glow-"] { stroke: var(--selection-glow); }
 [data-ring="glow-1"] { stroke-width: 48px; opacity: 0.4; }

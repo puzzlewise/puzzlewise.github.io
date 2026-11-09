@@ -409,16 +409,9 @@ describe('simple effects', () => {
         expect(declarationsFor(styleCss, selector)).toMatch(/filter:\s*none/);
     });
 
-    it('drops the completion glow filter and its fade under Simple', () => {
-        const body = declarationsFor(styleCss, '[data-effects="simple"] .completion-glow [data-group-id]');
-        expect(body).toMatch(/filter:\s*none/);
-        expect(body).toMatch(/transition:\s*none/);
-    });
-
     it.each([
         '[data-effects="simple"][data-piece-outline="shadow"] [data-ring^="edge-"]',
         '[data-effects="simple"] [data-group-id].dragging [data-ring^="lift-"]',
-        '[data-effects="simple"] .completion-glow [data-ring^="completion-"]',
         '[data-effects="simple"] [data-group-id].selected [data-ring^="glow-"]',
     ])('shows rings for %s', (selector) => {
         expect(declarationsFor(styleCss, selector)).toMatch(/display:\s*inline/);

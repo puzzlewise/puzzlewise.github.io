@@ -7,7 +7,6 @@ import { showToast } from './toast.js';
 import { loadColorPreference } from './background-color.js';
 
 export interface CompletionOverlayOptions {
-    /** Also receives the glow class. */
     container: HTMLElement;
     state: GameState;
     /**
@@ -22,20 +21,11 @@ export function showCompletionOverlay(
 ): () => void {
     const { container, state, onDismiss } = opts;
 
-    container.classList.add('completion-glow');
-
-    function cleanup(): void {
-        container.classList.remove('completion-glow');
-    }
-
     const handle = createDismissableOverlay({
         container,
         className: 'completion-overlay',
         dismissOn: 'any-click',
-        onDismiss: () => {
-            cleanup();
-            onDismiss?.();
-        },
+        onDismiss: () => onDismiss?.(),
     });
 
     const message = document.createElement('div');
@@ -89,6 +79,5 @@ export function showCompletionOverlay(
         if (hidden) return;
         hidden = true;
         handle.dismiss();
-        cleanup();
     };
 }
