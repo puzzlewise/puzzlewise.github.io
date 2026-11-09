@@ -72,6 +72,7 @@ function createFakeRenderer(): Renderer {
         setGroupSelected: vi.fn(),
         setRingsEnabled: vi.fn(),
         setInnerOutlineEnabled: vi.fn(),
+        invalidateGroup: vi.fn(),
         pieceIdFromTarget: vi.fn((t: EventTarget | null) =>
             (t as { _pieceId?: number } | null)?._pieceId ?? null),
         // Defaults to "no piece nearby"; probe tests override it.
@@ -770,5 +771,122 @@ describe('setupInteraction — marquee routing', () => {
         expect(selectionManager.toolActive).toBe(true);
         expect(selectionManager.marqueeActive).toBe(false);
         expect(container.appendChild).toHaveBeenCalled();
+    });
+});
+
+describe('setupInteraction — drag render batching', () => {
+    let frames: Map<number, FrameRequestCallback>;
+    let frameTime: number;
+
+    function runFrame(): void {
+        frameTime += 16;
+        for (const [id, cb] of Array.from(frames)) {
+            if (!frames.delete(id)) continue;
+            cb(frameTime);
+        }
+    }
+
+    beforeEach(() => {
+        frames = new Map();
+        frameTime = 0;
+        let nextId = 1;
+        globalThis.requestAnimationFrame = vi.fn((cb: FrameRequestCallback) => {
+            frames.set(nextId, cb);
+            return nextId++;
+        });
+        globalThis.cancelAnimationFrame = vi.fn((id: number) => { frames.delete(id); });
+    });
+
+    function startDrag(opts: { panViewport?: () => void } = {}) {
+        const container = createFakeContainer();
+        const onStateChanged = vi.fn();
+        const onDrop = vi.fn();
+        const state = makeState([makeGroup(7, [3])]);
+        const cleanup = setupInteraction({
+            container: container as unknown as HTMLElement,
+            renderer: createFakeRenderer(),
+            viewportTransform: new ViewportTransform(),
+            getState: () => state,
+            onStateChanged,
+            onDrop,
+            onViewportChanged: vi.fn(),
+            panViewport: opts.panViewport,
+        });
+        const pieceTarget = { _pieceId: 3 } as unknown as EventTarget;
+        container.fire('pointerdown', fakePointerEvent({ target: pieceTarget, pointerId: 1, clientX: 300, clientY: 300 }));
+        container.fire('pointermove', fakePointerEvent({ pointerId: 1, clientX: 320, clientY: 300 })); // promote
+        runFrame();
+        onStateChanged.mockClear();
+        const move = (clientX: number, clientY = 300) =>
+            container.fire('pointermove', fakePointerEvent({ pointerId: 1, clientX, clientY }));
+        return { container, onStateChanged, onDrop, cleanup, state, move };
+    }
+
+    it('renders drag moves at most once per animation frame', () => {
+        const { onStateChanged, state, move } = startDrag();
+
+        move(330);
+        move(340);
+        move(350);
+        expect(onStateChanged).not.toHaveBeenCalled();
+
+        runFrame();
+        expect(onStateChanged).toHaveBeenCalledOnce();
+        expect(state.groupsById.get(7)!.position.x).toBe(30);
+    });
+
+    it('renders a pending move before the drop runs', () => {
+        const { container, onStateChanged, onDrop, move } = startDrag();
+
+        move(330);
+        container.fire('pointerup', fakePointerEvent({ pointerId: 1, clientX: 330, clientY: 300 }));
+
+        expect(onStateChanged).toHaveBeenCalledOnce();
+        expect(onStateChanged.mock.invocationCallOrder[0]).toBeLessThan(onDrop.mock.invocationCallOrder[0]);
+    });
+
+    it('renders a pending move when the drag is cancelled', () => {
+        const { container, onStateChanged, move } = startDrag();
+
+        move(330);
+        container.fire('pointercancel', fakePointerEvent({ pointerId: 1 }));
+
+        expect(onStateChanged).toHaveBeenCalled();
+        expect(frames.size).toBe(0);
+    });
+
+    it('drops a pending move render on teardown', () => {
+        const { onStateChanged, cleanup, move } = startDrag();
+
+        move(330);
+        cleanup();
+        runFrame();
+
+        expect(onStateChanged).not.toHaveBeenCalled();
+    });
+
+    it('renders within the auto-pan frame while the pointer rests in the edge zone', () => {
+        const panViewport = vi.fn();
+        const { onStateChanged, move } = startDrag({ panViewport });
+        move(5);
+        runFrame();
+        onStateChanged.mockClear();
+
+        runFrame();
+
+        expect(panViewport).toHaveBeenCalledOnce();
+        expect(onStateChanged).toHaveBeenCalledOnce();
+    });
+
+    it('renders once in a frame where a move and an auto-pan tick coincide', () => {
+        const { onStateChanged, move } = startDrag({ panViewport: vi.fn() });
+        move(5);
+        runFrame();
+        onStateChanged.mockClear();
+
+        move(4);
+        runFrame();
+
+        expect(onStateChanged).toHaveBeenCalledOnce();
     });
 });

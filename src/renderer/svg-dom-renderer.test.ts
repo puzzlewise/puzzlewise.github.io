@@ -2,8 +2,8 @@
  * @vitest-environment jsdom
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { SvgDomRenderer, RELAYER_IDLE_MS, RING_NAMES } from './svg-dom-renderer.js';
+import { describe, it, expect, vi, beforeEach, afterEach, onTestFinished, type MockInstance } from 'vitest';
+import { SvgDomRenderer, RELAYER_IDLE_MS, RING_NAMES, applyGroupTransform } from './svg-dom-renderer.js';
 import { VIEWPORT_TRANSITION_MS } from './types.js';
 import type { GameState, PieceGroup } from '../model/types.js';
 import { makeGameState, makeRectPiece } from '../test-helpers/fixtures.js';
@@ -397,6 +397,126 @@ describe('SvgDomRenderer', () => {
                 '[data-group-id="0"]',
             ) as HTMLElement;
             expect(groupEl.style.transform).toBe('translate(300px, 400px) rotate(0deg)');
+        });
+
+        describe('re-rendering unchanged groups', () => {
+            function spyStyleWrites(): { transform: MockInstance; left: MockInstance } {
+                const proto = Object.getPrototypeOf(document.createElement('div').style) as CSSStyleDeclaration;
+                const transform = vi.spyOn(proto, 'transform', 'set');
+                const left = vi.spyOn(proto, 'left', 'set');
+                onTestFinished(() => {
+                    transform.mockRestore();
+                    left.mockRestore();
+                });
+                return { transform, left };
+            }
+
+            it('writes no styles when no group changed', () => {
+                renderer.init(container);
+                const state = make2x2State();
+                renderer.renderState(state);
+                const writes = spyStyleWrites();
+
+                renderer.renderState(state);
+
+                expect(writes.transform).not.toHaveBeenCalled();
+                expect(writes.left).not.toHaveBeenCalled();
+            });
+
+            it("writes only a moved group's transform", () => {
+                renderer.init(container);
+                const state = make2x2State();
+                renderer.renderState(state);
+                const writes = spyStyleWrites();
+
+                state.groups[1].position = { x: 210, y: 60 };
+                state.groups[2].rotation = 90;
+                renderer.renderState(state);
+
+                const styleOf = (id: number) => (container.querySelector(`[data-group-id="${id}"]`) as HTMLElement).style;
+                expect(writes.transform.mock.contexts).toEqual([styleOf(1), styleOf(2)]);
+                expect(writes.left).not.toHaveBeenCalled();
+                expect(styleOf(2).transform).toBe('translate(50px, 200px) rotate(90deg)');
+            });
+
+            it('removes a group that left the state while no other group changed', () => {
+                renderer.init(container);
+                const state = make2x2State();
+                renderer.renderState(state);
+
+                state.groups.splice(1, 1);
+                renderer.renderState(state);
+
+                expect(container.querySelector('[data-group-id="1"]')).toBeNull();
+                expect(container.querySelector('svg[data-piece-id="1"]')).toBeNull();
+                expect(container.querySelectorAll('[data-group-id]')).toHaveLength(3);
+            });
+
+            it('re-syncs a group whose pieces map grew in place', () => {
+                renderer.init(container);
+                const state = make2x2State();
+                renderer.renderState(state);
+
+                state.groups[0].pieces.set(1, { x: 100, y: 0 });
+                state.groups.splice(1, 1);
+                renderer.renderState(state);
+
+                const groupEl = container.querySelector('[data-group-id="0"]')!;
+                expect(groupEl.querySelector('[data-piece-id="1"]')).not.toBeNull();
+                expect(container.querySelector('[data-group-id="1"]')).toBeNull();
+            });
+
+            it('rewrites a group invalidated after an outside write left its model unchanged', () => {
+                renderer.init(container);
+                const state = make2x2State();
+                renderer.renderState(state);
+                const groupEl = container.querySelector('[data-group-id="0"]') as HTMLElement;
+
+                applyGroupTransform(groupEl, { x: 50, y: 50 }, 360, { x: 50, y: 50 });
+                renderer.invalidateGroup(0);
+                renderer.renderState(state);
+
+                expect(groupEl.style.transformOrigin).toBe('0px 0px');
+                expect(groupEl.style.transform).toBe('translate(50px, 50px) rotate(0deg)');
+            });
+
+            it('rewrites the transform after an outside write that also changed the model', () => {
+                renderer.init(container);
+                const state = make2x2State();
+                state.groups[0].rotation = 30;
+                renderer.renderState(state);
+                const groupEl = container.querySelector('[data-group-id="0"]') as HTMLElement;
+
+                applyGroupTransform(groupEl, { x: 60, y: 40 }, 360, { x: 50, y: 50 });
+                state.groups[0].position = { x: 60, y: 40 };
+                state.groups[0].rotation = 0;
+                renderer.renderState(state);
+
+                expect(groupEl.style.transformOrigin).toBe('0px 0px');
+                expect(groupEl.style.transform).toBe('translate(60px, 40px) rotate(0deg)');
+            });
+
+            it('rebuilds every group for a new puzzle', () => {
+                renderer.init(container);
+                const state = make2x2State();
+                renderer.renderState(state);
+
+                renderer.renderState({ ...state, imageUrl: 'other.jpg' });
+
+                expect(container.querySelectorAll('[data-group-id]')).toHaveLength(4);
+                expect(container.querySelectorAll('svg[data-piece-id]')).toHaveLength(4);
+            });
+
+            it('adds inner outlines to unchanged groups when the setting is switched on', () => {
+                renderer.init(container);
+                const state = make2x2State();
+                renderer.renderState(state);
+
+                renderer.setInnerOutlineEnabled(true);
+                renderer.renderState(state);
+
+                expect(container.querySelectorAll('[data-inner-outline]')).toHaveLength(4);
+            });
         });
 
         it('does nothing if init was not called', () => {

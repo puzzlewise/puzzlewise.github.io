@@ -145,6 +145,7 @@ export function zoomToFitCompletedPuzzle(
                 // rotation normalized to 0. Visually identical to the spin's
                 // final frame (targetRotation ≡ 0 mod 360), so no jump.
                 groupEl.style.transition = '';
+                renderer.invalidateGroup(completedGroup.id);
                 renderCurrent();
             };
         }
