@@ -45,6 +45,13 @@ export interface Renderer {
     setInnerOutlineEnabled(enabled: boolean): void;
 
     /**
+     * The next `renderState` rewrites this group's element in full. For
+     * callers that changed it outside the renderer: `renderState` otherwise
+     * skips groups whose model is unchanged.
+     */
+    invalidateGroup(groupId: number): void;
+
+    /**
      * Lets PointerRouter classify pointer events without per-piece
      * listeners.
      */

@@ -70,7 +70,7 @@ function syncRingReferences(groupEl: HTMLElement, groupId: number, enabled: bool
     }
 }
 
-function groupClipPathD(group: PieceGroup, pieceLookup: Map<number, Piece>): string {
+function groupClipPathD(group: PieceGroup, pieceLookup: ReadonlyMap<number, Piece>): string {
     try {
         return groupOutlinePath(group.pieces, pieceLookup) ?? [...group.pieces]
             .flatMap(([pieceId, offset]) => {
@@ -104,6 +104,30 @@ function createInnerOutline(groupId: number): SVGSVGElement {
     return overlay;
 }
 
+interface RenderedGroup {
+    x: number;
+    y: number;
+    rotation: number;
+    /** `[pieceId, offsetX, offsetY, ...]` in `group.pieces` order. */
+    layout: number[];
+}
+
+function groupLayout(pieces: ReadonlyMap<number, Point>): number[] {
+    const layout: number[] = [];
+    for (const [pieceId, offset] of pieces) layout.push(pieceId, offset.x, offset.y);
+    return layout;
+}
+
+function sameLayout(layout: readonly number[], pieces: ReadonlyMap<number, Point>): boolean {
+    if (layout.length !== pieces.size * 3) return false;
+    let i = 0;
+    for (const [pieceId, offset] of pieces) {
+        if (layout[i] !== pieceId || layout[i + 1] !== offset.x || layout[i + 2] !== offset.y) return false;
+        i += 3;
+    }
+    return true;
+}
+
 interface PhotoSettle {
     promise: Promise<'loaded' | 'failed'>;
     watch(image: SVGImageElement): void;
@@ -128,6 +152,7 @@ function createPhotoSettle(): PhotoSettle {
 export class SvgDomRenderer implements Renderer {
     private tableEl: HTMLElement | null = null;
     private groupElements = new Map<number, HTMLElement>();
+    private renderedGroups = new Map<number, RenderedGroup>();
     private pieceElements = new Map<number, SVGSVGElement>();
     private imageSize = { width: 0, height: 0 };
     private pieceBaseWidth = 0;
@@ -180,22 +205,24 @@ export class SvgDomRenderer implements Renderer {
         this.pieceBaseWidth = this.imageSize.width / gameState.gridSize.cols;
         this.pieceBaseHeight = this.imageSize.height / gameState.gridSize.rows;
 
-        const pieceLookup = new Map<number, Piece>();
-        for (const piece of gameState.pieces) {
-            pieceLookup.set(piece.id, piece);
-        }
-
-        const activeGroupIds = new Set<number>();
-
+        let layoutChanged = gameState.groups.length !== this.groupElements.size;
         for (const group of gameState.groups) {
-            activeGroupIds.add(group.id);
-            this.renderGroup(group, pieceLookup, gameState.imageUrl);
+            const rendered = this.renderedGroups.get(group.id);
+            if (rendered && sameLayout(rendered.layout, group.pieces)) {
+                this.updateGroupTransform(group, rendered);
+            } else {
+                this.renderGroup(group, gameState.piecesById, gameState.imageUrl);
+                layoutChanged = true;
+            }
         }
+        if (!layoutChanged) return;
 
+        const activeGroupIds = new Set(gameState.groups.map((group) => group.id));
         for (const [groupId, el] of this.groupElements) {
             if (!activeGroupIds.has(groupId)) {
                 el.remove();
                 this.groupElements.delete(groupId);
+                this.renderedGroups.delete(groupId);
             }
         }
 
@@ -325,7 +352,12 @@ export class SvgDomRenderer implements Renderer {
         }
     }
 
+    invalidateGroup(groupId: number): void {
+        this.renderedGroups.delete(groupId);
+    }
+
     setInnerOutlineEnabled(enabled: boolean): void {
+        if (enabled !== this.innerOutlineEnabled) this.renderedGroups.clear();
         this.innerOutlineEnabled = enabled;
     }
 
@@ -340,6 +372,7 @@ export class SvgDomRenderer implements Renderer {
         }
 
         this.groupElements.clear();
+        this.renderedGroups.clear();
         this.pieceElements.clear();
     }
 
@@ -349,14 +382,24 @@ export class SvgDomRenderer implements Renderer {
         }
 
         this.groupElements.clear();
+        this.renderedGroups.clear();
 
         // Piece elements live inside the group containers, already removed above.
         this.pieceElements.clear();
     }
 
+    private updateGroupTransform(group: PieceGroup, rendered: RenderedGroup): void {
+        const { x, y } = group.position;
+        if (rendered.x === x && rendered.y === y && rendered.rotation === group.rotation) return;
+        applyGroupTransform(this.groupElements.get(group.id)!, group.position, group.rotation);
+        rendered.x = x;
+        rendered.y = y;
+        rendered.rotation = group.rotation;
+    }
+
     private renderGroup(
         group: PieceGroup,
-        pieceLookup: Map<number, Piece>,
+        pieceLookup: ReadonlyMap<number, Piece>,
         imageUrl: string | null,
     ): void {
         let groupEl = this.groupElements.get(group.id);
@@ -411,6 +454,13 @@ export class SvgDomRenderer implements Renderer {
         const outline = (): string => (outlineD ??= groupClipPathD(group, pieceLookup));
         this.syncSeamFill(groupEl, underlay, group, pieceLookup, imageUrl, layoutKey, outline);
         this.syncInnerOutline(groupEl, group.id, layoutKey, outline);
+
+        this.renderedGroups.set(group.id, {
+            x: group.position.x,
+            y: group.position.y,
+            rotation: group.rotation,
+            layout: groupLayout(group.pieces),
+        });
     }
 
     /**
@@ -441,7 +491,7 @@ export class SvgDomRenderer implements Renderer {
     private syncOutlineUnderlay(
         groupEl: HTMLElement,
         group: PieceGroup,
-        pieceLookup: Map<number, Piece>,
+        pieceLookup: ReadonlyMap<number, Piece>,
         layoutKey: string,
     ): SVGSVGElement {
         const edgesId = `group-edges-${group.id}`;
@@ -502,7 +552,7 @@ export class SvgDomRenderer implements Renderer {
         groupEl: HTMLElement,
         underlay: SVGSVGElement,
         group: PieceGroup,
-        pieceLookup: Map<number, Piece>,
+        pieceLookup: ReadonlyMap<number, Piece>,
         imageUrl: string | null,
         layoutKey: string,
         outline: () => string,

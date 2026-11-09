@@ -372,6 +372,22 @@ describe('zoomToFitCompletedPuzzle', () => {
         expect(renderer.renderState).not.toHaveBeenCalled();
     });
 
+    it('has the renderer rewrite the spun group in full when the cleanup fires', () => {
+        const state = makeCompletedState();
+        const group = state.groups[0];
+        group.rotation = 90;
+        const groupEl = document.createElement('div');
+        groupEl.dataset.groupId = String(group.id);
+        container.appendChild(groupEl);
+
+        zoomToFitCompletedPuzzle(state, group, deps, () => {});
+        vi.advanceTimersByTime(NO_TABLE_DEADLINE_MS);
+
+        expect(renderer.invalidateGroup).toHaveBeenCalledExactlyOnceWith(group.id);
+        expect(renderer.invalidateGroup.mock.invocationCallOrder[0])
+            .toBeLessThan(renderCurrent.mock.invocationCallOrder[0]);
+    });
+
     it('falls back to a timer when the table element is missing', () => {
         const state = makeCompletedState();
         const onComplete = vi.fn();

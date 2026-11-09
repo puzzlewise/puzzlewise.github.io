@@ -20,6 +20,7 @@ import { MarqueeController, groupScreenRect } from './marquee-controller.js';
 import type { ScreenRect } from './marquee-controller.js';
 import { loadOffsetDragPreference, loadMarqueeContainPreference } from '../ui/index.js';
 import { SnapProximityRotationController } from './snap-proximity-rotation-controller.js';
+import { createFrameCoalescer } from './frame-coalescer.js';
 import type { SnapTolerances } from '../game/snap-proximity-rotation.js';
 
 export interface InteractionSetupOptions {
@@ -49,6 +50,14 @@ export function setupInteraction(options: InteractionSetupOptions): () => void {
 
     const deltaToWorld = screenDeltaToWorld ?? ((d: Point) => d);
 
+    // Auto-pan moves the viewport within its own frame, so its group render
+    // can't wait for the next one; it renders now and supersedes a pending one.
+    const dragRender = createFrameCoalescer(onStateChanged);
+    const renderNow = (): void => {
+        dragRender.cancel();
+        onStateChanged();
+    };
+
     const expandToSelection = (groupId: number): readonly number[] =>
         selectionManager?.expandToSelectionIfActive(groupId) ?? [groupId];
 
@@ -69,7 +78,7 @@ export function setupInteraction(options: InteractionSetupOptions): () => void {
                 snapRotation?.onGroupMoved();
             },
             screenDeltaToWorld: deltaToWorld,
-            requestRender: onStateChanged,
+            requestRender: renderNow,
             getViewportSize: () => ({
                 width: window.visualViewport?.width ?? window.innerWidth,
                 height: window.visualViewport?.height ?? window.innerHeight,
@@ -97,7 +106,7 @@ export function setupInteraction(options: InteractionSetupOptions): () => void {
                     renderer.setGroupDragging(ids[i], true);
                 }
             },
-            requestRender: onStateChanged,
+            requestRender: () => dragRender.schedule(),
         },
         undefined,
         screenDeltaToWorld,
@@ -121,7 +130,7 @@ export function setupInteraction(options: InteractionSetupOptions): () => void {
                 }
                 return rects;
             },
-            onSelectionCommitted: onStateChanged,
+            onSelectionCommitted: renderNow,
         })
         : null;
 
@@ -135,7 +144,7 @@ export function setupInteraction(options: InteractionSetupOptions): () => void {
         if (!loadOffsetDragPreference()) return;
         const offset = deltaToWorld({ x: 0, y: -OFFSET_DRAG_SCREEN_PX });
         moveGroup(group, offset);
-        onStateChanged();
+        renderNow();
     }
 
     const probeHitTest = (p: Point): number | null => renderer.pieceIdAtPoint(p);
@@ -167,7 +176,7 @@ export function setupInteraction(options: InteractionSetupOptions): () => void {
             if (!selectionManager?.toolActive) return;
             selectionManager.toggle(group.id);
             renderer.setGroupSelected(group.id, selectionManager.isSelected(group.id));
-            onStateChanged();
+            renderNow();
         },
 
         onPieceDrag: {
@@ -194,6 +203,7 @@ export function setupInteraction(options: InteractionSetupOptions): () => void {
                 const groupId = drag.groupId;
                 dragController.handlePointerUp(evt);
                 autoPan?.stop();
+                dragRender.flush();
                 for (const id of expandToSelection(groupId)) renderer.setGroupDragging(id, false);
                 snapRotation?.stop();
                 onDrop(groupId);
@@ -205,6 +215,7 @@ export function setupInteraction(options: InteractionSetupOptions): () => void {
                 snapRotation?.stop();
                 dragController.cancel();
                 autoPan?.stop();
+                dragRender.flush();
                 for (const id of expandToSelection(groupId)) renderer.setGroupDragging(id, false);
             },
         },
@@ -268,6 +279,7 @@ export function setupInteraction(options: InteractionSetupOptions): () => void {
 
     return () => {
         autoPan?.stop();
+        dragRender.cancel();
         router.destroy();
     };
 }
