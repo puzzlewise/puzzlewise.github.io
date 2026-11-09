@@ -25,6 +25,13 @@ function cachedEdgePathBounds(
     return bounds;
 }
 
+/** Without it, a resumed game fills the cache in a long task on its first winning drop or marquee (#716). */
+export function warmEdgePathBounds(piece: Readonly<Piece>): void {
+    for (const edge of piece.edges) {
+        if (edge.path) cachedEdgePathBounds(edge);
+    }
+}
+
 export interface BoundingRect {
     minX: number;
     minY: number;
