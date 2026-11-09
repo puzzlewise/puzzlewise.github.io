@@ -112,6 +112,8 @@ vi.mock('../analytics/index.js', async (importOriginal) => {
     return { ...actual, track: vi.fn(), whenAnalyticsReady: vi.fn((send: () => void) => send()) };
 });
 
+vi.mock('./idle-chunks.js', () => ({ runInIdleChunks: vi.fn(() => vi.fn()) }));
+
 vi.mock('../move/move-receiver.js', async (importOriginal) => {
     const actual = await importOriginal<typeof import('../move/move-receiver.js')>();
     return { ...actual, runMoveReceiver: vi.fn(async () => 'done' as const) };
@@ -132,6 +134,8 @@ import { installToolbar } from './install-toolbar.js';
 import { installDevHooks } from './dev-hooks.js';
 import { track } from '../analytics/index.js';
 import { runMoveReceiver } from '../move/move-receiver.js';
+import { runInIdleChunks } from './idle-chunks.js';
+import { warmEdgePathBounds } from '../game/index.js';
 import type { NewGameData, PuzzleCompletedData } from '../analytics/index.js';
 // From the module, not the barrel: the token key is deliberately not part of
 // the persistence layer's public surface.
@@ -449,6 +453,19 @@ describe('bootstrap', () => {
             .dispatchEvent(new MouseEvent('click', { cancelable: true }));
 
         expect(vi.mocked(track)).toHaveBeenCalledWith('photo-credit-opened', { where: 'puzzle', link: 'photo', photoId: 'abc123' });
+    });
+
+    it("warms each installed puzzle's edge-bounds cache, cancelling the previous warm-up", () => {
+        bootstrap(root);
+        const { onInstalled } = vi.mocked(createGameSession).mock.calls[0][0];
+        onInstalled(makeGameState());
+        const cancelFirst = vi.mocked(runInIdleChunks).mock.results[0].value as Mock;
+        const second = makeGameState({ pieces: [makeRectPiece({ id: 0 }), makeRectPiece({ id: 1 })] });
+
+        onInstalled(second);
+
+        expect(cancelFirst).toHaveBeenCalledOnce();
+        expect(runInIdleChunks).toHaveBeenLastCalledWith([...second.piecesById.values()], warmEdgePathBounds);
     });
 
     it("abandons the previous puzzle's pending photo when another puzzle installs", () => {

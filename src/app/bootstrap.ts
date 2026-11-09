@@ -55,6 +55,8 @@ import { installBackgroundColor } from './install-background-color.js';
 import { installGlobalHandlers } from './global-handlers.js';
 import { installToolbar } from './install-toolbar.js';
 import { installDevHooks, solvePuzzle } from './dev-hooks.js';
+import { warmEdgePathBounds } from '../game/index.js';
+import { runInIdleChunks } from './idle-chunks.js';
 import { installGeometryTokenInvalidation } from '../persistence/index.js';
 import { initPwaUpdates } from '../pwa/register.js';
 import { isReceiveMode, runMoveReceiver } from '../move/move-receiver.js';
@@ -172,6 +174,7 @@ export function bootstrap(
     };
 
     const puzzleImageLoad = createPuzzleImageLoadTracker({ photoSettled: () => renderer.photoSettled() });
+    let cancelBoundsWarmup = (): void => {};
 
     // Before `session` — see `createOnInstalled` for why the compiler enforces it.
     const rotationUi = createRotationUi({
@@ -200,6 +203,8 @@ export function bootstrap(
     ): (state: GameState) => void {
         return (state) => {
             puzzleImageLoad.abandon();
+            cancelBoundsWarmup();
+            cancelBoundsWarmup = runInIdleChunks([...state.piecesById.values()], warmEdgePathBounds);
             // Drop the outgoing puzzle's cached analytics (#507; the field's
             // contract covers why this can't wipe the incoming game's payload).
             currentGameAnalytics = null;
