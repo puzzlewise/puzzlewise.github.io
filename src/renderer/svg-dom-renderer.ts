@@ -55,7 +55,6 @@ export const RELAYER_IDLE_MS = 200;
 export const RING_NAMES = [
     'edge-1', 'edge-2', 'edge-3',
     'lift-1', 'lift-2', 'lift-3',
-    'completion-shadow', 'completion-1', 'completion-2',
     'glow-1', 'glow-2', 'glow-3',
 ] as const;
 
