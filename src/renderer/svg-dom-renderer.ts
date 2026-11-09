@@ -153,6 +153,7 @@ export class SvgDomRenderer implements Renderer {
     private tableEl: HTMLElement | null = null;
     private groupElements = new Map<number, HTMLElement>();
     private renderedGroups = new Map<number, RenderedGroup>();
+    private topZIndex = 0;
     private pieceElements = new Map<number, SVGSVGElement>();
     private imageSize = { width: 0, height: 0 };
     private pieceBaseWidth = 0;
@@ -178,6 +179,7 @@ export class SvgDomRenderer implements Renderer {
         table.style.overflow = 'visible';
         table.style.touchAction = 'none';
         table.style.transformOrigin = '0 0';
+        table.style.isolation = 'isolate';
         container.appendChild(table);
 
         this.tableEl = table;
@@ -241,11 +243,17 @@ export class SvgDomRenderer implements Renderer {
         }
     }
 
+    /**
+     * Raises by `z-index`, not DOM order: re-parenting the element made the
+     * browser restyle and re-lay-out its whole subtree on every drag start (#718).
+     */
     bringGroupToFront(groupId: number): void {
         const el = this.groupElements.get(groupId);
-        if (el && this.tableEl) {
-            this.tableEl.appendChild(el);
-        }
+        if (el && el.style.zIndex !== String(this.topZIndex)) this.stackOnTop(el);
+    }
+
+    private stackOnTop(el: HTMLElement): void {
+        el.style.zIndex = String(++this.topZIndex);
     }
 
     setViewportTransform(scale: number, offsetX: number, offsetY: number): void {
@@ -410,6 +418,7 @@ export class SvgDomRenderer implements Renderer {
             groupEl.style.position = 'absolute';
             groupEl.style.top = '0';
             groupEl.style.left = '0';
+            this.stackOnTop(groupEl);
             this.tableEl!.appendChild(groupEl);
             this.groupElements.set(group.id, groupEl);
         }
