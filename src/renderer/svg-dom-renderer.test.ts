@@ -579,19 +579,60 @@ describe('SvgDomRenderer', () => {
     });
 
     describe('bringGroupToFront', () => {
-        it('moves the group element to the end of its parent', () => {
+        function stackingOrder(): string[] {
+            const groups = Array.from(container.querySelectorAll<HTMLElement>('[data-group-id]'));
+            expect(groups.map((el) => el.style.zIndex)).not.toContain('');
+            return groups
+                .sort((a, b) => Number(a.style.zIndex) - Number(b.style.zIndex))
+                .map((el) => el.dataset.groupId!);
+        }
+
+        it('stacks groups in the order they were created', () => {
+            renderer.init(container);
+            renderer.renderState(make2x2State());
+
+            expect(stackingOrder()).toEqual(['0', '1', '2', '3']);
+        });
+
+        it('stacks the group above all others without moving its element', () => {
+            renderer.init(container);
+            renderer.renderState(make2x2State());
+            const table = container.querySelector('[data-puzzle-table]')!;
+
+            renderer.bringGroupToFront(0);
+            renderer.bringGroupToFront(2);
+
+            expect(stackingOrder()).toEqual(['1', '3', '0', '2']);
+            expect(table.firstElementChild!.getAttribute('data-group-id')).toBe('0');
+        });
+
+        it('leaves the topmost group untouched', () => {
+            renderer.init(container);
+            renderer.renderState(make2x2State());
+            renderer.bringGroupToFront(1);
+            const zIndex = (container.querySelector('[data-group-id="1"]') as HTMLElement).style.zIndex;
+
+            renderer.bringGroupToFront(1);
+
+            expect((container.querySelector('[data-group-id="1"]') as HTMLElement).style.zIndex).toBe(zIndex);
+            expect(stackingOrder()).toEqual(['0', '2', '3', '1']);
+        });
+
+        it('stacks a group created later above a raised one', () => {
             renderer.init(container);
             const state = make2x2State();
             renderer.renderState(state);
-
-            const table = container.querySelector('div')!;
-            const firstChild = table.firstElementChild;
-            expect(firstChild!.getAttribute('data-group-id')).toBe('0');
-
             renderer.bringGroupToFront(0);
 
-            const lastChild = table.lastElementChild;
-            expect(lastChild!.getAttribute('data-group-id')).toBe('0');
+            renderer.renderState({ ...state, groups: [...state.groups.slice(0, 3), makeGroup(9, [3], 200, 200)] });
+
+            expect(stackingOrder()).toEqual(['1', '2', '0', '9']);
+        });
+
+        it('keeps the stacking inside the table', () => {
+            renderer.init(container);
+
+            expect((container.querySelector('[data-puzzle-table]') as HTMLElement).style.isolation).toBe('isolate');
         });
 
         it('is a no-op for non-existent group ids', () => {
