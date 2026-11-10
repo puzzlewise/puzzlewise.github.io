@@ -147,8 +147,10 @@ describe('selection glow CSS', () => {
 });
 
 describe('group layer promotion CSS', () => {
-    it('promotes every group to its own layer', () => {
-        expect(declarationsFor(styleCss, '[data-group-id]')).toMatch(
+    it('composites groups only while dragged, and the table only while the viewport moves (#735)', () => {
+        expect(declarationsFor(styleCss, '[data-group-id]')).not.toMatch(/will-change/);
+        expect(declarationsFor(styleCss, '[data-group-id].dragging')).toMatch(/will-change:\s*transform/);
+        expect(declarationsFor(styleCss, '[data-puzzle-table][data-viewport-moving]')).toMatch(
             /will-change:\s*transform/,
         );
     });

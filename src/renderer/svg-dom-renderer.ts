@@ -359,6 +359,10 @@ export class SvgDomRenderer implements Renderer {
         }
     }
 
+    setViewportMoving(moving: boolean): void {
+        this.tableEl?.toggleAttribute('data-viewport-moving', moving);
+    }
+
     invalidateGroup(groupId: number): void {
         this.renderedGroups.delete(groupId);
     }
