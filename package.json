@@ -20,7 +20,7 @@
     "typescript": "~7.0.2",
     "vite": "^8.3.5",
     "vite-plugin-pwa": "^2.0.0",
-    "vitest": "^5.0.5",
+    "vitest": "^5.1.0",
     "workbox-precaching": "^7.4.0",
     "workbox-routing": "^7.4.0",
     "wrangler": "^4.156.1"
