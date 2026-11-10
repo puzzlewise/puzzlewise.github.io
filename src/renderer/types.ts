@@ -52,6 +52,12 @@ export interface Renderer {
     invalidateGroup(groupId: number): void;
 
     /**
+     * True while a gesture moves the viewport. Groups aren't composited at
+     * rest, so without this every frame of a pan redraws them (#735).
+     */
+    setViewportMoving(moving: boolean): void;
+
+    /**
      * Lets PointerRouter classify pointer events without per-piece
      * listeners.
      */

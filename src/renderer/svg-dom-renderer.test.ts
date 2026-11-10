@@ -709,6 +709,23 @@ describe('SvgDomRenderer', () => {
         });
     });
 
+    describe('setViewportMoving', () => {
+        it('marks the table while the viewport moves', () => {
+            renderer.init(container);
+            const table = container.querySelector('[data-puzzle-table]')!;
+
+            renderer.setViewportMoving(true);
+            expect(table.hasAttribute('data-viewport-moving')).toBe(true);
+
+            renderer.setViewportMoving(false);
+            expect(table.hasAttribute('data-viewport-moving')).toBe(false);
+        });
+
+        it('does nothing if init was not called', () => {
+            renderer.setViewportMoving(true);
+        });
+    });
+
     describe('relayer after zooming out', () => {
         let frames: FrameRequestCallback[];
         let table: HTMLElement;
