@@ -17,6 +17,7 @@
 import type { GameState, PieceGroup } from '../model/types.js';
 import type { MergeResult } from '../game/group-merging.js';
 import { SvgDomRenderer } from '../renderer/index.js';
+import { createProbeResolver, observeRendererAppearance, readRendererAppearance } from './renderer-appearance.js';
 import { ViewportTransform, RotationFocus } from '../interaction/index.js';
 import {
     createAttributionElement,
@@ -395,6 +396,10 @@ export function bootstrap(
             viewportFitDeps.renderCurrent();
         },
     });
+
+    const resolveRootColor = createProbeResolver(document.documentElement);
+    renderer.setAppearance(readRendererAppearance(document.documentElement, resolveRootColor));
+    observeRendererAppearance(document.documentElement, resolveRootColor, (appearance) => renderer.setAppearance(appearance));
 
     /**
      * Reuses `startNewGameDeps`'s `fitView` / `persistNewPuzzle` /

@@ -39,12 +39,15 @@ describe('installBackgroundColor', () => {
     it('applies the saved piece-outline settings', () => {
         localStorage.setItem('puzzle-piece-outline', 'shadow');
         localStorage.setItem('puzzle-outline-constant-width', 'true');
+        localStorage.setItem('puzzle-outline-inside', 'true');
         document.documentElement.removeAttribute('data-outline-constant-width');
+        document.documentElement.removeAttribute('data-outline-inside-pref');
 
         installBackgroundColor({ container });
 
         expect(document.documentElement.dataset.pieceOutline).toBe('shadow');
         expect(document.documentElement.hasAttribute('data-outline-constant-width')).toBe(true);
+        expect(document.documentElement.hasAttribute('data-outline-inside-pref')).toBe(true);
     });
 
     it('reports an adopted shared color', () => {

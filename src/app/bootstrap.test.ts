@@ -99,6 +99,15 @@ vi.mock('./install-toolbar.js', async (importOriginal) => {
     return { ...actual, installToolbar: vi.fn(actual.installToolbar) };
 });
 
+vi.mock('./renderer-appearance.js', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('./renderer-appearance.js')>();
+    return {
+        ...actual,
+        observeRendererAppearance: vi.fn(actual.observeRendererAppearance),
+        createProbeResolver: () => () => 'rgb(8, 8, 8)',
+    };
+});
+
 vi.mock('./dev-hooks.js', async (importOriginal) => {
     const actual = await importOriginal<typeof import('./dev-hooks.js')>();
     return { ...actual, installDevHooks: vi.fn(actual.installDevHooks) };
@@ -132,6 +141,7 @@ import { createShareLinkLoader } from './share-link-loader.js';
 import { installBackgroundColor } from './install-background-color.js';
 import { installToolbar } from './install-toolbar.js';
 import { installDevHooks } from './dev-hooks.js';
+import { observeRendererAppearance } from './renderer-appearance.js';
 import { track } from '../analytics/index.js';
 import { runMoveReceiver } from '../move/move-receiver.js';
 import { runInIdleChunks } from './idle-chunks.js';
@@ -144,6 +154,8 @@ import { loadGameContext, loadGameStartedAt, saveGameContext } from '../analytic
 import type { LoadSharedPuzzleDeps } from './load-shared-puzzle.js';
 import { bootstrap } from './bootstrap.js';
 import { SvgDomRenderer } from '../renderer/index.js';
+import { savePieceOutlinePreference } from '../ui/piece-outline.js';
+import { saveOutlineInsidePreference } from '../ui/outline-inside.js';
 
 const HOOK_NAMES = [
     '__solvePuzzle',
@@ -257,6 +269,9 @@ describe('bootstrap', () => {
         }
         windowListeners.mockRestore();
         documentListeners.mockRestore();
+        for (const result of vi.mocked(observeRendererAppearance).mock.results) {
+            if (result.type === 'return') result.value();
+        }
         for (const name of HOOK_NAMES) {
             delete (window as unknown as Record<string, unknown>)[name];
         }
@@ -538,6 +553,24 @@ describe('bootstrap', () => {
         expect(setInnerOutlineEnabled).toHaveBeenLastCalledWith(expected);
     });
 
+    it.each([
+        ['outline', true],
+        ['shadow', false],
+    ] as const)('pushes the saved %s preset, with draw-inside on, as the first appearance at boot', (style, innerOutline) => {
+        savePieceOutlinePreference(style);
+        saveOutlineInsidePreference(true);
+        const setAppearance = vi.spyOn(SvgDomRenderer.prototype, 'setAppearance');
+        onTestFinished(() => setAppearance.mockRestore());
+
+        bootstrap(root);
+
+        expect(setAppearance.mock.calls[0][0]).toMatchObject({ outline: style, innerOutline });
+        expect(setAppearance.mock.invocationCallOrder[0])
+            .toBeGreaterThan(vi.mocked(installToolbar).mock.invocationCallOrder[0]);
+        expect(setAppearance.mock.invocationCallOrder[0])
+            .toBeLessThan(vi.mocked(runBootSequence).mock.invocationCallOrder[0]);
+    });
+
     it('applies a draw-inside change from the settings modal to the current game', () => {
         localStorage.setItem('puzzle-piece-outline', 'outline');
         const setInnerOutlineEnabled = vi.spyOn(SvgDomRenderer.prototype, 'setInnerOutlineEnabled');
@@ -560,6 +593,23 @@ describe('bootstrap', () => {
         expect(renderState).toHaveBeenLastCalledWith(state);
         expect(setInnerOutlineEnabled.mock.invocationCallOrder.at(-1)!)
             .toBeLessThan(renderState.mock.invocationCallOrder.at(-1)!);
+    });
+
+    it('delivers a draw-inside change from the settings modal to the renderer appearance', async () => {
+        savePieceOutlinePreference('outline');
+        const setAppearance = vi.spyOn(SvgDomRenderer.prototype, 'setAppearance');
+        onTestFinished(() => setAppearance.mockRestore());
+        bootstrap(root);
+        expect(setAppearance).toHaveBeenLastCalledWith(expect.objectContaining({ innerOutline: false }));
+
+        root.querySelector<HTMLButtonElement>('.settings-button')!.click();
+        const toggle = root.querySelector<HTMLInputElement>('[data-testid="outline-inside-toggle"]')!;
+        toggle.checked = true;
+        toggle.dispatchEvent(new Event('change'));
+
+        await vi.waitFor(() => {
+            expect(setAppearance).toHaveBeenLastCalledWith(expect.objectContaining({ innerOutline: true }));
+        });
     });
 
     it('puts the background-color control in the right-hand toolbar, between Gather and Help', () => {

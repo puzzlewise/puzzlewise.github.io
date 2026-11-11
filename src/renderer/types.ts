@@ -4,6 +4,7 @@
  */
 
 import type { GameState, Point } from '../model/types.js';
+import type { RendererAppearance } from './appearance.js';
 
 /** Duration of the completion zoom and spin, with `cubic-bezier(.42,0,.58,1)` easing. */
 export const VIEWPORT_TRANSITION_MS = 800;
@@ -45,6 +46,8 @@ export interface Renderer {
 
     /** Takes effect on the next `renderState`. */
     setInnerOutlineEnabled(enabled: boolean): void;
+
+    setAppearance(appearance: RendererAppearance): void;
 
     /**
      * True while a gesture moves the viewport. Groups aren't composited at

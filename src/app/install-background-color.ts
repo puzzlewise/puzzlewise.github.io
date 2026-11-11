@@ -23,6 +23,8 @@ import {
     applyPieceOutlineColor,
     loadOutlineConstantWidthPreference,
     applyOutlineConstantWidth,
+    loadOutlineInsidePreference,
+    applyOutlineInside,
     type SharedColorOutcome,
 } from '../ui/index.js';
 import { track } from '../analytics/index.js';
@@ -47,6 +49,7 @@ export function installBackgroundColor(deps: {
     applyPieceOutline(loadPieceOutlinePreference());
     applyPieceOutlineColor(loadPieceOutlineColorPreference());
     applyOutlineConstantWidth(loadOutlineConstantWidthPreference());
+    applyOutlineInside(loadOutlineInsidePreference());
 
     let currentColorId = loadColorPreference();
     applyBackgroundColor(currentColorId);
