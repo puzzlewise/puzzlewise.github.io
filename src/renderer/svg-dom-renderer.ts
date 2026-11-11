@@ -329,19 +329,16 @@ export class SvgDomRenderer implements Renderer {
         }
     }
 
-    pieceIdFromTarget(target: EventTarget | null): number | null {
-        if (!(target instanceof Element)) return null;
-        const svg = target.closest('svg[data-piece-id]') as SVGElement | null;
-        if (!svg) return null;
-        const id = Number(svg.dataset.pieceId);
-        return Number.isFinite(id) ? id : null;
-    }
-
     pieceIdAtPoint(point: Point): number | null {
         // jsdom has no `elementFromPoint`; guard so hit-testing just finds
         // nothing there.
         if (typeof document.elementFromPoint !== 'function') return null;
-        return this.pieceIdFromTarget(document.elementFromPoint(point.x, point.y));
+        const target = document.elementFromPoint(point.x, point.y);
+        if (!target) return null;
+        const svg = target.closest<SVGElement>('svg[data-piece-id]');
+        if (!svg) return null;
+        const id = Number(svg.dataset.pieceId);
+        return Number.isFinite(id) ? id : null;
     }
 
     photoSettled(): Promise<'loaded' | 'failed'> {
