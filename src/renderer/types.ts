@@ -58,12 +58,6 @@ export interface Renderer {
     setViewportMoving(moving: boolean): void;
 
     /**
-     * Lets PointerRouter classify pointer events without per-piece
-     * listeners.
-     */
-    pieceIdFromTarget(target: EventTarget | null): number | null;
-
-    /**
      * `point` is screen-space. Keeps hit-testing behind the renderer
      * abstraction; implementations that cannot hit-test by point may
      * return null.
