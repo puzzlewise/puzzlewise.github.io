@@ -17,6 +17,7 @@ import {
 } from '../test-helpers/fixtures.js';
 import { activeSnapTolerances } from './snap-tolerances.js';
 import { createGameSession, type GameSession } from './game-session.js';
+import { zoomToFitCompletedPuzzle } from './viewport-fit.js';
 
 // Plain `vi.spyOn` can't intercept a cross-module call under Vite; wrap the
 // real `setupInteraction` via `vi.mock` passthrough so tests can inspect the
@@ -317,6 +318,32 @@ describe('createGameSession', () => {
                 ],
             });
         }
+
+        it('saves the zoomed-to-fit viewport when the drop completes the puzzle', () => {
+            const session = make();
+            const state = makeMergeableState();
+            session.install(state);
+            const before = viewportTransform.getState();
+            applyMerge.mockImplementation((mergedState) => {
+                zoomToFitCompletedPuzzle(
+                    mergedState,
+                    mergedState.groups[0],
+                    { container, renderer, viewportTransform, applyTransform, renderCurrent: vi.fn() },
+                    vi.fn(),
+                );
+            });
+            let saved: ReturnType<ViewportTransform['getState']> | undefined;
+            save.mockImplementation(() => {
+                saved = viewportTransform.getState();
+            });
+
+            lastInteractionOptions().onDrop(11);
+
+            expect(renderer.transitionViewport).toHaveBeenCalledTimes(1);
+            const [scale, x, y] = renderer.transitionViewport.mock.calls[0];
+            expect(saved).toEqual({ scale, offset: { x, y } });
+            expect(saved).not.toEqual(before);
+        });
 
         it('hands a merging drop to applyMerge and saves the result', () => {
             const session = make();

@@ -5,13 +5,11 @@
 
 import type { GameState, Point } from '../model/types.js';
 
-/**
- * Animated viewport transition duration, in ms. Part of the port because the
- * caller that disables the transition can't observe the animation:
- * `app/viewport-fit.ts` arms a fallback timer against this number. A second
- * literal (in CSS) would let the timer silently cut the animation short.
- */
+/** Duration of the completion zoom and spin, with `cubic-bezier(.42,0,.58,1)` easing. */
 export const VIEWPORT_TRANSITION_MS = 800;
+
+/** Animation promises settle within `VIEWPORT_TRANSITION_MS + SETTLE_GRACE_MS` even if no frame runs. */
+export const SETTLE_GRACE_MS = 200;
 
 export interface Renderer {
     init(container: HTMLElement): void;
@@ -24,16 +22,20 @@ export interface Renderer {
     setViewportTransform(scale: number, offsetX: number, offsetY: number): void;
 
     /**
-     * Implementations that animate must run for
-     * {@link VIEWPORT_TRANSITION_MS}; those that cannot may no-op.
+     * Animates from the current transform; resolves once the target is
+     * applied.
      */
-    enableViewportTransition(): void;
+    transitionViewport(scale: number, offsetX: number, offsetY: number): Promise<void>;
 
     /**
-     * Should be called once an animation has completed — which the caller
-     * cannot observe, so it waits {@link VIEWPORT_TRANSITION_MS}.
+     * Spins the group about `pivotLocal` (group-local) without moving it.
+     * The group's model transform is restored by the next `renderState`.
      */
-    disableViewportTransition(): void;
+    animateGroupRotation(
+        groupId: number,
+        toDeg: number,
+        pivotLocal: Point,
+    ): Promise<void>;
 
     setGroupDragging(groupId: number, dragging: boolean): void;
 
@@ -43,13 +45,6 @@ export interface Renderer {
 
     /** Takes effect on the next `renderState`. */
     setInnerOutlineEnabled(enabled: boolean): void;
-
-    /**
-     * The next `renderState` rewrites this group's element in full. For
-     * callers that changed it outside the renderer: `renderState` otherwise
-     * skips groups whose model is unchanged.
-     */
-    invalidateGroup(groupId: number): void;
 
     /**
      * True while a gesture moves the viewport. Groups aren't composited at
