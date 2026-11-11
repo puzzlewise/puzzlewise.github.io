@@ -165,20 +165,13 @@ export function setupInteraction(options: InteractionSetupOptions): () => void {
     const probeHitTest = (p: Point): number | null => renderer.pieceIdAtPoint(p);
 
     const classifyTarget: ClassifyTarget = (target, point) => {
-        const pieceId = renderer.pieceIdFromTarget(target);
-        if (pieceId !== null) return { kind: 'piece', pieceId };
+        const isTable = target === container ||
+            (target instanceof Element && target.closest('[data-puzzle-table]') !== null);
+        if (!isTable) return { kind: 'ignore' };
+        if (!point) return { kind: 'background' };
 
-        const isBackground = target === container ||
-            (target instanceof HTMLElement && target.dataset.puzzleTable === 'true');
-        if (!isBackground) return { kind: 'ignore' };
-
-        // Background hit — widen to a nearby piece so small pieces stay grabbable when zoomed out (see hit-probe.ts). Point-carrying events only.
-        if (point) {
-            const nearby = probeNearbyPieceId(point, probeHitTest);
-            if (nearby !== null) return { kind: 'piece', pieceId: nearby };
-        }
-
-        return { kind: 'background' };
+        const pieceId = renderer.pieceIdAtPoint(point) ?? probeNearbyPieceId(point, probeHitTest);
+        return pieceId === null ? { kind: 'background' } : { kind: 'piece', pieceId };
     };
 
     const router = new PointerRouter({

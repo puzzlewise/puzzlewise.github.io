@@ -1,11 +1,10 @@
 /**
  * The app talks to the renderer through the `Renderer` port only, so a fake of
- * spies is enough — no real DOM. The two hit-test methods answer `null` (this
- * fake has no geometry) but are spies, not stubs, because they *are* reached:
+ * spies is enough — no real DOM. `pieceIdAtPoint` answers `null` (this
+ * fake has no geometry) but is a spy, not a stub, because it *is* reached:
  * `game-session.test.ts` hands this fake to the real `setupInteraction`, which
- * calls `pieceIdFromTarget` on every pointerdown and `pieceIdAtPoint` for the
- * snap probe. A driven pointer sequence therefore gets "no piece hit" from
- * every event; give the relevant one a `mockReturnValue(pieceId)` for a hit.
+ * calls it on every table pointerdown. A driven pointer sequence therefore gets
+ * "no piece hit" from every event; give it a `mockReturnValue(pieceId)` for a hit.
  */
 
 import { vi, type Mock } from 'vitest';
@@ -29,7 +28,6 @@ export interface FakeRenderer extends Renderer {
     setInnerOutlineEnabled: Mock<Renderer['setInnerOutlineEnabled']>;
     invalidateGroup: Mock<Renderer['invalidateGroup']>;
     setViewportMoving: Mock<Renderer['setViewportMoving']>;
-    pieceIdFromTarget: Mock<Renderer['pieceIdFromTarget']>;
     pieceIdAtPoint: Mock<Renderer['pieceIdAtPoint']>;
     photoSettled: Mock<Renderer['photoSettled']>;
     prefetchPhoto: Mock<Renderer['prefetchPhoto']>;
@@ -50,7 +48,6 @@ export function createFakeRenderer(): FakeRenderer {
         setInnerOutlineEnabled: vi.fn(),
         invalidateGroup: vi.fn(),
         setViewportMoving: vi.fn(),
-        pieceIdFromTarget: vi.fn<Renderer['pieceIdFromTarget']>(() => null),
         pieceIdAtPoint: vi.fn<Renderer['pieceIdAtPoint']>(() => null),
         photoSettled: vi.fn(() => new Promise<'loaded' | 'failed'>(() => {})),
         prefetchPhoto: vi.fn(),
