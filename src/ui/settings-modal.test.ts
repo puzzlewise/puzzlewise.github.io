@@ -493,6 +493,7 @@ describe('createSettingsModal — Piece outline setting', () => {
         toggle.dispatchEvent(new Event('change'));
 
         expect(localStorage.getItem('puzzle-outline-inside')).toBe('true');
+        expect(document.documentElement.hasAttribute('data-outline-inside-pref')).toBe(true);
         expect(onOutlineChanged).toHaveBeenCalledOnce();
     });
 
