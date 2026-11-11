@@ -15,7 +15,7 @@ export interface PieceOutlinePreset {
     idleFilter?: string;
 }
 
-export const PIECE_OUTLINE_PRESETS: readonly PieceOutlinePreset[] = [
+const PRESETS = [
     {
         id: 'none',
         label: 'None',
@@ -43,9 +43,14 @@ export const PIECE_OUTLINE_PRESETS: readonly PieceOutlinePreset[] = [
         filter: 'opacity(1)',
         idleFilter: 'none',
     },
-] as const;
+] as const satisfies readonly PieceOutlinePreset[];
 
-export const DEFAULT_PIECE_OUTLINE_ID = 'outline';
+export type PieceOutlineId = (typeof PRESETS)[number]['id'];
+
+export const PIECE_OUTLINE_PRESETS: readonly PieceOutlinePreset[] = PRESETS;
+
+export const DEFAULT_PIECE_OUTLINE_ID: PieceOutlineId = 'outline';
+export const PIECE_OUTLINE_ATTRIBUTE = 'data-piece-outline';
 export const PIECE_OUTLINE_PREFERENCE_KEY = 'puzzle-piece-outline';
 export const CSS_CUSTOM_PROPERTY = '--piece-edge-filter';
 export const IDLE_CSS_CUSTOM_PROPERTY = '--piece-edge-idle-filter';
@@ -64,7 +69,7 @@ export const loadPieceOutlinePreference = store.load;
 export function applyPieceOutline(id: string): void {
     const preset = getPieceOutlinePreset(id);
     const root = document.documentElement;
-    root.dataset.pieceOutline = preset.id;
+    root.setAttribute(PIECE_OUTLINE_ATTRIBUTE, preset.id);
     const { style } = root;
     style.setProperty(CSS_CUSTOM_PROPERTY, preset.filter);
     style.setProperty(IDLE_CSS_CUSTOM_PROPERTY, preset.idleFilter ?? preset.filter);

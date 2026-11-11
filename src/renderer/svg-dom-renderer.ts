@@ -12,6 +12,7 @@ import { groupOutlinePath } from './group-outline.js';
 import { PathDataError, translatePath } from './translate-path.js';
 import { rotatePoint } from '../model/helpers.js';
 import { SETTLE_GRACE_MS, VIEWPORT_TRANSITION_MS, type Renderer } from './types.js';
+import type { RendererAppearance } from './appearance.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const XLINK_NS = 'http://www.w3.org/1999/xlink';
@@ -419,6 +420,8 @@ export class SvgDomRenderer implements Renderer {
     setViewportMoving(moving: boolean): void {
         this.tableEl?.toggleAttribute('data-viewport-moving', moving);
     }
+
+    setAppearance(_appearance: RendererAppearance): void {}
 
     setInnerOutlineEnabled(enabled: boolean): void {
         if (enabled !== this.innerOutlineEnabled) this.renderedGroups.clear();

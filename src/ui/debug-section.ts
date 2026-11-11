@@ -6,8 +6,9 @@ import {
     writeDistinctId,
 } from '../analytics/distinct-id.js';
 
-/** HTML class toggled on <html> to switch pieces into debug (white) view. */
-const DEBUG_PIECES_CLASS = 'show-debug-pieces';
+export const DEBUG_PIECES_CLASS = 'show-debug-pieces';
+export const PIECE_OPACITY_PROPERTY = '--piece-opacity';
+export const MATELESS_EDGES_CLASS = 'show-mateless-edges';
 
 const TRANSLUCENT_PIECES_CLASS = 'pieces-translucent';
 
@@ -36,7 +37,7 @@ export function buildDebugSection(args: {
             label: 'Show mateless edges',
             description:
                 'Highlight edges with no mate (mateEdgeId = -1) in pink.',
-            htmlClass: 'show-mateless-edges',
+            htmlClass: MATELESS_EDGES_CLASS,
         }),
     );
 
@@ -224,7 +225,7 @@ function buildOpacitySetting(): HTMLElement {
     value.textContent = '1';
 
     const current = getComputedStyle(document.documentElement)
-        .getPropertyValue('--piece-opacity')
+        .getPropertyValue(PIECE_OPACITY_PROPERTY)
         .trim();
     if (current) {
         slider.value = current;
@@ -232,7 +233,7 @@ function buildOpacitySetting(): HTMLElement {
     }
     slider.addEventListener('input', () => {
         value.textContent = slider.value;
-        document.documentElement.style.setProperty('--piece-opacity', slider.value);
+        document.documentElement.style.setProperty(PIECE_OPACITY_PROPERTY, slider.value);
         document.documentElement.classList.toggle(TRANSLUCENT_PIECES_CLASS, Number(slider.value) < 1);
     });
 

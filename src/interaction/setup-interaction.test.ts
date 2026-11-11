@@ -71,6 +71,7 @@ function createFakeRenderer(pieceAt: (point: { x: number; y: number }) => number
         setGroupDragging: vi.fn(),
         setGroupSelected: vi.fn(),
         setRingsEnabled: vi.fn(),
+        setAppearance: vi.fn(),
         setInnerOutlineEnabled: vi.fn(),
         setViewportMoving: vi.fn(),
         pieceIdAtPoint: vi.fn(pieceAt),
