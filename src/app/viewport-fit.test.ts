@@ -2,21 +2,14 @@
  * @vitest-environment jsdom
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi, type Mock } from 'vitest';
+import { describe, it, expect, beforeEach, vi, type Mock } from 'vitest';
 import type { GameState, PieceGroup } from '../model/types.js';
 import { ViewportTransform } from '../interaction/index.js';
 import { computeGatheredPositions, computeSplitGatheredPositions, splitGatherGutter } from '../game/index.js';
 import { createFakeRenderer, type FakeRenderer } from '../test-helpers/fake-renderer.js';
 import { makeGameState, makeCenteredGroup, makeRectPiece } from '../test-helpers/fixtures.js';
-import { VIEWPORT_TRANSITION_MS } from '../renderer/index.js';
-import { gatherAndZoomToFit, SETTLE_GRACE_MS, zoomToFitCompletedPuzzle } from './viewport-fit.js';
-
-/**
- * The two deadlines the fallback timer is armed to, derived not hardcoded:
- * raising the renderer's transition moves these with it.
- */
-const TABLE_DEADLINE_MS = VIEWPORT_TRANSITION_MS + SETTLE_GRACE_MS;
-const NO_TABLE_DEADLINE_MS = VIEWPORT_TRANSITION_MS;
+import { getGroupImageCenter } from '../game/index.js';
+import { gatherAndZoomToFit, zoomToFitCompletedPuzzle } from './viewport-fit.js';
 
 /**
  * Two real groups so `computeGatheredPositions`/`applyGatheredPositions` have
@@ -132,23 +125,12 @@ describe('zoomToFitCompletedPuzzle', () => {
     let deps: Parameters<typeof zoomToFitCompletedPuzzle>[2];
 
     beforeEach(() => {
-        vi.useFakeTimers();
         container = document.createElement('div');
         renderer = createFakeRenderer();
         viewportTransform = new ViewportTransform();
         applyTransform = vi.fn();
         renderCurrent = vi.fn();
         deps = { container, renderer, viewportTransform, applyTransform, renderCurrent };
-        // requestAnimationFrame runs the transform application one frame later.
-        vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
-            cb(0);
-            return 0;
-        });
-    });
-
-    afterEach(() => {
-        vi.useRealTimers();
-        vi.unstubAllGlobals();
     });
 
     it('normalizes a completed rotation to upright', () => {
@@ -160,46 +142,6 @@ describe('zoomToFitCompletedPuzzle', () => {
 
         // 350° takes the +10° short way to an upright resting angle.
         expect(group.rotation).toBe(0);
-    });
-
-    it('spins the DOM element the short way (+10°), not the long way (-350°)', () => {
-        // The settled model rotation is always 0, so it can't distinguish +10°
-        // from -350° — only the CSS transition target written to the element
-        // shows which way it spins.
-        const state = makeCompletedState();
-        const group = state.groups[0];
-        group.rotation = 350;
-
-        const groupEl = document.createElement('div');
-        groupEl.dataset.groupId = String(group.id);
-        container.appendChild(groupEl);
-
-        zoomToFitCompletedPuzzle(state, group, deps, () => {});
-
-        // 350° animates to 360° (the +10° short way), not 0° (the -350° way),
-        // though both rest upright.
-        expect(groupEl.style.transform).toContain('rotate(360deg)');
-        // The origin must be pinned to the image center (50,50 here) — without
-        // it the rotation pivots about (0,0) and orbits instead of spinning in place.
-        expect(groupEl.style.transformOrigin).toBe('50px 50px');
-    });
-
-    it('forces a reflow between the re-anchor frame and the spin frame', () => {
-        // Without the forced reflow, the browser coalesces the re-anchor
-        // (transition: none) and the spin (a real transition) into one paint,
-        // collapsing the animation to a single frame.
-        const state = makeCompletedState();
-        const group = state.groups[0];
-        group.rotation = 90;
-
-        const groupEl = document.createElement('div');
-        groupEl.dataset.groupId = String(group.id);
-        container.appendChild(groupEl);
-        const reflowSpy = vi.spyOn(groupEl, 'getBoundingClientRect');
-
-        zoomToFitCompletedPuzzle(state, group, deps, () => {});
-
-        expect(reflowSpy).toHaveBeenCalled();
     });
 
     it('compensates position so the puzzle does not move when the pivot changes', () => {
@@ -227,175 +169,65 @@ describe('zoomToFitCompletedPuzzle', () => {
         expect(group.position).toEqual(before);
     });
 
-    it('enables the viewport transition and disables it when the transition ends', () => {
-        const state = makeCompletedState();
-        const table = document.createElement('div');
-        table.dataset.puzzleTable = 'true';
-        container.appendChild(table);
+    function deferred(): { promise: Promise<void>; resolve: () => void } {
+        let resolve!: () => void;
+        const promise = new Promise<void>((r) => { resolve = r; });
+        return { promise, resolve };
+    }
 
+    const flush = () => new Promise<void>((r) => { setTimeout(r, 0); });
+
+    it('completion zoom calls transitionViewport with the fit transform and completes after it resolves', async () => {
+        const state = makeCompletedState();
+        const zoom = deferred();
+        renderer.transitionViewport.mockReturnValueOnce(zoom.promise);
         const onComplete = vi.fn();
+
         zoomToFitCompletedPuzzle(state, state.groups[0], deps, onComplete);
 
-        expect(renderer.enableViewportTransition).toHaveBeenCalled();
+        const { scale, offset } = viewportTransform.getState();
+        expect(renderer.transitionViewport).toHaveBeenCalledExactlyOnceWith(scale, offset.x, offset.y);
+        expect(applyTransform).not.toHaveBeenCalled();
+        await flush();
         expect(onComplete).not.toHaveBeenCalled();
+        expect(renderCurrent).not.toHaveBeenCalled();
 
-        table.dispatchEvent(Object.assign(new Event('transitionend'), { propertyName: 'transform' }));
+        zoom.resolve();
+        await flush();
 
-        expect(renderer.disableViewportTransition).toHaveBeenCalled();
+        expect(renderCurrent).toHaveBeenCalledTimes(1);
         expect(onComplete).toHaveBeenCalledTimes(1);
+        expect(renderCurrent.mock.invocationCallOrder[0])
+            .toBeLessThan(onComplete.mock.invocationCallOrder[0]);
     });
 
-    it('ignores a transitionend for an unrelated CSS property', () => {
-        // The table transitions other properties too (e.g. background-color
-        // on theme change); only "transform" ending means the zoom is done.
-        const state = makeCompletedState();
-        const table = document.createElement('div');
-        table.dataset.puzzleTable = 'true';
-        container.appendChild(table);
-
-        const onComplete = vi.fn();
-        zoomToFitCompletedPuzzle(state, state.groups[0], deps, onComplete);
-
-        table.dispatchEvent(Object.assign(new Event('transitionend'), { propertyName: 'opacity' }));
-
-        expect(onComplete).not.toHaveBeenCalled();
-    });
-
-    it('does not fire onComplete twice for a repeated transitionend', () => {
-        // The handler must unsubscribe once it fires, or a second "transform"
-        // transitionend would run the completion callback again.
-        const state = makeCompletedState();
-        const table = document.createElement('div');
-        table.dataset.puzzleTable = 'true';
-        container.appendChild(table);
-
-        const onComplete = vi.fn();
-        zoomToFitCompletedPuzzle(state, state.groups[0], deps, onComplete);
-
-        const dispatchTransformEnd = () =>
-            table.dispatchEvent(Object.assign(new Event('transitionend'), { propertyName: 'transform' }));
-        dispatchTransformEnd();
-        dispatchTransformEnd();
-
-        expect(onComplete).toHaveBeenCalledTimes(1);
-    });
-
-    it('settles on the timer when the transform never transitions', () => {
-        // A `transform` transition only starts when the transform changes. Two
-        // Solves in a row frame the same group from the same viewport, so the
-        // second target is identical, no transition runs and `transitionend`
-        // never fires. Without a timer here too, the viewport transition is
-        // never disabled (every later pan/zoom animates), the listener stays on
-        // an element the renderer never replaces, and the spun group's element
-        // is retained.
+    it('a rotated completed group spins via animateGroupRotation to the shortest upright angle about the image center', async () => {
         const state = makeCompletedState();
         const group = state.groups[0];
-        group.rotation = 90;
-        const table = document.createElement('div');
-        table.dataset.puzzleTable = 'true';
-        container.appendChild(table);
-        const groupEl = document.createElement('div');
-        groupEl.dataset.groupId = String(group.id);
-        container.appendChild(groupEl);
-
+        group.rotation = 300;
+        const centerLocal = getGroupImageCenter(group, state.piecesById);
+        const spin = deferred();
+        renderer.animateGroupRotation.mockReturnValueOnce(spin.promise);
         const onComplete = vi.fn();
+
         zoomToFitCompletedPuzzle(state, group, deps, onComplete);
 
-        // The zoom, then the grace on top. Not settled at the nominal duration:
-        // the real transitionend must win the ordinary race, or the timer cuts
-        // the zoom short.
-        vi.advanceTimersByTime(VIEWPORT_TRANSITION_MS);
+        expect(renderer.animateGroupRotation)
+            .toHaveBeenCalledExactlyOnceWith(group.id, 360, centerLocal);
+        expect(group.rotation).toBe(0);
+        await flush();
         expect(onComplete).not.toHaveBeenCalled();
 
-        vi.advanceTimersByTime(SETTLE_GRACE_MS);
+        spin.resolve();
+        await flush();
         expect(onComplete).toHaveBeenCalledTimes(1);
-        expect(renderer.disableViewportTransition).toHaveBeenCalledTimes(1);
-        expect(renderCurrent).toHaveBeenCalledTimes(1);
     });
 
-    it('removes its transitionend listener when the timer settles it', () => {
-        // The listener lands on `[data-puzzle-table]`, which `renderState` never
-        // replaces — one never removed lives for the session, one per
-        // completion. A leaked listener can't re-run `onComplete` (the latch
-        // stops that), so the registration itself has to be checked.
+    it('does not spin a group that is already upright', () => {
         const state = makeCompletedState();
-        const table = document.createElement('div');
-        table.dataset.puzzleTable = 'true';
-        container.appendChild(table);
-        const add = vi.spyOn(table, 'addEventListener');
-        const remove = vi.spyOn(table, 'removeEventListener');
 
         zoomToFitCompletedPuzzle(state, state.groups[0], deps, () => {});
-        vi.advanceTimersByTime(TABLE_DEADLINE_MS);
 
-        // Same handler identities and order: what was wired is exactly what was
-        // unwired, not merely "something was removed".
-        expect(add.mock.calls.length).toBeGreaterThan(0);
-        expect(remove.mock.calls).toEqual(add.mock.calls);
-    });
-
-    it('cancels the fallback timer when the transition ends first', () => {
-        // The ordinary path: the timer is a net, not a second completion.
-        const state = makeCompletedState();
-        const table = document.createElement('div');
-        table.dataset.puzzleTable = 'true';
-        container.appendChild(table);
-
-        const onComplete = vi.fn();
-        zoomToFitCompletedPuzzle(state, state.groups[0], deps, onComplete);
-        table.dispatchEvent(Object.assign(new Event('transitionend'), { propertyName: 'transform' }));
-        expect(onComplete).toHaveBeenCalledTimes(1);
-
-        vi.advanceTimersByTime(TABLE_DEADLINE_MS);
-
-        expect(onComplete).toHaveBeenCalledTimes(1);
-        expect(renderer.disableViewportTransition).toHaveBeenCalledTimes(1);
-    });
-
-    it('re-renders whatever game is current when the cleanup fires, not the state captured at call time', () => {
-        // The cleanup can fire up to 1000ms after this call, by which time a new
-        // game may have started, so it must read state fresh via `renderCurrent`,
-        // not repaint the captured `state`. The cleanup only exists for a
-        // non-zero rotation with a found DOM element, so both are set up here.
-        const state = makeCompletedState();
-        const group = state.groups[0];
-        group.rotation = 90;
-
-        const groupEl = document.createElement('div');
-        groupEl.dataset.groupId = String(group.id);
-        container.appendChild(groupEl);
-
-        zoomToFitCompletedPuzzle(state, group, deps, () => {});
-        vi.advanceTimersByTime(NO_TABLE_DEADLINE_MS);
-
-        expect(renderCurrent).toHaveBeenCalledTimes(1);
-        expect(renderer.renderState).not.toHaveBeenCalled();
-    });
-
-    it('has the renderer rewrite the spun group in full when the cleanup fires', () => {
-        const state = makeCompletedState();
-        const group = state.groups[0];
-        group.rotation = 90;
-        const groupEl = document.createElement('div');
-        groupEl.dataset.groupId = String(group.id);
-        container.appendChild(groupEl);
-
-        zoomToFitCompletedPuzzle(state, group, deps, () => {});
-        vi.advanceTimersByTime(NO_TABLE_DEADLINE_MS);
-
-        expect(renderer.invalidateGroup).toHaveBeenCalledExactlyOnceWith(group.id);
-        expect(renderer.invalidateGroup.mock.invocationCallOrder[0])
-            .toBeLessThan(renderCurrent.mock.invocationCallOrder[0]);
-    });
-
-    it('falls back to a timer when the table element is missing', () => {
-        const state = makeCompletedState();
-        const onComplete = vi.fn();
-
-        zoomToFitCompletedPuzzle(state, state.groups[0], deps, onComplete);
-        expect(onComplete).not.toHaveBeenCalled();
-
-        vi.advanceTimersByTime(NO_TABLE_DEADLINE_MS);
-        expect(onComplete).toHaveBeenCalledTimes(1);
+        expect(renderer.animateGroupRotation).not.toHaveBeenCalled();
     });
 });

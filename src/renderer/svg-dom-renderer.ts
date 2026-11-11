@@ -10,7 +10,8 @@ import { getPieceBounds } from '../model/derive.js';
 import type { GameState, Piece, PieceGroup, Point } from '../model/types.js';
 import { groupOutlinePath } from './group-outline.js';
 import { PathDataError, translatePath } from './translate-path.js';
-import { VIEWPORT_TRANSITION_MS, type Renderer } from './types.js';
+import { rotatePoint } from '../model/helpers.js';
+import { SETTLE_GRACE_MS, VIEWPORT_TRANSITION_MS, type Renderer } from './types.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const XLINK_NS = 'http://www.w3.org/1999/xlink';
@@ -18,20 +19,8 @@ const XLINK_NS = 'http://www.w3.org/1999/xlink';
 /** Accommodates tabs that extend beyond the base piece rectangle. */
 const PIECE_PADDING = 30;
 
-/**
- * Exported for `app/viewport-fit.ts`, which spins the completed group in
- * lockstep with the viewport zoom via direct DOM. Sharing this string keeps the
- * easing and duration identical.
- */
-export const VIEWPORT_TRANSITION = `transform ${VIEWPORT_TRANSITION_MS / 1000}s ease-in-out`;
+const VIEWPORT_TRANSITION = `transform ${VIEWPORT_TRANSITION_MS / 1000}s ease-in-out`;
 
-/**
- * Single source of truth for the `translate(...) rotate(...)` string, so
- * outside callers (e.g. the completion spin) stay in sync with normal
- * rendering. `origin` is the rotation pivot in group-local space (CSS
- * `transform-origin`), defaulting to the group origin `(0, 0)`; pass a local
- * point (e.g. the puzzle center) to pivot elsewhere.
- */
 export function applyGroupTransform(
     el: HTMLElement,
     position: Point,
@@ -272,13 +261,84 @@ export class SvgDomRenderer implements Renderer {
         }, RELAYER_IDLE_MS);
     }
 
-    enableViewportTransition(): void {
-        if (!this.tableEl) return;
-        this.tableEl.style.transition = VIEWPORT_TRANSITION;
+    transitionViewport(scale: number, offsetX: number, offsetY: number): Promise<void> {
+        const table = this.tableEl;
+        if (!table) {
+            return new Promise((resolve) => { setTimeout(resolve, VIEWPORT_TRANSITION_MS); });
+        }
+        table.style.transition = VIEWPORT_TRANSITION;
         this.transitionActive = true;
+
+        return new Promise((resolve) => {
+            let applied = false;
+            const apply = (): void => {
+                if (applied) return;
+                applied = true;
+                this.setViewportTransform(scale, offsetX, offsetY);
+            };
+            const settle = (): void => {
+                apply();
+                table.removeEventListener('transitionend', onEnd);
+                clearTimeout(timer);
+                this.endViewportTransition();
+                resolve();
+            };
+            const onEnd = (event: TransitionEvent): void => {
+                if (event.propertyName === 'transform' && event.target === table) settle();
+            };
+            table.addEventListener('transitionend', onEnd);
+
+            // No `transitionend` fires when the target equals the current
+            // transform, so the timer is the net; the grace lets a real event win.
+            const timer = setTimeout(settle, VIEWPORT_TRANSITION_MS + SETTLE_GRACE_MS);
+
+            // Next frame, so the transition is in place before the target transform.
+            requestAnimationFrame(apply);
+        });
     }
 
-    disableViewportTransition(): void {
+    animateGroupRotation(
+        groupId: number,
+        toDeg: number,
+        pivotLocal: Point,
+    ): Promise<void> {
+        const groupEl = this.groupElements.get(groupId);
+        const rendered = this.renderedGroups.get(groupId);
+        if (!groupEl || !rendered) return Promise.resolve();
+
+        const fromDeg = rendered.rotation;
+
+        // Pinning the origin at the pivot must not move the puzzle.
+        const rotatedPivot = rotatePoint(pivotLocal, fromDeg);
+        const position = {
+            x: rendered.x + rotatedPivot.x - pivotLocal.x,
+            y: rendered.y + rotatedPivot.y - pivotLocal.y,
+        };
+
+        // The reflow makes the pinned frame the transition's start frame.
+        groupEl.style.transition = 'none';
+        applyGroupTransform(groupEl, position, fromDeg, pivotLocal);
+        groupEl.getBoundingClientRect();
+        groupEl.style.transition = VIEWPORT_TRANSITION;
+        applyGroupTransform(groupEl, position, toDeg, pivotLocal);
+
+        return new Promise((resolve) => {
+            const settle = (): void => {
+                groupEl.removeEventListener('transitionend', onEnd);
+                clearTimeout(timer);
+                groupEl.style.transition = '';
+                this.renderedGroups.delete(groupId);
+                resolve();
+            };
+            const onEnd = (event: TransitionEvent): void => {
+                if (event.propertyName === 'transform' && event.target === groupEl) settle();
+            };
+            groupEl.addEventListener('transitionend', onEnd);
+            const timer = setTimeout(settle, VIEWPORT_TRANSITION_MS + SETTLE_GRACE_MS);
+        });
+    }
+
+    private endViewportTransition(): void {
         if (!this.tableEl) return;
         this.tableEl.style.transition = '';
         this.transitionActive = false;
@@ -358,10 +418,6 @@ export class SvgDomRenderer implements Renderer {
 
     setViewportMoving(moving: boolean): void {
         this.tableEl?.toggleAttribute('data-viewport-moving', moving);
-    }
-
-    invalidateGroup(groupId: number): void {
-        this.renderedGroups.delete(groupId);
     }
 
     setInnerOutlineEnabled(enabled: boolean): void {
