@@ -20,13 +20,12 @@ export interface FakeRenderer extends Renderer {
     renderState: Mock<Renderer['renderState']>;
     bringGroupToFront: Mock<Renderer['bringGroupToFront']>;
     setViewportTransform: Mock<Renderer['setViewportTransform']>;
-    enableViewportTransition: Mock<Renderer['enableViewportTransition']>;
-    disableViewportTransition: Mock<Renderer['disableViewportTransition']>;
+    transitionViewport: Mock<Renderer['transitionViewport']>;
+    animateGroupRotation: Mock<Renderer['animateGroupRotation']>;
     setGroupDragging: Mock<Renderer['setGroupDragging']>;
     setGroupSelected: Mock<Renderer['setGroupSelected']>;
     setRingsEnabled: Mock<Renderer['setRingsEnabled']>;
     setInnerOutlineEnabled: Mock<Renderer['setInnerOutlineEnabled']>;
-    invalidateGroup: Mock<Renderer['invalidateGroup']>;
     setViewportMoving: Mock<Renderer['setViewportMoving']>;
     pieceIdAtPoint: Mock<Renderer['pieceIdAtPoint']>;
     photoSettled: Mock<Renderer['photoSettled']>;
@@ -40,13 +39,12 @@ export function createFakeRenderer(): FakeRenderer {
         renderState: vi.fn(),
         bringGroupToFront: vi.fn(),
         setViewportTransform: vi.fn(),
-        enableViewportTransition: vi.fn(),
-        disableViewportTransition: vi.fn(),
+        transitionViewport: vi.fn(() => Promise.resolve()),
+        animateGroupRotation: vi.fn(() => Promise.resolve()),
         setGroupDragging: vi.fn(),
         setGroupSelected: vi.fn(),
         setRingsEnabled: vi.fn(),
         setInnerOutlineEnabled: vi.fn(),
-        invalidateGroup: vi.fn(),
         setViewportMoving: vi.fn(),
         pieceIdAtPoint: vi.fn<Renderer['pieceIdAtPoint']>(() => null),
         photoSettled: vi.fn(() => new Promise<'loaded' | 'failed'>(() => {})),
