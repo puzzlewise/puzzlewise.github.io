@@ -18,7 +18,7 @@
     "oxlint": "^1.91.0",
     "oxlint-tsgolint": "~7.0.2005",
     "typescript": "~7.0.2",
-    "vite": "^8.3.5",
+    "vite": "^8.3.6",
     "vite-plugin-pwa": "^2.0.0",
     "vitest": "^5.1.0",
     "workbox-precaching": "^7.4.0",
