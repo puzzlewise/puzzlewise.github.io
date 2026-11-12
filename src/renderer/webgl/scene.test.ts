@@ -242,4 +242,14 @@ describe('Scene', () => {
         scene.sync(state);
         expect(scene.groupLayout(11)).toBe(layout);
     });
+
+    test('groupRotation reports the last synced rotation, undefined for unknown groups', () => {
+        const state = pairState();
+        const scene = makeScene(state);
+        state.groups[1].rotation = 90;
+        expect(scene.groupRotation(11)).toBe(0);
+        scene.sync(state);
+        expect(scene.groupRotation(11)).toBe(90);
+        expect(scene.groupRotation(999)).toBeUndefined();
+    });
 });
