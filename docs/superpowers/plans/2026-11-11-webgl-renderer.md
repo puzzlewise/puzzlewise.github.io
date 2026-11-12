@@ -863,7 +863,9 @@ Open the Milestone 5 PR.
   - rotated groups;
   - dark OS theme;
   - the debug views;
-  - #711 seams, as a pixel diff along shared edges.
+  - #711 seams, as a pixel diff along shared edges. Include one in-progress save
+    created before 2026-10-31 (before `alignMatePaths`): its mate edges can
+    differ by up to 0.014 units, while current puzzles' mates agree to ~3e-13.
 - [ ] **Step 5: Owner sign-off.** Present the numbers and image pairs. Milestone 7
   starts only after the owner approves.
 
