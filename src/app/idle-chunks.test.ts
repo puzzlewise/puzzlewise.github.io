@@ -1,4 +1,5 @@
-import { describe, it, expect, afterEach, vi } from 'vitest';
+import { describe, it, expect, expectTypeOf, afterEach, vi } from 'vitest';
+import type { IdleScheduler } from '../renderer/index.js';
 import { runInIdleChunks } from './idle-chunks.js';
 
 type IdleCallback = (deadline: IdleDeadline) => void;
@@ -26,6 +27,10 @@ function stubIdleCallback(): { flush: (msRemaining: number) => void; pending: ()
 }
 
 describe('runInIdleChunks', () => {
+    it('is an IdleScheduler the WebGL renderer can take', () => {
+        expectTypeOf(runInIdleChunks).toExtend<IdleScheduler>();
+    });
+
     afterEach(() => {
         vi.unstubAllGlobals();
         vi.useRealTimers();
