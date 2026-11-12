@@ -1576,6 +1576,40 @@ export interface SaveRecoveryData {
 }
 
 /**
+ * Data attached to `renderer-failed` — the WebGL renderer could not run and the
+ * player saw a failure message instead of the puzzle. Nothing falls back to
+ * another renderer, so each event is a player locked out of that session, and
+ * none of these failures reaches `unhandled-error`.
+ *
+ * `kind`: `no-webgl2` (the browser has no WebGL 2), `blocked` (WebGL 2 exists
+ * but the browser refused a context, e.g. WebGL disabled or the GPU
+ * blocklisted), `shader` (a shader failed to compile or link), `lost` (the
+ * context was lost and not restored; see {@link RendererContextLostData}).
+ *
+ * Deliberately no free-text reason: browser and driver messages can carry GPU
+ * identifiers.
+ */
+export interface RendererFailedData {
+    kind: 'no-webgl2' | 'blocked' | 'shader' | 'lost';
+}
+
+/**
+ * Data attached to `renderer-context-lost` — the browser took the WebGL
+ * context away, one event per loss. A loss not restored is followed by
+ * `renderer-failed { kind: 'lost' }`, so the share of losses that never
+ * recover is that count over this one. That share misses the rare restore
+ * whose shaders fail to rebuild: it sends `kind: 'shader'`, which does not
+ * tell it apart from a shader failure at startup.
+ *
+ * `pieceCount` is the installed puzzle's, 0 when none was installed yet.
+ * `visibilityState` is the document's at the moment of loss.
+ */
+export interface RendererContextLostData {
+    pieceCount: number;
+    visibilityState: DocumentVisibilityState;
+}
+
+/**
  * Data attached to `pwa-update-detected` — a freshly-built service worker is
  * waiting and the persistent "update ready" indicator was shown. This is the
  * funnel denominator. The gap between detected and applied is the
@@ -1909,6 +1943,8 @@ export function track(name: 'save-compressed', data: SaveCompressedData): void;
 export function track(name: 'save-unreadable', data: SaveUnreadableData): void;
 export function track(name: 'save-recovery', data: SaveRecoveryData): void;
 export function track(name: 'progress-save-skipped', data: ProgressSaveSkippedData): void;
+export function track(name: 'renderer-failed', data: RendererFailedData): void;
+export function track(name: 'renderer-context-lost', data: RendererContextLostData): void;
 export function track(name: 'pwa-update-detected', data: PwaUpdateDetectedData): void;
 export function track(name: 'pwa-update-check-failed', data: PwaUpdateCheckFailedData): void;
 export function track(name: 'pwa-update-applied', data: PwaUpdateAppliedData): void;
