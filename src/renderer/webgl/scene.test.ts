@@ -225,4 +225,21 @@ describe('Scene', () => {
         t = scene.pieceTransforms();
         expect(slot(t, 0).slice(0, 4)).toEqual([1, 0, 100, 100]);
     });
+
+    test('groupLayout lists a group\'s pieces and slotOfPiece maps ids to state.pieces indexes', () => {
+        const scene = makeScene(pairState());
+        expect(scene.groupLayout(11).map((p) => p.id)).toEqual([1]);
+        expect(scene.groupLayout(999)).toEqual([]);
+        expect(scene.slotOfPiece(1)).toBe(1);
+        expect(scene.slotOfPiece(42)).toBeUndefined();
+    });
+
+    test('a move-only sync keeps the group\'s layout snapshot', () => {
+        const state = pairState();
+        const scene = makeScene(state);
+        const layout = scene.groupLayout(11);
+        state.groups[1].position = { x: 400, y: 0 };
+        scene.sync(state);
+        expect(scene.groupLayout(11)).toBe(layout);
+    });
 });

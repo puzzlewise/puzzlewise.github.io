@@ -186,6 +186,14 @@ export class Scene {
         return this.order;
     }
 
+    groupLayout(groupId: number): readonly { id: number; x: number; y: number }[] {
+        return this.groups.get(groupId)?.layout ?? [];
+    }
+
+    slotOfPiece(pieceId: number): number | undefined {
+        return this.slotByPiece.get(pieceId);
+    }
+
     isOuterEdge(edgeId: number): boolean {
         const owner = this.edgeOwners.get(edgeId);
         if (!owner || owner.matePieceId === -1) return owner !== undefined;
