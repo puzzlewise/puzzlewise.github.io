@@ -121,6 +121,31 @@ vi.mock('../analytics/index.js', async (importOriginal) => {
     return { ...actual, track: vi.fn(), whenAnalyticsReady: vi.fn((send: () => void) => send()) };
 });
 
+const webgl = vi.hoisted(() => ({
+    initError: null as Error | null,
+    onInit: null as ((options: WebGlRendererOptions) => void) | null,
+    options: undefined as WebGlRendererOptions | undefined,
+}));
+
+// An SVG renderer under the WebGL name: jsdom has no WebGL, and the wiring
+// under test only needs `init` to fail or succeed and the options it was given.
+vi.mock('../renderer/index.js', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('../renderer/index.js')>();
+    class FakeWebGlRenderer extends actual.SvgDomRenderer {
+        constructor(options: WebGlRendererOptions) {
+            super();
+            webgl.options = options;
+        }
+
+        override init(container: HTMLElement): void {
+            if (webgl.initError) throw webgl.initError;
+            super.init(container);
+            webgl.onInit?.(webgl.options!);
+        }
+    }
+    return { ...actual, WebGlRenderer: FakeWebGlRenderer };
+});
+
 vi.mock('./idle-chunks.js', () => ({ runInIdleChunks: vi.fn(() => vi.fn()) }));
 
 vi.mock('../move/move-receiver.js', async (importOriginal) => {
@@ -142,7 +167,7 @@ import { installBackgroundColor } from './install-background-color.js';
 import { installToolbar } from './install-toolbar.js';
 import { installDevHooks } from './dev-hooks.js';
 import { observeRendererAppearance } from './renderer-appearance.js';
-import { track } from '../analytics/index.js';
+import { track, whenAnalyticsReady } from '../analytics/index.js';
 import { runMoveReceiver } from '../move/move-receiver.js';
 import { runInIdleChunks } from './idle-chunks.js';
 import { warmEdgePathBounds } from '../game/index.js';
@@ -153,7 +178,10 @@ import { STORAGE_KEY, GEOMETRY_SEED_KEY } from '../persistence/storage.js';
 import { loadGameContext, loadGameStartedAt, saveGameContext } from '../analytics/game-context.js';
 import type { LoadSharedPuzzleDeps } from './load-shared-puzzle.js';
 import { bootstrap } from './bootstrap.js';
-import { SvgDomRenderer } from '../renderer/index.js';
+import {
+    SvgDomRenderer, ShaderBuildError, WebGLUnsupportedError, type WebGlRendererOptions,
+} from '../renderer/index.js';
+import { initPwaUpdates } from '../pwa/register.js';
 import { savePieceOutlinePreference } from '../ui/piece-outline.js';
 import { saveOutlineInsidePreference } from '../ui/outline-inside.js';
 
@@ -1150,6 +1178,183 @@ describe('bootstrap', () => {
             const replaced = sharedDeps().replacedGameAnalytics(makeUnfinishedState());
 
             expect(replaced?.replacedProgress).toBe(1);
+        });
+    });
+
+    it('builds the SVG renderer without ?renderer=webgl', () => {
+        bootstrap(root);
+
+        expect(webgl.options).toBeUndefined();
+    });
+
+    describe('with ?renderer=webgl', () => {
+        const UNSUPPORTED = "Puzzlewise needs WebGL 2, which this browser doesn't support.";
+        let consoleError: MockInstance<typeof console.error>;
+
+        beforeEach(() => {
+            history.replaceState(null, '', '/?renderer=webgl');
+            consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+        });
+
+        afterEach(() => {
+            history.replaceState(null, '', '/');
+            consoleError.mockRestore();
+            webgl.initError = null;
+            webgl.onInit = null;
+            webgl.options = undefined;
+        });
+
+        function contextEvent(phase: 'lost' | 'restored' | 'gave-up'): void {
+            expect(webgl.options?.onContextEvent, 'the WebGL renderer got no onContextEvent').toBeTypeOf('function');
+            webgl.options!.onContextEvent!(phase);
+        }
+
+        it('builds the WebGL renderer, not the SVG one', () => {
+            bootstrap(root);
+
+            expect(webgl.options?.runInIdle).toBe(runInIdleChunks);
+            expect(runBootSequence).toHaveBeenCalled();
+        });
+
+        it('webgl init throwing WebGLUnsupportedError shows the unsupported message and does not boot the game', () => {
+            webgl.initError = new WebGLUnsupportedError('no-webgl2');
+            // `index.html`'s static "Building puzzle…" overlay, which only boot would remove.
+            const loading = document.createElement('div');
+            loading.className = 'loading-overlay';
+            document.body.appendChild(loading);
+
+            bootstrap(root);
+
+            expect(root.querySelector('.renderer-failure-body')?.textContent).toBe(UNSUPPORTED);
+            expect(loading.isConnected, 'the loading overlay is still up').toBe(false);
+            expect(createGameSession).not.toHaveBeenCalled();
+            expect(runBootSequence).not.toHaveBeenCalled();
+            expect(startNewGame).not.toHaveBeenCalled();
+            expect(installToolbar).not.toHaveBeenCalled();
+            expect(windowListeners.mock.calls.some(([type]) => type === 'hashchange')).toBe(false);
+            expect(localStorage.length).toBe(0);
+            expect(consoleError).toHaveBeenCalledWith(expect.any(String), webgl.initError);
+        });
+
+        it('still registers PWA updates when WebGL is unsupported', () => {
+            webgl.initError = new WebGLUnsupportedError('blocked');
+
+            bootstrap(root);
+
+            expect(initPwaUpdates).toHaveBeenCalledTimes(1);
+        });
+
+        it.each(['no-webgl2', 'blocked'] as const)(
+            'an unsupported WebGL tracks renderer-failed with its cause as kind (%s)',
+            (cause) => {
+                webgl.initError = new WebGLUnsupportedError(cause);
+
+                bootstrap(root);
+
+                expect(track).toHaveBeenCalledWith('renderer-failed', { kind: cause });
+            },
+        );
+
+        it('a ShaderBuildError at init shows the unsupported message, tracks renderer-failed with kind shader and console.errors its log', () => {
+            const log = "ERROR: 0:12: 'vUv' : undeclared identifier";
+            webgl.initError = new ShaderBuildError('Fragment shader failed to compile', log);
+
+            bootstrap(root);
+
+            expect(root.querySelector('.renderer-failure-body')?.textContent).toBe(UNSUPPORTED);
+            expect(track).toHaveBeenCalledWith('renderer-failed', { kind: 'shader' });
+            expect(consoleError).toHaveBeenCalledWith(expect.any(String), webgl.initError, log);
+            expect(runBootSequence).not.toHaveBeenCalled();
+        });
+
+        it('lets any other init error propagate', () => {
+            webgl.initError = new TypeError('boom');
+
+            expect(() => bootstrap(root)).toThrow('boom');
+            expect(track).not.toHaveBeenCalledWith('renderer-failed', expect.anything());
+        });
+
+        it('onContextEvent lost tracks renderer-context-lost with pieceCount and visibilityState', () => {
+            bootstrap(root);
+            createdSession().install(makeUnfinishedState());
+            const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+            onTestFinished(() => visibility.mockRestore());
+            vi.mocked(track).mockClear();
+
+            contextEvent('lost');
+
+            expect(track).toHaveBeenCalledWith('renderer-context-lost', { pieceCount: 2, visibilityState: 'hidden' });
+            expect(track).toHaveBeenCalledTimes(1);
+            expect(root.querySelector('.renderer-failure-overlay')).toBeNull();
+        });
+
+        it('reports the visibilityState at the loss, not when analytics becomes ready', () => {
+            bootstrap(root);
+            createdSession().install(makeUnfinishedState());
+            let pendingSend: (() => void) | undefined;
+            vi.mocked(whenAnalyticsReady).mockImplementationOnce((send) => {
+                pendingSend = send;
+            });
+            const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+            onTestFinished(() => visibility.mockRestore());
+
+            contextEvent('lost');
+            visibility.mockReturnValue('visible');
+            expect(pendingSend, 'the send was not deferred').toBeTypeOf('function');
+            pendingSend!();
+
+            expect(track).toHaveBeenCalledWith('renderer-context-lost', { pieceCount: 2, visibilityState: 'hidden' });
+        });
+
+        it('reports a context lost during init with no puzzle installed', () => {
+            // `session` doesn't exist yet when `init` reports a loss.
+            webgl.onInit = (options) => options.onContextEvent?.('lost');
+
+            expect(() => bootstrap(root)).not.toThrow();
+
+            expect(track).toHaveBeenCalledWith('renderer-context-lost', {
+                pieceCount: 0,
+                visibilityState: document.visibilityState,
+            });
+            expect(runBootSequence).toHaveBeenCalled();
+        });
+
+        it('onContextEvent gave-up shows the lost message and tracks renderer-failed with kind lost', () => {
+            bootstrap(root);
+            vi.mocked(track).mockClear();
+
+            contextEvent('gave-up');
+
+            expect(root.querySelector('.renderer-failure-body')?.textContent).toBe('Graphics stopped working.');
+            expect(root.querySelector('.renderer-failure-overlay button')?.textContent).toBe('Reload');
+            expect(track).toHaveBeenCalledWith('renderer-failed', { kind: 'lost' });
+            expect(track).toHaveBeenCalledTimes(1);
+        });
+
+        it('a shader failure on restore shows the unsupported message, tracks renderer-failed with kind shader and console.errors its log', () => {
+            const log = "ERROR: 0:12: 'vUv' : undeclared identifier";
+            const error = new ShaderBuildError('Fragment shader failed to compile', log);
+            bootstrap(root);
+            contextEvent('lost');
+            vi.mocked(track).mockClear();
+            expect(webgl.options?.onRestoreFailed, 'the WebGL renderer got no onRestoreFailed').toBeTypeOf('function');
+
+            webgl.options!.onRestoreFailed!(error);
+
+            expect(root.querySelector('.renderer-failure-body')?.textContent).toBe(UNSUPPORTED);
+            expect(track).toHaveBeenCalledWith('renderer-failed', { kind: 'shader' });
+            expect(track).toHaveBeenCalledTimes(1);
+            expect(consoleError).toHaveBeenCalledWith(expect.any(String), error, log);
+        });
+
+        it('onContextEvent restored shows nothing and tracks nothing', () => {
+            bootstrap(root);
+            vi.mocked(track).mockClear();
+
+            contextEvent('restored');
+
+            expect(root.querySelector('.renderer-failure-overlay')).toBeNull();
+            expect(track).not.toHaveBeenCalled();
         });
     });
 
