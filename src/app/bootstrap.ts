@@ -16,7 +16,6 @@
 
 import type { GameState, PieceGroup } from '../model/types.js';
 import type { MergeResult } from '../game/group-merging.js';
-import { SvgDomRenderer } from '../renderer/index.js';
 import { createProbeResolver, observeRendererAppearance, readRendererAppearance } from './renderer-appearance.js';
 import { ViewportTransform, RotationFocus } from '../interaction/index.js';
 import {
@@ -58,6 +57,7 @@ import { installToolbar } from './install-toolbar.js';
 import { installDevHooks, solvePuzzle } from './dev-hooks.js';
 import { warmEdgePathBounds } from '../game/index.js';
 import { runInIdleChunks } from './idle-chunks.js';
+import { chooseRenderer, startRenderer } from './start-renderer.js';
 import { installGeometryTokenInvalidation } from '../persistence/index.js';
 import { initPwaUpdates } from '../pwa/register.js';
 import { isReceiveMode, runMoveReceiver } from '../move/move-receiver.js';
@@ -94,8 +94,15 @@ export function bootstrap(
     let currentGameResumed = false;
     let currentGameStartedAt: number | undefined;
 
-    const renderer = new SvgDomRenderer();
-    renderer.init(root);
+    // Not `session.current()`: `init` can report a context loss before `session` exists.
+    let installedPieceCount = 0;
+    const startedRenderer = startRenderer(root, chooseRenderer(location.search), () => installedPieceCount);
+    if (!startedRenderer) {
+        // A later build may fix what failed, and only a registered worker can deliver it.
+        initPwaUpdates(() => {});
+        return;
+    }
+    const renderer = startedRenderer;
     const setEffects = (preference: string): void => {
         renderer.setRingsEnabled(usesRings(applyEffects(preference)));
     };
@@ -211,6 +218,7 @@ export function bootstrap(
             currentGameAnalytics = null;
             currentGameResumed = false;
             currentGameStartedAt = undefined;
+            installedPieceCount = state.pieces.length;
             // Remove the previous game's overlay first — `show` no-ops while
             // one is already up.
             completionPresenter.remove();

@@ -26,6 +26,8 @@ export type {
     NewGameFailedData,
     PieceCountMismatchData,
     ShareFailedData,
+    RendererFailedData,
+    RendererContextLostData,
     PwaUpdateDetectedData,
     PwaUpdateCheckFailedData,
     PwaUpdateAppliedData,
