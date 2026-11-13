@@ -55,10 +55,17 @@ export function gaussianKernel(sigma: number, texelsPerUnit: number): Float32Arr
     return kernel;
 }
 
+/**
+ * Chained blurs add variances, and the halo is stored in 8 bits: past three
+ * combined σ its tail rounds to zero long before the truncated kernels' summed
+ * support ends.
+ */
 export function haloMargin(steps: readonly HaloStep[]): number {
-    let margin = 0;
-    for (const step of steps) margin += 3 * step.sigma;
-    return margin;
+    if (steps.length === 0) return 0;
+    const support = steps.reduce((sum, step) => sum + 3 * step.sigma, 0);
+    const texelsPerUnit = haloTexelsPerUnit(steps);
+    const spread = Math.ceil(3 * Math.hypot(...steps.map((step) => step.sigma)) * texelsPerUnit) / texelsPerUnit;
+    return Math.min(support, spread);
 }
 
 export function haloTexelsPerUnit(steps: readonly HaloStep[]): number {

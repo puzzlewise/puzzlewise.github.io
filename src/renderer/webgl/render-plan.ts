@@ -1,6 +1,8 @@
 import type { GameState, Point, Size } from '../../model/types.js';
 import type { RendererAppearance } from '../appearance.js';
 import { type DrawPasses, drawPasses } from './draw-list.js';
+import { silhouetteStroke } from './halo-atlas-plan.js';
+import { HALO_STATES, type HaloState, haloSteps } from './halo-recipe.js';
 import type { SceneChanges } from './scene.js';
 
 /**
@@ -19,10 +21,11 @@ export interface Dirt {
     vertices: boolean;
     indices: boolean;
     transforms: boolean;
+    halos: boolean;
     frame: boolean;
 }
 
-export const NO_DIRT: Readonly<Dirt> = { vertices: false, indices: false, transforms: false, frame: false };
+export const NO_DIRT: Readonly<Dirt> = { vertices: false, indices: false, transforms: false, halos: false, frame: false };
 
 export function gameIdentity(state: GameState): GameIdentity {
     return {
@@ -43,6 +46,7 @@ export function sceneDirt(changes: SceneChanges): Dirt {
         vertices: false,
         indices,
         transforms: changes.transforms,
+        halos: changes.outerEdges,
         frame: indices || changes.transforms || changes.groupsChanged.length > 0,
     };
 }
@@ -63,8 +67,28 @@ export function appearanceDirt(prev: RendererAppearance, next: RendererAppearanc
         vertices: false,
         indices: !samePasses(drawPasses(prev, true), drawPasses(next, true)),
         transforms: false,
+        halos: HALO_STATES.some((state) => haloKey(prev, state) !== haloKey(next, state)),
         frame,
     };
+}
+
+/** Everything in the appearance that the pixels of a halo in `state` depend on. */
+export function haloKey(appearance: RendererAppearance, state: HaloState): string {
+    const steps = haloSteps(state, appearance.outline, appearance.selectionGlowColor);
+    return JSON.stringify([silhouetteStroke(appearance), steps]);
+}
+
+export function haloState(flags: { selected: boolean; dragging: boolean }): HaloState {
+    if (flags.selected) return flags.dragging ? 'selected-dragging' : 'selected';
+    return flags.dragging ? 'dragging' : 'idle';
+}
+
+type GroupFlags = { selected: boolean; dragging: boolean };
+
+export function groupStateDirt(prev: GroupFlags, next: GroupFlags, appearance: RendererAppearance): Dirt {
+    const steps = (flags: GroupFlags) =>
+        JSON.stringify(haloSteps(haloState(flags), appearance.outline, appearance.selectionGlowColor));
+    return { ...NO_DIRT, halos: steps(prev) !== steps(next) };
 }
 
 /** `rect` is the canvas's client rect; `cssSize` its layout size, which differs under an ancestor's CSS transform. */

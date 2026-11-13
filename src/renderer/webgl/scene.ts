@@ -194,6 +194,10 @@ export class Scene {
         return this.groups.get(groupId)?.rotation;
     }
 
+    groupOfPiece(pieceId: number): number | undefined {
+        return this.pieceGroup.get(pieceId);
+    }
+
     slotOfPiece(pieceId: number): number | undefined {
         return this.slotByPiece.get(pieceId);
     }

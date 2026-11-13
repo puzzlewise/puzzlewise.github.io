@@ -1,7 +1,7 @@
 import type { Piece, Point } from '../../model/types.js';
 import { CHAIN_EPSILON } from '../../model/build-shape.js';
 import type { EdgeOutline, PieceMesh } from './piece-mesh.js';
-import { KIND_FILL, KIND_FRINGE, KIND_STROKE, MAIN_ATTRIBUTES, MAIN_VERTEX_FLOATS } from './shaders.js';
+import { KIND_FILL, KIND_FRINGE, KIND_HALO, KIND_STROKE, MAIN_ATTRIBUTES, MAIN_VERTEX_FLOATS } from './shaders.js';
 import type { IndexRange, StrokeMesh } from './stroke-mesh.js';
 
 const INITIAL_VERTICES = 4096;
@@ -19,6 +19,20 @@ export interface StrokeParts {
     endCap: Uint32Array;
 }
 
+/** Corners in the reference piece's frame (world units) and their atlas UVs. */
+export interface HaloQuad {
+    refSlot: number;
+    x0: number;
+    y0: number;
+    x1: number;
+    y1: number;
+    u0: number;
+    v0: number;
+    u1: number;
+    v1: number;
+    layer: number;
+}
+
 export interface EdgeCorners {
     prev: number;
     next: number;
@@ -26,8 +40,9 @@ export interface EdgeCorners {
     endConvex: boolean;
 }
 
-/** Index arrays hold absolute indices into `vertices()`. */
+/** Index arrays hold absolute indices into `vertices()`. Halo quads take the first `haloCapacity` × 4 vertices. */
 export class GeometryStore {
+    readonly haloCapacity: number;
     private data = new Float32Array(INITIAL_VERTICES * MAIN_VERTEX_FLOATS);
     private count = 0;
     private readonly pieces = new Map<number, PieceInfo>();
@@ -36,8 +51,11 @@ export class GeometryStore {
     private readonly parts = new Map<number, StrokeParts>();
     private readonly corners = new Map<number, EdgeCorners>();
     private readonly stroked = new Set<number>();
+    private readonly haloIndexCache: Uint32Array[] = [];
 
-    constructor(pieces: readonly Piece[], slotOf: (pieceId: number) => number | undefined) {
+    constructor(pieces: readonly Piece[], slotOf: (pieceId: number) => number | undefined, haloCapacity = 0) {
+        this.haloCapacity = haloCapacity;
+        this.reserve(haloCapacity * 4);
         for (const piece of pieces) {
             const slot = slotOf(piece.id);
             if (slot === undefined) continue;
@@ -51,6 +69,41 @@ export class GeometryStore {
 
     vertices(): Float32Array {
         return this.data.subarray(0, this.count * MAIN_VERTEX_FLOATS);
+    }
+
+    /** One slot's 4 vertices, which start `index` × 4 vertices into `vertices()`. */
+    haloVertices(index: number): Float32Array {
+        return this.data.subarray(index * 4 * MAIN_VERTEX_FLOATS, (index + 1) * 4 * MAIN_VERTEX_FLOATS);
+    }
+
+    haloIndices(index: number): Uint32Array {
+        let indices = this.haloIndexCache[index];
+        if (!indices) {
+            const base = index * 4;
+            indices = Uint32Array.of(base, base + 1, base + 2, base, base + 2, base + 3);
+            this.haloIndexCache[index] = indices;
+        }
+        return indices;
+    }
+
+    /** A null quad collapses the slot's vertices to a point, which draws nothing. */
+    writeHalo(index: number, quad: HaloQuad | null): void {
+        const q = quad ?? { x0: 0, y0: 0, x1: 0, y1: 0, u0: 0, v0: 0, u1: 0, v1: 0, layer: 0, refSlot: 0 };
+        const corners = [[q.x0, q.y0, q.u0, q.v0], [q.x1, q.y0, q.u1, q.v0],
+            [q.x1, q.y1, q.u1, q.v1], [q.x0, q.y1, q.u0, q.v1]];
+        corners.forEach(([x, y, u, v], corner) => {
+            const o = (index * 4 + corner) * MAIN_VERTEX_FLOATS;
+            const d = this.data;
+            d[o + A.position.offset] = x;
+            d[o + A.position.offset + 1] = y;
+            d[o + A.normal.offset] = q.layer;
+            d[o + A.normal.offset + 1] = 0;
+            d[o + A.side.offset] = 0;
+            d[o + A.imagePosition.offset] = u;
+            d[o + A.imagePosition.offset + 1] = v;
+            d[o + A.slot.offset] = q.refSlot;
+            d[o + A.kind.offset] = KIND_HALO;
+        });
     }
 
     fillIndices(pieceId: number): Uint32Array | undefined {

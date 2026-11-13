@@ -6,7 +6,7 @@ export interface FrameHost {
 
 export interface FrameWork {
     /** Must be a no-op when nothing is dirty: both paths can fire for one change. */
-    draw(): void;
+    draw(inFrame: boolean): void;
     /** Returns whether an animation is still running. */
     tick(now: number): boolean;
 }
@@ -33,7 +33,7 @@ export class FrameScheduler {
         this.drawQueued = true;
         this.host.queueMicrotask(() => {
             this.drawQueued = false;
-            this.work.draw();
+            this.work.draw(false);
         });
     }
 
@@ -50,7 +50,7 @@ export class FrameScheduler {
     private readonly onFrame = (now: number): void => {
         this.frameHandle = null;
         const animating = this.work.tick(now);
-        this.work.draw();
+        this.work.draw(true);
         if (animating) this.drawNextFrame();
     };
 }
