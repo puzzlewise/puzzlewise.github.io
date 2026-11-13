@@ -14,7 +14,7 @@ export interface DrawOrder {
 }
 
 /** The fringe is the only edge antialiasing without an outline; strokes and fringe share the stroke vertices. */
-export function drawPasses(appearance: RendererAppearance, strokesReady: boolean): DrawPasses {
+export function drawPasses(appearance: Pick<RendererAppearance, 'outline' | 'innerOutline'>, strokesReady: boolean): DrawPasses {
     const outline = strokesReady && appearance.outline === 'outline';
     return {
         strokesUnder: outline && !appearance.innerOutline,
