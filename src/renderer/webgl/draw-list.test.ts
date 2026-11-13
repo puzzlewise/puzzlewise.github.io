@@ -43,10 +43,11 @@ function setup(groups: PieceGroup[], withStrokes = true): { state: GameState; sc
     const pieces = matedPieces();
     const state = makeGameState({ pieces, groups });
     const meshes = pieces.map((p) => buildPieceFill(p, 0.05));
-    const store = new GeometryStore(pieces);
+    const scene = new Scene(meshes, state);
+    const store = new GeometryStore(pieces, (id) => scene.slotOfPiece(id));
     for (const mesh of meshes) store.addFill(mesh);
     if (withStrokes) for (const mesh of meshes) store.addStrokes(mesh, buildPieceStrokes(mesh));
-    return { state, scene: new Scene(meshes, state), store };
+    return { state, scene, store };
 }
 
 function wholeStroke(store: GeometryStore, edgeId: number): Uint32Array {

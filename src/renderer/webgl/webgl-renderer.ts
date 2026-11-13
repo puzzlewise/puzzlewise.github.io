@@ -275,12 +275,13 @@ export class WebGlRenderer implements Renderer {
         this.photos.load(state.imageUrl);
 
         const meshes = state.pieces.map((piece) => buildPieceFill(piece, FLATTEN_TOLERANCE));
-        const store = new GeometryStore(state.pieces);
+        const scene = new Scene(meshes, state);
+        const store = new GeometryStore(state.pieces, (id) => scene.slotOfPiece(id));
         for (const mesh of meshes) store.addFill(mesh);
         const game: Game = {
             identity,
             state,
-            scene: new Scene(meshes, state),
+            scene,
             store,
             strokesReady: meshes.length === 0,
             cancelStrokes: () => {},
