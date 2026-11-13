@@ -914,6 +914,12 @@ Open the Milestone 5 PR.
     a context the browser was about to return goes unnoticed. While WebGL is
     behind the dev flag almost nobody would send these, so they wait for the
     switch.
+  - Same files plus `WebGlRendererOptions`: an `onHalosUnavailable(kind)`
+    option, and one `renderer-degraded { kind: 'halo-shader' | 'halo-atlas' }`
+    event per page load (no free text). After the switch, a GPU family whose
+    driver rejects a halo shader, or a puzzle too big for the atlas, would
+    otherwise silently lose selection glow and drag shadows, with nothing in
+    analytics: the failure is caught and only logged to the console.
 
 - [ ] **Step 1:** Make the edits.
 - [ ] **Step 2:** `fnm exec npm test && fnm exec npm run lint && fnm exec npm run build`.
