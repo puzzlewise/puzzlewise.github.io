@@ -60,24 +60,21 @@ function createFakeContainer(): FakeContainer {
     };
 }
 
-function createFakeRenderer(): Renderer {
+function createFakeRenderer(pieceAt: (point: { x: number; y: number }) => number | null = () => null): Renderer {
     return {
         init: vi.fn(),
         renderState: vi.fn(),
         bringGroupToFront: vi.fn(),
         setViewportTransform: vi.fn(),
-        enableViewportTransition: vi.fn(),
-        disableViewportTransition: vi.fn(),
+        transitionViewport: vi.fn(() => Promise.resolve()),
+        animateGroupRotation: vi.fn(() => Promise.resolve()),
         setGroupDragging: vi.fn(),
         setGroupSelected: vi.fn(),
         setRingsEnabled: vi.fn(),
+        setAppearance: vi.fn(),
         setInnerOutlineEnabled: vi.fn(),
-        invalidateGroup: vi.fn(),
         setViewportMoving: vi.fn(),
-        pieceIdFromTarget: vi.fn((t: EventTarget | null) =>
-            (t as { _pieceId?: number } | null)?._pieceId ?? null),
-        // Defaults to "no piece nearby"; probe tests override it.
-        pieceIdAtPoint: vi.fn(() => null),
+        pieceIdAtPoint: vi.fn(pieceAt),
         photoSettled: vi.fn(() => new Promise<'loaded' | 'failed'>(() => {})),
         prefetchPhoto: vi.fn(),
         destroy: vi.fn(),
@@ -139,7 +136,7 @@ describe('setupInteraction', () => {
 
     it('a piece tap in select-mode toggles selection', () => {
         const container = createFakeContainer();
-        const renderer = createFakeRenderer();
+        const renderer = createFakeRenderer(() => 3);
         const selectionManager = new SelectionManager();
         selectionManager.toolActive = true;
 
@@ -156,10 +153,10 @@ describe('setupInteraction', () => {
             selectionManager,
         });
 
-        const pieceTarget = { _pieceId: 3 } as unknown as EventTarget;
+        const tableTarget = container as unknown as EventTarget;
 
-        container.fire('pointerdown', fakePointerEvent({ target: pieceTarget, clientX: 100, clientY: 100 }));
-        container.fire('pointerup', fakePointerEvent({ target: pieceTarget, clientX: 101, clientY: 100 }));
+        container.fire('pointerdown', fakePointerEvent({ target: tableTarget, clientX: 100, clientY: 100 }));
+        container.fire('pointerup', fakePointerEvent({ target: tableTarget, clientX: 101, clientY: 100 }));
 
         expect(selectionManager.isSelected(7)).toBe(true);
         expect(renderer.setGroupSelected).toHaveBeenCalledWith(7, true);
@@ -167,7 +164,7 @@ describe('setupInteraction', () => {
 
     it('a piece drag triggers setGroupDragging(true) on start and onDrop on end', () => {
         const container = createFakeContainer();
-        const renderer = createFakeRenderer();
+        const renderer = createFakeRenderer(() => 3);
         const onStateChanged = vi.fn();
         const onDrop = vi.fn();
         const state = makeState([makeGroup(7, [3])]);
@@ -182,8 +179,8 @@ describe('setupInteraction', () => {
             onViewportChanged: vi.fn(),
         });
 
-        const pieceTarget = { _pieceId: 3 };
-        container.fire('pointerdown', fakePointerEvent({ target: pieceTarget as unknown as EventTarget, pointerId: 1, clientX: 100, clientY: 100 }));
+        const tableTarget = container as unknown as EventTarget;
+        container.fire('pointerdown', fakePointerEvent({ target: tableTarget, pointerId: 1, clientX: 100, clientY: 100 }));
         container.fire('pointermove', fakePointerEvent({ pointerId: 1, clientX: 120, clientY: 100 })); // promote
         expect(renderer.setGroupDragging).toHaveBeenCalledWith(7, true);
 
@@ -215,8 +212,8 @@ describe('setupInteraction', () => {
         });
 
         // Direct hit is background (target === container), so the probe runs.
-        const bgTarget = container as unknown as EventTarget;
-        container.fire('pointerdown', fakePointerEvent({ target: bgTarget, pointerId: 1, clientX: 100, clientY: 100 }));
+        const tableTarget = container as unknown as EventTarget;
+        container.fire('pointerdown', fakePointerEvent({ target: tableTarget, pointerId: 1, clientX: 100, clientY: 100 }));
         container.fire('pointermove', fakePointerEvent({ pointerId: 1, clientX: 120, clientY: 100 })); // promote
 
         expect(renderer.pieceIdAtPoint).toHaveBeenCalled();
@@ -244,10 +241,10 @@ describe('setupInteraction', () => {
             panViewport: vi.fn(),
         });
 
-        const bgTarget = container as unknown as EventTarget;
-        container.fire('pointerdown', fakePointerEvent({ target: bgTarget, pointerId: 1, clientX: 100, clientY: 100 }));
-        container.fire('pointermove', fakePointerEvent({ target: bgTarget, pointerId: 1, clientX: 130, clientY: 100 })); // promote pan
-        container.fire('pointermove', fakePointerEvent({ target: bgTarget, pointerId: 1, clientX: 150, clientY: 100 })); // pan move
+        const tableTarget = container as unknown as EventTarget;
+        container.fire('pointerdown', fakePointerEvent({ target: tableTarget, pointerId: 1, clientX: 100, clientY: 100 }));
+        container.fire('pointermove', fakePointerEvent({ target: tableTarget, pointerId: 1, clientX: 130, clientY: 100 })); // promote pan
+        container.fire('pointermove', fakePointerEvent({ target: tableTarget, pointerId: 1, clientX: 150, clientY: 100 })); // pan move
 
         expect(renderer.pieceIdAtPoint).toHaveBeenCalled();
         expect(renderer.setGroupDragging).not.toHaveBeenCalled();
@@ -255,9 +252,97 @@ describe('setupInteraction', () => {
         expect(onDrop).not.toHaveBeenCalled();
     });
 
+    describe('press classification', () => {
+        function setupPress(pieceAt: (point: { x: number; y: number }) => number | null) {
+            const container = createFakeContainer();
+            const renderer = createFakeRenderer(pieceAt);
+            const onDrop = vi.fn();
+            const onViewportChanged = vi.fn();
+            setupInteraction({
+                container: container as unknown as HTMLElement,
+                renderer,
+                viewportTransform: new ViewportTransform(),
+                getState: () => makeState([makeGroup(7, [3])]),
+                onStateChanged: vi.fn(),
+                onDrop,
+                onViewportChanged,
+                panViewport: vi.fn(),
+            });
+            return { container, renderer, onDrop, onViewportChanged };
+        }
+
+        function pressAndDrag(container: FakeContainer, target: EventTarget): void {
+            container.fire('pointerdown', fakePointerEvent({ target, pointerId: 1, clientX: 100, clientY: 100 }));
+            container.fire('pointermove', fakePointerEvent({ target, pointerId: 1, clientX: 130, clientY: 100 }));
+            container.fire('pointerup', fakePointerEvent({ target, pointerId: 1, clientX: 130, clientY: 100 }));
+        }
+
+        it('a table press directly on a piece classifies via pieceIdAtPoint', () => {
+            const { container, renderer, onDrop } = setupPress((p) => (p.x === 100 && p.y === 100 ? 3 : null));
+
+            pressAndDrag(container, container as unknown as EventTarget);
+
+            expect(renderer.pieceIdAtPoint).toHaveBeenCalledWith({ x: 100, y: 100 });
+            expect(renderer.setGroupDragging).toHaveBeenCalledWith(7, true);
+            expect(onDrop).toHaveBeenCalledWith(7);
+        });
+
+        it('a press whose target is an element inside [data-puzzle-table] classifies by point', () => {
+            const { container, renderer, onDrop } = setupPress((p) => (p.x === 100 && p.y === 100 ? 3 : null));
+            const table = document.createElement('div');
+            table.dataset.puzzleTable = 'true';
+            const child = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            table.appendChild(child);
+
+            pressAndDrag(container, child);
+
+            expect(renderer.setGroupDragging).toHaveBeenCalledWith(7, true);
+            expect(onDrop).toHaveBeenCalledWith(7);
+        });
+
+        it('a table press near a piece falls back to the 8px probe', () => {
+            const { container, renderer, onDrop } = setupPress((p) =>
+                p.x === 100 && p.y === 100 ? null : Math.hypot(p.x - 100, p.y - 100) <= 8 ? 3 : null);
+
+            pressAndDrag(container, container as unknown as EventTarget);
+
+            expect(renderer.setGroupDragging).toHaveBeenCalledWith(7, true);
+            expect(onDrop).toHaveBeenCalledWith(7);
+        });
+
+        it('a press on a non-table element is ignored', () => {
+            const { container, renderer, onDrop, onViewportChanged } = setupPress(() => 3);
+
+            pressAndDrag(container, document.createElement('button'));
+
+            expect(renderer.pieceIdAtPoint).not.toHaveBeenCalled();
+            expect(renderer.setGroupDragging).not.toHaveBeenCalled();
+            expect(onViewportChanged).not.toHaveBeenCalled();
+            expect(onDrop).not.toHaveBeenCalled();
+        });
+
+        it('wheel (no point) on the table classifies as background', () => {
+            const { container, renderer, onViewportChanged } = setupPress(() => 3);
+
+            container.fire('wheel', {
+                target: container,
+                clientX: 100,
+                clientY: 100,
+                deltaX: 0,
+                deltaY: -100,
+                deltaMode: 0,
+                ctrlKey: true,
+                preventDefault: vi.fn(),
+            } as unknown as WheelEvent);
+
+            expect(renderer.pieceIdAtPoint).not.toHaveBeenCalled();
+            expect(onViewportChanged).toHaveBeenCalled();
+        });
+    });
+
     it('a pointercancel during drag clears dragging visual without calling onDrop', () => {
         const container = createFakeContainer();
-        const renderer = createFakeRenderer();
+        const renderer = createFakeRenderer(() => 3);
         const onDrop = vi.fn();
         const state = makeState([makeGroup(7, [3])]);
 
@@ -271,8 +356,8 @@ describe('setupInteraction', () => {
             onViewportChanged: vi.fn(),
         });
 
-        const pieceTarget = { _pieceId: 3 };
-        container.fire('pointerdown', fakePointerEvent({ target: pieceTarget as unknown as EventTarget, pointerId: 1, clientX: 100, clientY: 100 }));
+        const tableTarget = container as unknown as EventTarget;
+        container.fire('pointerdown', fakePointerEvent({ target: tableTarget, pointerId: 1, clientX: 100, clientY: 100 }));
         container.fire('pointermove', fakePointerEvent({ pointerId: 1, clientX: 120, clientY: 100 })); // promote
         container.fire('pointercancel', fakePointerEvent({ pointerId: 1 }));
 
@@ -283,7 +368,7 @@ describe('setupInteraction', () => {
     describe('rotation focus', () => {
         it('a piece tap sets focus on that group, regardless of multi-select state', () => {
             const container = createFakeContainer();
-            const renderer = createFakeRenderer();
+            const renderer = createFakeRenderer(() => 3);
             const rotationFocus = new RotationFocus();
             const state = makeState([makeGroup(7, [3])]);
 
@@ -298,16 +383,16 @@ describe('setupInteraction', () => {
                 rotationFocus,
             });
 
-            const pieceTarget = { _pieceId: 3 } as unknown as EventTarget;
-            container.fire('pointerdown', fakePointerEvent({ target: pieceTarget, clientX: 100, clientY: 100 }));
-            container.fire('pointerup', fakePointerEvent({ target: pieceTarget, clientX: 101, clientY: 100 }));
+            const tableTarget = container as unknown as EventTarget;
+            container.fire('pointerdown', fakePointerEvent({ target: tableTarget, clientX: 100, clientY: 100 }));
+            container.fire('pointerup', fakePointerEvent({ target: tableTarget, clientX: 101, clientY: 100 }));
 
             expect(rotationFocus.focusedGroupId).toBe(7);
         });
 
         it('a piece tap also still toggles multi-select when the tool is active', () => {
             const container = createFakeContainer();
-            const renderer = createFakeRenderer();
+            const renderer = createFakeRenderer(() => 3);
             const rotationFocus = new RotationFocus();
             const selectionManager = new SelectionManager();
             selectionManager.toolActive = true;
@@ -325,9 +410,9 @@ describe('setupInteraction', () => {
                 rotationFocus,
             });
 
-            const pieceTarget = { _pieceId: 3 } as unknown as EventTarget;
-            container.fire('pointerdown', fakePointerEvent({ target: pieceTarget, clientX: 100, clientY: 100 }));
-            container.fire('pointerup', fakePointerEvent({ target: pieceTarget, clientX: 101, clientY: 100 }));
+            const tableTarget = container as unknown as EventTarget;
+            container.fire('pointerdown', fakePointerEvent({ target: tableTarget, clientX: 100, clientY: 100 }));
+            container.fire('pointerup', fakePointerEvent({ target: tableTarget, clientX: 101, clientY: 100 }));
 
             expect(selectionManager.isSelected(7)).toBe(true);
             expect(rotationFocus.focusedGroupId).toBe(7);
@@ -335,7 +420,7 @@ describe('setupInteraction', () => {
 
         it('a piece drag start clears focus', () => {
             const container = createFakeContainer();
-            const renderer = createFakeRenderer();
+            const renderer = createFakeRenderer(() => 3);
             const rotationFocus = new RotationFocus();
             rotationFocus.setFocus(7);
             const state = makeState([makeGroup(7, [3])]);
@@ -351,8 +436,8 @@ describe('setupInteraction', () => {
                 rotationFocus,
             });
 
-            const pieceTarget = { _pieceId: 3 };
-            container.fire('pointerdown', fakePointerEvent({ target: pieceTarget as unknown as EventTarget, pointerId: 1, clientX: 100, clientY: 100 }));
+            const tableTarget = container as unknown as EventTarget;
+            container.fire('pointerdown', fakePointerEvent({ target: tableTarget, pointerId: 1, clientX: 100, clientY: 100 }));
             container.fire('pointermove', fakePointerEvent({ pointerId: 1, clientX: 120, clientY: 100 }));
 
             expect(rotationFocus.focusedGroupId).toBeNull();
@@ -377,9 +462,9 @@ describe('setupInteraction', () => {
             });
 
             // Cast to EventTarget so classifyTarget's target === container check matches.
-            const bgTarget = container as unknown as EventTarget;
-            container.fire('pointerdown', fakePointerEvent({ target: bgTarget, pointerId: 1, clientX: 100, clientY: 100 }));
-            container.fire('pointerup', fakePointerEvent({ target: bgTarget, pointerId: 1, clientX: 101, clientY: 100 }));
+            const tableTarget = container as unknown as EventTarget;
+            container.fire('pointerdown', fakePointerEvent({ target: tableTarget, pointerId: 1, clientX: 100, clientY: 100 }));
+            container.fire('pointerup', fakePointerEvent({ target: tableTarget, pointerId: 1, clientX: 101, clientY: 100 }));
 
             expect(rotationFocus.focusedGroupId).toBeNull();
         });
@@ -404,16 +489,16 @@ describe('setupInteraction', () => {
             });
 
             // Cast to EventTarget so classifyTarget's target === container check matches.
-            const bgTarget = container as unknown as EventTarget;
-            container.fire('pointerdown', fakePointerEvent({ target: bgTarget, pointerId: 1, clientX: 100, clientY: 100 }));
-            container.fire('pointermove', fakePointerEvent({ target: bgTarget, pointerId: 1, clientX: 130, clientY: 100 })); // promote pan
+            const tableTarget = container as unknown as EventTarget;
+            container.fire('pointerdown', fakePointerEvent({ target: tableTarget, pointerId: 1, clientX: 100, clientY: 100 }));
+            container.fire('pointermove', fakePointerEvent({ target: tableTarget, pointerId: 1, clientX: 130, clientY: 100 })); // promote pan
 
             expect(rotationFocus.focusedGroupId).toBeNull();
         });
 
         it('a wheel zoom clears focus', () => {
             const container = createFakeContainer();
-            const renderer = createFakeRenderer();
+            const renderer = createFakeRenderer(() => 3);
             const rotationFocus = new RotationFocus();
             rotationFocus.setFocus(7);
             const state = makeState([makeGroup(7, [3])]);
@@ -429,12 +514,12 @@ describe('setupInteraction', () => {
                 rotationFocus,
             });
 
-            const pieceTarget = { _pieceId: 3 };
+            const tableTarget = container as unknown as EventTarget;
             const wheelEvt = {
                 deltaY: -100,
                 clientX: 50,
                 clientY: 50,
-                target: pieceTarget,
+                target: tableTarget,
                 preventDefault: vi.fn(),
             } as unknown as WheelEvent;
 
@@ -445,7 +530,7 @@ describe('setupInteraction', () => {
 
         it('a pinch start clears focus', () => {
             const container = createFakeContainer();
-            const renderer = createFakeRenderer();
+            const renderer = createFakeRenderer(() => 3);
             const rotationFocus = new RotationFocus();
             rotationFocus.setFocus(7);
             const state = makeState([makeGroup(7, [3])]);
@@ -461,9 +546,9 @@ describe('setupInteraction', () => {
                 rotationFocus,
             });
 
-            const pieceTarget = { _pieceId: 3 };
-            container.fire('pointerdown', fakePointerEvent({ target: pieceTarget as unknown as EventTarget, pointerId: 1, pointerType: 'touch', clientX: 0, clientY: 0 }));
-            container.fire('pointerdown', fakePointerEvent({ target: pieceTarget as unknown as EventTarget, pointerId: 2, pointerType: 'touch', clientX: 100, clientY: 0 }));
+            const tableTarget = container as unknown as EventTarget;
+            container.fire('pointerdown', fakePointerEvent({ target: tableTarget, pointerId: 1, pointerType: 'touch', clientX: 0, clientY: 0 }));
+            container.fire('pointerdown', fakePointerEvent({ target: tableTarget, pointerId: 2, pointerType: 'touch', clientX: 100, clientY: 0 }));
 
             expect(rotationFocus.focusedGroupId).toBeNull();
         });
@@ -473,7 +558,7 @@ describe('setupInteraction', () => {
         it('does NOT apply when dragging a multi-selection', () => {
             vi.mocked(loadOffsetDragPreference).mockReturnValue(true);
             const container = createFakeContainer();
-            const renderer = createFakeRenderer();
+            const renderer = createFakeRenderer(() => 3);
             const selectionManager = new SelectionManager();
             selectionManager.toolActive = true;
 
@@ -495,8 +580,8 @@ describe('setupInteraction', () => {
                 selectionManager,
             });
 
-            const pieceTarget = { _pieceId: 3 };
-            container.fire('pointerdown', fakePointerEvent({ target: pieceTarget as unknown as EventTarget, pointerId: 1, clientX: 100, clientY: 100 }));
+            const tableTarget = container as unknown as EventTarget;
+            container.fire('pointerdown', fakePointerEvent({ target: tableTarget, pointerId: 1, clientX: 100, clientY: 100 }));
             container.fire('pointermove', fakePointerEvent({ pointerId: 1, clientX: 120, clientY: 100 })); // promote
 
             expect(group7.position.y).toBe(0);
@@ -505,7 +590,7 @@ describe('setupInteraction', () => {
         it('does NOT apply when dragging a multi-piece group within a multi-selection', () => {
             vi.mocked(loadOffsetDragPreference).mockReturnValue(true);
             const container = createFakeContainer();
-            const renderer = createFakeRenderer();
+            const renderer = createFakeRenderer(() => 3);
             const selectionManager = new SelectionManager();
             selectionManager.toolActive = true;
 
@@ -527,8 +612,8 @@ describe('setupInteraction', () => {
                 selectionManager,
             });
 
-            const pieceTarget = { _pieceId: 3 };
-            container.fire('pointerdown', fakePointerEvent({ target: pieceTarget as unknown as EventTarget, pointerId: 1, clientX: 100, clientY: 100 }));
+            const tableTarget = container as unknown as EventTarget;
+            container.fire('pointerdown', fakePointerEvent({ target: tableTarget, pointerId: 1, clientX: 100, clientY: 100 }));
             container.fire('pointermove', fakePointerEvent({ pointerId: 1, clientX: 120, clientY: 100 })); // promote
 
             expect(group7.position.y).toBe(0);
@@ -537,7 +622,7 @@ describe('setupInteraction', () => {
         it('still applies when the multi-select tool has only one group selected', () => {
             vi.mocked(loadOffsetDragPreference).mockReturnValue(true);
             const container = createFakeContainer();
-            const renderer = createFakeRenderer();
+            const renderer = createFakeRenderer(() => 3);
             const selectionManager = new SelectionManager();
             selectionManager.toolActive = true;
 
@@ -556,8 +641,8 @@ describe('setupInteraction', () => {
                 selectionManager,
             });
 
-            const pieceTarget = { _pieceId: 3 };
-            container.fire('pointerdown', fakePointerEvent({ target: pieceTarget as unknown as EventTarget, pointerId: 1, clientX: 100, clientY: 100 }));
+            const tableTarget = container as unknown as EventTarget;
+            container.fire('pointerdown', fakePointerEvent({ target: tableTarget, pointerId: 1, clientX: 100, clientY: 100 }));
             container.fire('pointermove', fakePointerEvent({ pointerId: 1, clientX: 120, clientY: 100 })); // promote
 
             // OFFSET_DRAG_SCREEN_PX = 50, shifted upward (negative Y).
@@ -567,7 +652,7 @@ describe('setupInteraction', () => {
         it('applies when dragging a single multi-piece group', () => {
             vi.mocked(loadOffsetDragPreference).mockReturnValue(true);
             const container = createFakeContainer();
-            const renderer = createFakeRenderer();
+            const renderer = createFakeRenderer(() => 3);
 
             // One group (2 pieces), no multi-select: exactly one group moves, so the offset applies.
             const group7 = makeGroup(7, [3, 4], { x: 0, y: 0 });
@@ -583,8 +668,8 @@ describe('setupInteraction', () => {
                 onViewportChanged: vi.fn(),
             });
 
-            const pieceTarget = { _pieceId: 3 };
-            container.fire('pointerdown', fakePointerEvent({ target: pieceTarget as unknown as EventTarget, pointerId: 1, clientX: 100, clientY: 100 }));
+            const tableTarget = container as unknown as EventTarget;
+            container.fire('pointerdown', fakePointerEvent({ target: tableTarget, pointerId: 1, clientX: 100, clientY: 100 }));
             container.fire('pointermove', fakePointerEvent({ pointerId: 1, clientX: 120, clientY: 100 })); // promote
 
             // OFFSET_DRAG_SCREEN_PX = 50, shifted upward (negative Y).
@@ -626,8 +711,8 @@ describe('snap proximity rotation', () => {
     const toXMidpoint = 320 + (midpointCenterX - (150 + D));
 
     function dragPieceOne(container: FakeContainer, toX: number): void {
-        const pieceTarget = { _pieceId: 1 } as unknown as EventTarget;
-        container.fire('pointerdown', fakePointerEvent({ target: pieceTarget, pointerId: 1, clientX: 300, clientY: 300 }));
+        const tableTarget = container as unknown as EventTarget;
+        container.fire('pointerdown', fakePointerEvent({ target: tableTarget, pointerId: 1, clientX: 300, clientY: 300 }));
         container.fire('pointermove', fakePointerEvent({ pointerId: 1, clientX: 320, clientY: 300 })); // promote
         container.fire('pointermove', fakePointerEvent({ pointerId: 1, clientX: toX, clientY: 300 })); // real move
     }
@@ -638,7 +723,7 @@ describe('snap proximity rotation', () => {
 
         setupInteraction({
             container: container as unknown as HTMLElement,
-            renderer: createFakeRenderer(),
+            renderer: createFakeRenderer(() => 1),
             viewportTransform: new ViewportTransform(),
             getState: () => state,
             onStateChanged: vi.fn(),
@@ -659,7 +744,7 @@ describe('snap proximity rotation', () => {
 
         setupInteraction({
             container: container as unknown as HTMLElement,
-            renderer: createFakeRenderer(),
+            renderer: createFakeRenderer(() => 1),
             viewportTransform: new ViewportTransform(),
             getState: () => state,
             onStateChanged: vi.fn(),
@@ -683,7 +768,7 @@ describe('snap proximity rotation', () => {
 
         setupInteraction({
             container: container as unknown as HTMLElement,
-            renderer: createFakeRenderer(),
+            renderer: createFakeRenderer(() => 1),
             viewportTransform: new ViewportTransform(),
             getState: () => state,
             onStateChanged: vi.fn(),
@@ -805,7 +890,7 @@ describe('setupInteraction — drag render batching', () => {
         const state = makeState([makeGroup(7, [3])]);
         const cleanup = setupInteraction({
             container: container as unknown as HTMLElement,
-            renderer: createFakeRenderer(),
+            renderer: createFakeRenderer(() => 3),
             viewportTransform: new ViewportTransform(),
             getState: () => state,
             onStateChanged,
@@ -813,8 +898,8 @@ describe('setupInteraction — drag render batching', () => {
             onViewportChanged: vi.fn(),
             panViewport: opts.panViewport,
         });
-        const pieceTarget = { _pieceId: 3 } as unknown as EventTarget;
-        container.fire('pointerdown', fakePointerEvent({ target: pieceTarget, pointerId: 1, clientX: 300, clientY: 300 }));
+        const tableTarget = container as unknown as EventTarget;
+        container.fire('pointerdown', fakePointerEvent({ target: tableTarget, pointerId: 1, clientX: 300, clientY: 300 }));
         container.fire('pointermove', fakePointerEvent({ pointerId: 1, clientX: 320, clientY: 300 })); // promote
         runFrame();
         onStateChanged.mockClear();
@@ -893,6 +978,8 @@ describe('setupInteraction — drag render batching', () => {
 });
 
 describe('setupInteraction — viewport layer while the viewport moves', () => {
+    const pressAt300 = (p: { x: number; y: number }) => (p.x === 300 && p.y === 300 ? 3 : null);
+
     let frames: Map<number, FrameRequestCallback>;
     let frameTime: number;
 
@@ -917,7 +1004,7 @@ describe('setupInteraction — viewport layer while the viewport moves', () => {
 
     function setup(opts: { selectionManager?: SelectionManager } = {}) {
         const container = createFakeContainer();
-        const renderer = createFakeRenderer();
+        const renderer = createFakeRenderer(pressAt300);
         const state = makeState([makeGroup(7, [3])]);
         const cleanup = setupInteraction({
             container: container as unknown as HTMLElement,
@@ -934,17 +1021,16 @@ describe('setupInteraction — viewport layer while the viewport moves', () => {
         return { container, renderer, cleanup, moving };
     }
 
-    const bg = (container: FakeContainer) => container as unknown as EventTarget;
-    const piece = { _pieceId: 3 } as unknown as EventTarget;
+    const tableTarget = (container: FakeContainer) => container as unknown as EventTarget;
 
     it('composites the viewport for the length of a background pan', () => {
         const { container, moving } = setup();
 
-        container.fire('pointerdown', fakePointerEvent({ target: bg(container), pointerId: 1, clientX: 100, clientY: 100 }));
-        container.fire('pointermove', fakePointerEvent({ target: bg(container), pointerId: 1, clientX: 130, clientY: 100 }));
+        container.fire('pointerdown', fakePointerEvent({ target: tableTarget(container), pointerId: 1, clientX: 100, clientY: 100 }));
+        container.fire('pointermove', fakePointerEvent({ target: tableTarget(container), pointerId: 1, clientX: 130, clientY: 100 }));
         expect(moving()).toBe(true);
 
-        container.fire('pointerup', fakePointerEvent({ target: bg(container), pointerId: 1, clientX: 130, clientY: 100 }));
+        container.fire('pointerup', fakePointerEvent({ target: tableTarget(container), pointerId: 1, clientX: 130, clientY: 100 }));
         expect(moving()).toBe(false);
     });
 
@@ -953,9 +1039,9 @@ describe('setupInteraction — viewport layer while the viewport moves', () => {
         selectionManager.toggleMarquee();
         const { container, renderer } = setup({ selectionManager });
 
-        container.fire('pointerdown', fakePointerEvent({ target: bg(container), pointerId: 1, clientX: 0, clientY: 0 }));
-        container.fire('pointermove', fakePointerEvent({ target: bg(container), pointerId: 1, clientX: 40, clientY: 40 }));
-        container.fire('pointerup', fakePointerEvent({ target: bg(container), pointerId: 1, clientX: 40, clientY: 40 }));
+        container.fire('pointerdown', fakePointerEvent({ target: tableTarget(container), pointerId: 1, clientX: 0, clientY: 0 }));
+        container.fire('pointermove', fakePointerEvent({ target: tableTarget(container), pointerId: 1, clientX: 40, clientY: 40 }));
+        container.fire('pointerup', fakePointerEvent({ target: tableTarget(container), pointerId: 1, clientX: 40, clientY: 40 }));
 
         expect(renderer.setViewportMoving).not.toHaveBeenCalledWith(true);
     });
@@ -963,17 +1049,17 @@ describe('setupInteraction — viewport layer while the viewport moves', () => {
     it('composites the viewport for the length of a pinch', () => {
         const { container, moving } = setup();
 
-        container.fire('pointerdown', fakePointerEvent({ target: bg(container), pointerId: 1, pointerType: 'touch', clientX: 0, clientY: 0 }));
-        container.fire('pointerdown', fakePointerEvent({ target: bg(container), pointerId: 2, pointerType: 'touch', clientX: 100, clientY: 0 }));
+        container.fire('pointerdown', fakePointerEvent({ target: tableTarget(container), pointerId: 1, pointerType: 'touch', clientX: 0, clientY: 0 }));
+        container.fire('pointerdown', fakePointerEvent({ target: tableTarget(container), pointerId: 2, pointerType: 'touch', clientX: 100, clientY: 0 }));
         expect(moving()).toBe(true);
 
-        container.fire('pointerup', fakePointerEvent({ target: bg(container), pointerId: 2, pointerType: 'touch', clientX: 100, clientY: 0 }));
+        container.fire('pointerup', fakePointerEvent({ target: tableTarget(container), pointerId: 2, pointerType: 'touch', clientX: 100, clientY: 0 }));
         expect(moving()).toBe(false);
     });
 
     it('composites the viewport once auto-pan moves it, until the drop', () => {
         const { container, moving, renderer } = setup();
-        container.fire('pointerdown', fakePointerEvent({ target: piece, pointerId: 1, clientX: 300, clientY: 300 }));
+        container.fire('pointerdown', fakePointerEvent({ target: tableTarget(container), pointerId: 1, clientX: 300, clientY: 300 }));
         container.fire('pointermove', fakePointerEvent({ pointerId: 1, clientX: 320, clientY: 300 }));
         expect(renderer.setViewportMoving).not.toHaveBeenCalledWith(true);
 
@@ -991,23 +1077,23 @@ describe('setupInteraction — viewport layer while the viewport moves', () => {
         vi.spyOn(performance, 'now').mockImplementation(() => now);
         onTestFinished(() => { vi.restoreAllMocks(); });
         const { container, moving } = setup();
-        container.fire('pointerdown', fakePointerEvent({ target: piece, pointerId: 1, pointerType: 'touch', clientX: 300, clientY: 300 }));
+        container.fire('pointerdown', fakePointerEvent({ target: tableTarget(container), pointerId: 1, pointerType: 'touch', clientX: 300, clientY: 300 }));
         container.fire('pointermove', fakePointerEvent({ pointerId: 1, pointerType: 'touch', clientX: 320, clientY: 300 }));
         container.fire('pointermove', fakePointerEvent({ pointerId: 1, pointerType: 'touch', clientX: 5, clientY: 300 }));
         runFrame();
         runFrame();
         now = 1000;
-        container.fire('pointerdown', fakePointerEvent({ target: bg(container), pointerId: 2, pointerType: 'touch', clientX: 200, clientY: 300 }));
+        container.fire('pointerdown', fakePointerEvent({ target: tableTarget(container), pointerId: 2, pointerType: 'touch', clientX: 200, clientY: 300 }));
 
-        container.fire('pointerup', fakePointerEvent({ target: bg(container), pointerId: 2, pointerType: 'touch', clientX: 200, clientY: 300 }));
+        container.fire('pointerup', fakePointerEvent({ target: tableTarget(container), pointerId: 2, pointerType: 'touch', clientX: 200, clientY: 300 }));
 
         expect(moving()).toBe(true);
     });
 
     it('releases the viewport layer on teardown', () => {
         const { container, cleanup, moving } = setup();
-        container.fire('pointerdown', fakePointerEvent({ target: bg(container), pointerId: 1, clientX: 100, clientY: 100 }));
-        container.fire('pointermove', fakePointerEvent({ target: bg(container), pointerId: 1, clientX: 130, clientY: 100 }));
+        container.fire('pointerdown', fakePointerEvent({ target: tableTarget(container), pointerId: 1, clientX: 100, clientY: 100 }));
+        container.fire('pointermove', fakePointerEvent({ target: tableTarget(container), pointerId: 1, clientX: 130, clientY: 100 }));
 
         cleanup();
 

@@ -110,6 +110,7 @@ export {
 export {
     loadOutlineInsidePreference,
     saveOutlineInsidePreference,
+    applyOutlineInside,
 } from './outline-inside.js';
 
 export {

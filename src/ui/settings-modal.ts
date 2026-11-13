@@ -39,6 +39,7 @@ import {
 import {
     loadOutlineInsidePreference,
     saveOutlineInsidePreference,
+    applyOutlineInside,
 } from './outline-inside.js';
 import { buildDebugSection } from './debug-section.js';
 import { track } from '../analytics/index.js';
@@ -261,6 +262,7 @@ function buildOutlineInsideToggle(onOutlineChanged?: () => void): HTMLElement {
         load: loadOutlineInsidePreference,
         save: (on) => {
             saveOutlineInsidePreference(on);
+            applyOutlineInside(on);
             onOutlineChanged?.();
         },
     });

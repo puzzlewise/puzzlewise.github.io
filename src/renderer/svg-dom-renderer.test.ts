@@ -4,7 +4,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach, onTestFinished, type MockInstance } from 'vitest';
 import { SvgDomRenderer, RELAYER_IDLE_MS, RING_NAMES, applyGroupTransform } from './svg-dom-renderer.js';
-import { VIEWPORT_TRANSITION_MS } from './types.js';
+import { SETTLE_GRACE_MS, VIEWPORT_TRANSITION_MS } from './types.js';
 import type { GameState, PieceGroup } from '../model/types.js';
 import { makeGameState, makeRectPiece } from '../test-helpers/fixtures.js';
 import { computePieceBounds } from '../model/derive.js';
@@ -466,14 +466,17 @@ describe('SvgDomRenderer', () => {
                 expect(container.querySelector('[data-group-id="1"]')).toBeNull();
             });
 
-            it('rewrites a group invalidated after an outside write left its model unchanged', () => {
+            it('rewrites a spun group once its animation settles, though its model is unchanged', async () => {
                 renderer.init(container);
                 const state = make2x2State();
                 renderer.renderState(state);
                 const groupEl = container.querySelector('[data-group-id="0"]') as HTMLElement;
 
-                applyGroupTransform(groupEl, { x: 50, y: 50 }, 360, { x: 50, y: 50 });
-                renderer.invalidateGroup(0);
+                vi.useFakeTimers();
+                onTestFinished(() => { vi.useRealTimers(); });
+                const spin = renderer.animateGroupRotation(0, 360, { x: 50, y: 50 });
+                await vi.advanceTimersByTimeAsync(VIEWPORT_TRANSITION_MS + SETTLE_GRACE_MS);
+                await spin;
                 renderer.renderState(state);
 
                 expect(groupEl.style.transformOrigin).toBe('0px 0px');
@@ -804,12 +807,12 @@ describe('SvgDomRenderer', () => {
         });
 
         it('defers a relayer during an animated viewport transition until it ends', () => {
-            renderer.enableViewportTransition();
-            renderer.setViewportTransform(1, 0, 0);
+            void renderer.transitionViewport(1, 0, 0);
+            runFrame();
             vi.advanceTimersByTime(RELAYER_IDLE_MS);
             expect(table.classList.contains('relayer')).toBe(false);
 
-            renderer.disableViewportTransition();
+            table.dispatchEvent(Object.assign(new Event('transitionend'), { propertyName: 'transform' }));
             expect(table.classList.contains('relayer')).toBe(true);
         });
 
@@ -818,40 +821,6 @@ describe('SvgDomRenderer', () => {
             renderer.destroy();
 
             expect(vi.getTimerCount()).toBe(0);
-        });
-    });
-
-    describe('pieceIdFromTarget', () => {
-        it('returns the piece id when target is the SVG element itself', () => {
-            renderer.init(container);
-            renderer.renderState(make2x2State());
-
-            const svg = container.querySelector('svg[data-piece-id="0"]') as SVGSVGElement;
-            expect(renderer.pieceIdFromTarget(svg)).toBe(0);
-        });
-
-        it('returns the piece id when target is a hit-area child of the SVG', () => {
-            renderer.init(container);
-            renderer.renderState(make2x2State());
-
-            const svg = container.querySelector('svg[data-piece-id="1"]') as SVGSVGElement;
-            const hitArea = svg.querySelector('[data-hit-area="true"]') as SVGPathElement;
-            expect(renderer.pieceIdFromTarget(hitArea)).toBe(1);
-        });
-
-        it('returns null for an unrelated DOM node', () => {
-            renderer.init(container);
-            renderer.renderState(make2x2State());
-
-            const unrelated = document.createElement('div');
-            expect(renderer.pieceIdFromTarget(unrelated)).toBeNull();
-        });
-
-        it('returns null for a null target', () => {
-            renderer.init(container);
-            renderer.renderState(make2x2State());
-
-            expect(renderer.pieceIdFromTarget(null)).toBeNull();
         });
     });
 
@@ -887,23 +856,185 @@ describe('SvgDomRenderer', () => {
     });
 
     describe('viewport transition', () => {
-        it('writes a CSS duration derived from VIEWPORT_TRANSITION_MS', () => {
-            // `app/viewport-fit.ts` arms a fallback timer against this constant,
-            // so a mismatched CSS duration silently truncates the completion
-            // zoom. This pins the derivation's shape, not the link itself: at
-            // 800 the expected string equals `'transform 0.8s ease-in-out'`, so
-            // re-hardcoding that still passes; any other duration/unit/easing
-            // fails. The real link is structural — `viewport-fit.ts` imports both.
+        beforeEach(() => {
+            vi.useFakeTimers();
             renderer.init(container);
-            const table = container.querySelector<HTMLElement>('[data-puzzle-table]');
+        });
 
-            renderer.enableViewportTransition();
+        afterEach(() => {
+            vi.useRealTimers();
+        });
 
-            expect(table?.style.transition)
+        function transformEnd(table: HTMLElement): void {
+            table.dispatchEvent(Object.assign(new Event('transitionend'), { propertyName: 'transform' }));
+        }
+
+        it('transitionViewport resolves on table transitionend', async () => {
+            const table = container.querySelector<HTMLElement>('[data-puzzle-table]')!;
+            const settled = vi.fn();
+
+            const promise = renderer.transitionViewport(2, 10, 20).then(settled);
+            expect(table.style.transition)
                 .toBe(`transform ${VIEWPORT_TRANSITION_MS / 1000}s ease-in-out`);
+            await vi.advanceTimersByTimeAsync(0);
+            expect(settled).not.toHaveBeenCalled();
 
-            renderer.disableViewportTransition();
-            expect(table?.style.transition).toBe('');
+            transformEnd(table);
+            await promise;
+
+            expect(table.style.transform).toBe('translate(10px, 20px) scale(2)');
+            expect(table.style.transition).toBe('');
+        });
+
+        it('transitionViewport ignores a transitionend for another property', async () => {
+            const table = container.querySelector<HTMLElement>('[data-puzzle-table]')!;
+            const settled = vi.fn();
+            void renderer.transitionViewport(2, 0, 0).then(settled);
+
+            table.dispatchEvent(Object.assign(new Event('transitionend'), { propertyName: 'opacity' }));
+            await vi.advanceTimersByTimeAsync(0);
+
+            expect(settled).not.toHaveBeenCalled();
+        });
+
+        it('transitionViewport resolves after 1000ms with no transitionend', async () => {
+            const table = container.querySelector<HTMLElement>('[data-puzzle-table]')!;
+            const settled = vi.fn();
+            void renderer.transitionViewport(2, 10, 20).then(settled);
+
+            await vi.advanceTimersByTimeAsync(VIEWPORT_TRANSITION_MS + SETTLE_GRACE_MS - 1);
+            expect(settled).not.toHaveBeenCalled();
+
+            await vi.advanceTimersByTimeAsync(1);
+            expect(settled).toHaveBeenCalledTimes(1);
+            expect(table.style.transform).toBe('translate(10px, 20px) scale(2)');
+            expect(table.style.transition).toBe('');
+        });
+
+        it('transitionViewport removes its transitionend listener once settled', async () => {
+            const table = container.querySelector<HTMLElement>('[data-puzzle-table]')!;
+            const add = vi.spyOn(table, 'addEventListener');
+            const remove = vi.spyOn(table, 'removeEventListener');
+
+            void renderer.transitionViewport(2, 0, 0);
+            await vi.advanceTimersByTimeAsync(VIEWPORT_TRANSITION_MS + SETTLE_GRACE_MS);
+
+            expect(add.mock.calls.length).toBeGreaterThan(0);
+            expect(remove.mock.calls).toEqual(add.mock.calls);
+        });
+
+        it('transitionViewport leaves a later transition alone once its own has settled', async () => {
+            const table = container.querySelector<HTMLElement>('[data-puzzle-table]')!;
+            void renderer.transitionViewport(2, 0, 0);
+            transformEnd(table);
+            await vi.advanceTimersByTimeAsync(100);
+
+            const second = vi.fn();
+            void renderer.transitionViewport(3, 0, 0).then(second);
+            await vi.advanceTimersByTimeAsync(VIEWPORT_TRANSITION_MS + SETTLE_GRACE_MS - 100);
+
+            expect(second).not.toHaveBeenCalled();
+            expect(table.style.transition)
+                .toBe(`transform ${VIEWPORT_TRANSITION_MS / 1000}s ease-in-out`);
+        });
+
+        it('transitionViewport resolves after the nominal duration when there is no table', async () => {
+            renderer.destroy();
+            const settled = vi.fn();
+            void renderer.transitionViewport(2, 0, 0).then(settled);
+
+            await vi.advanceTimersByTimeAsync(VIEWPORT_TRANSITION_MS);
+
+            expect(settled).toHaveBeenCalledTimes(1);
+        });
+
+        describe('animateGroupRotation', () => {
+            it('pins the pivot without moving the group, then spins to the target', async () => {
+                const state = make2x2State();
+                state.groups[0].rotation = 90;
+                renderer.renderState(state);
+                const groupEl = container.querySelector<HTMLElement>('[data-group-id="0"]')!;
+
+                const settled = vi.fn();
+                void renderer.animateGroupRotation(0, 360, { x: 50, y: 0 }).then(settled);
+
+                expect(groupEl.style.transformOrigin).toBe('50px 0px');
+                expect(groupEl.style.transform).toBe('translate(0px, 100px) rotate(360deg)');
+                expect(groupEl.style.transition)
+                    .toBe(`transform ${VIEWPORT_TRANSITION_MS / 1000}s ease-in-out`);
+                expect(settled).not.toHaveBeenCalled();
+
+                groupEl.dispatchEvent(Object.assign(new Event('transitionend'), { propertyName: 'transform' }));
+                await vi.advanceTimersByTimeAsync(0);
+
+                expect(settled).toHaveBeenCalledTimes(1);
+                expect(groupEl.style.transition).toBe('');
+            });
+
+            it('forces a reflow between the re-anchor frame and the spin frame', () => {
+                renderer.renderState(make2x2State());
+                const groupEl = container.querySelector<HTMLElement>('[data-group-id="0"]')!;
+                const transitionsAtReflow: string[] = [];
+                vi.spyOn(groupEl, 'getBoundingClientRect').mockImplementation(() => {
+                    transitionsAtReflow.push(groupEl.style.transition);
+                    return new DOMRect();
+                });
+
+                void renderer.animateGroupRotation(0, 360, { x: 50, y: 50 });
+
+                expect(transitionsAtReflow).toEqual(['none']);
+            });
+
+            it('resolves after 1000ms with no transitionend', async () => {
+                renderer.renderState(make2x2State());
+                const settled = vi.fn();
+                void renderer.animateGroupRotation(0, 360, { x: 50, y: 50 }).then(settled);
+
+                await vi.advanceTimersByTimeAsync(VIEWPORT_TRANSITION_MS + SETTLE_GRACE_MS);
+
+                expect(settled).toHaveBeenCalledTimes(1);
+            });
+
+            function groupTransformEnd(groupEl: HTMLElement): void {
+                groupEl.dispatchEvent(Object.assign(new Event('transitionend'), { propertyName: 'transform' }));
+            }
+
+            it('leaves a later spin alone once its own has settled', async () => {
+                const state = make2x2State();
+                renderer.renderState(state);
+                const groupEl = container.querySelector<HTMLElement>('[data-group-id="0"]')!;
+                void renderer.animateGroupRotation(0, 360, { x: 50, y: 50 });
+                groupTransformEnd(groupEl);
+                await vi.advanceTimersByTimeAsync(100);
+                renderer.renderState(state);
+
+                const second = vi.fn();
+                void renderer.animateGroupRotation(0, 360, { x: 50, y: 50 }).then(second);
+                await vi.advanceTimersByTimeAsync(VIEWPORT_TRANSITION_MS + SETTLE_GRACE_MS - 100);
+
+                expect(second).not.toHaveBeenCalled();
+                expect(groupEl.style.transition)
+                    .toBe(`transform ${VIEWPORT_TRANSITION_MS / 1000}s ease-in-out`);
+            });
+
+            it('ignores a transitionend that arrives after its spin has settled', async () => {
+                const state = make2x2State();
+                renderer.renderState(state);
+                const groupEl = container.querySelector<HTMLElement>('[data-group-id="0"]')!;
+                void renderer.animateGroupRotation(0, 360, { x: 50, y: 50 });
+                groupTransformEnd(groupEl);
+                await vi.advanceTimersByTimeAsync(0);
+                renderer.renderState(state);
+
+                groupEl.style.transition = 'transform 1s';
+                groupTransformEnd(groupEl);
+
+                expect(groupEl.style.transition).toBe('transform 1s');
+            });
+
+            it('resolves at once for a group that is not rendered', async () => {
+                await expect(renderer.animateGroupRotation(99, 360, { x: 0, y: 0 })).resolves.toBeUndefined();
+            });
         });
     });
 
@@ -1465,12 +1596,15 @@ describe('SvgDomRenderer', () => {
                 renderer.init(container);
                 const table = container.querySelector<HTMLElement>('[data-puzzle-table]')!;
 
-                renderer.enableViewportTransition();
-                renderer.setViewportTransform(0.5, 0, 0);
+                vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+                    cb(0);
+                    return 0;
+                });
+                void renderer.transitionViewport(0.5, 0, 0);
                 vi.advanceTimersByTime(RELAYER_IDLE_MS);
                 expect(table.style.getPropertyValue('--outline-zoom-comp')).toBe('');
 
-                renderer.disableViewportTransition();
+                table.dispatchEvent(Object.assign(new Event('transitionend'), { propertyName: 'transform' }));
                 expect(table.style.getPropertyValue('--outline-zoom-comp')).toBe('2');
             });
         });
