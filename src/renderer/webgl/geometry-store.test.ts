@@ -5,7 +5,7 @@ import { makeRectPiece } from '../../test-helpers/fixtures.js';
 import { GeometryStore } from './geometry-store.js';
 import { buildPieceFill, buildPieceStrokes } from './piece-mesh.js';
 import { KIND_FILL, KIND_FRINGE, KIND_STROKE, MAIN_ATTRIBUTES, MAIN_VERTEX_FLOATS } from './shaders.js';
-import type { StrokeMesh } from './stroke-mesh.js';
+import { buildStrokeMesh, type StrokeMesh } from './stroke-mesh.js';
 
 function vertexCount(store: GeometryStore): number {
     return store.vertices().length / MAIN_VERTEX_FLOATS;
@@ -33,6 +33,8 @@ const STROKE: StrokeMesh = {
     normals: new Float32Array([0, -1, 0, 1, 0, -1, 0, 1, 1, 0]),
     sides: new Float32Array([1, -1, 1, -1, 0]),
     indices: new Uint32Array([0, 1, 2, 1, 3, 2, 4, 1, 3]),
+    startCap: { offset: 0, count: 0 },
+    endCap: { offset: 0, count: 0 },
 };
 
 function twoPieces() {
@@ -163,6 +165,23 @@ describe('GeometryStore', () => {
         expect(new Set(hubAt(endCap).map(String))).toEqual(new Set(['100,0']));
     });
 
+    test('a near-duplicate final point still yields an end cap', () => {
+        const polyline = [{ x: 10, y: 0 }, { x: 0, y: 0 }, { x: 0, y: 1e-10 }];
+        const store = new GeometryStore([makeRectPiece({ id: 0 })]);
+        store.addStrokes(
+            { pieceId: 0, edgeOutlines: [{ edgeId: 0, polyline, interiorSide: 1, loop: 0 }] },
+            new Map([[0, buildStrokeMesh(polyline, false, 1)]]),
+        );
+
+        const { startCap, endCap } = store.strokeParts(0)!;
+        const hubs = (cap: Uint32Array) => new Set([...cap]
+            .map((i) => vertex(store, i))
+            .filter((v) => v.side[0] === 0)
+            .map((v) => String(v.position)));
+        expect(hubs(startCap)).toEqual(new Set(['10,0']));
+        expect(hubs(endCap)).toEqual(new Set(['0,0']));
+    });
+
     test('corners link each edge to its loop neighbors and tell convex from reflex', () => {
         // An L: the corner at (50, 50) is reflex, every other corner convex.
         const piece = polygonPiece([
@@ -178,13 +197,27 @@ describe('GeometryStore', () => {
         expect(store.cornersOf(3)).toEqual({ prev: 2, next: 4, startConvex: false, endConvex: true });
         expect(store.cornersOf(5)).toEqual({ prev: 4, next: 0, startConvex: true, endConvex: true });
     });
+
+    test('corners wrap within each loop of a piece with a hole', () => {
+        const piece = polygonPiece(
+            [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 100 }, { x: 0, y: 100 }],
+            [{ x: 25, y: 25 }, { x: 25, y: 75 }, { x: 75, y: 75 }, { x: 75, y: 25 }],
+        );
+        const mesh = buildPieceFill(piece, 0.05);
+        const store = new GeometryStore([piece]);
+        store.addStrokes(mesh, buildPieceStrokes(mesh));
+
+        expect(store.cornersOf(3)).toEqual({ prev: 2, next: 0, startConvex: true, endConvex: true });
+        expect(store.cornersOf(4)).toEqual({ prev: 7, next: 5, startConvex: false, endConvex: false });
+    });
 });
 
-function polygonPiece(points: Point[]): Piece {
-    const edges: Edge[] = points.map((start, i) => {
+function polygonPiece(...loops: Point[][]): Piece {
+    const edges: Edge[] = loops.flatMap((points, l) => points.map((start, i) => {
         const end = points[(i + 1) % points.length];
-        return { id: i, mateEdgeId: -1, matePieceId: -1, path: `L ${end.x} ${end.y}`, start, end };
-    });
+        const id = loops.slice(0, l).reduce((n, loop) => n + loop.length, 0) + i;
+        return { id, mateEdgeId: -1, matePieceId: -1, path: `L ${end.x} ${end.y}`, start, end };
+    }));
     return {
         id: 0,
         edges,
