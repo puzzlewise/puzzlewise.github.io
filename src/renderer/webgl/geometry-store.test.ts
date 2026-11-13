@@ -48,7 +48,7 @@ function twoPieces() {
 describe('GeometryStore', () => {
     test('fill vertices carry local position, image position, slot and the fill kind', () => {
         const { pieces, meshes } = twoPieces();
-        const store = new GeometryStore(pieces);
+        const store = new GeometryStore(pieces, (id) => id);
         store.addFill(meshes[1]);
 
         const mesh = meshes[1];
@@ -67,9 +67,30 @@ describe('GeometryStore', () => {
         }
     });
 
+    test('vertices take their slot from the lookup, not from the piece order', () => {
+        const { pieces, meshes } = twoPieces();
+        const store = new GeometryStore(pieces, (id) => (id === 1 ? 0 : 1));
+        store.addFill(meshes[1]);
+        const fillCount = vertexCount(store);
+        store.addStrokes({ pieceId: 1, edgeOutlines: [] }, new Map([[5, STROKE]]));
+
+        expect(fillCount).toBeGreaterThan(0);
+        expect(vertexCount(store)).toBeGreaterThan(fillCount);
+        for (let i = 0; i < vertexCount(store); i++) expect(vertex(store, i).slot).toEqual([0]);
+    });
+
+    test('a piece the lookup has no slot for gets no vertices', () => {
+        const { pieces, meshes } = twoPieces();
+        const store = new GeometryStore(pieces, (id) => (id === 0 ? 0 : undefined));
+        store.addFill(meshes[1]);
+
+        expect(vertexCount(store)).toBe(0);
+        expect(store.fillIndices(1)).toBeUndefined();
+    });
+
     test('fill indices are offset to the piece\'s first vertex', () => {
         const { pieces, meshes } = twoPieces();
-        const store = new GeometryStore(pieces);
+        const store = new GeometryStore(pieces, (id) => id);
         store.addFill(meshes[0]);
         store.addFill(meshes[1]);
 
@@ -80,7 +101,7 @@ describe('GeometryStore', () => {
 
     test('stroke vertices carry centers, normals and sides with the stroke kind', () => {
         const { pieces, meshes } = twoPieces();
-        const store = new GeometryStore(pieces);
+        const store = new GeometryStore(pieces, (id) => id);
         store.addFill(meshes[0]);
         const base = vertexCount(store);
         store.addStrokes({ pieceId: 1, edgeOutlines: [] }, new Map([[5, STROKE]]));
@@ -99,7 +120,7 @@ describe('GeometryStore', () => {
 
     test('fringe keeps only the triangles that reach outside the piece, with the fringe kind', () => {
         const { pieces } = twoPieces();
-        const store = new GeometryStore(pieces);
+        const store = new GeometryStore(pieces, (id) => id);
         store.addStrokes({ pieceId: 0, edgeOutlines: [] }, new Map([[2, STROKE]]));
 
         const fringe = Array.from(store.fringeIndices(2)!);
@@ -118,7 +139,7 @@ describe('GeometryStore', () => {
 
     test('an edge without a stroke mesh has no stroke or fringe indices', () => {
         const { pieces } = twoPieces();
-        const store = new GeometryStore(pieces);
+        const store = new GeometryStore(pieces, (id) => id);
         store.addStrokes({ pieceId: 0, edgeOutlines: [] }, new Map([[2, STROKE]]));
 
         expect(store.strokeParts(3)).toBeUndefined();
@@ -127,7 +148,7 @@ describe('GeometryStore', () => {
 
     test('the vertex data is trimmed to its used length once every piece has strokes', () => {
         const { pieces, meshes } = twoPieces();
-        const store = new GeometryStore(pieces);
+        const store = new GeometryStore(pieces, (id) => id);
         for (const mesh of meshes) store.addFill(mesh);
         store.addStrokes(meshes[0], buildPieceStrokes(meshes[0]));
         expect(store.vertices().buffer.byteLength).toBeGreaterThan(store.vertices().byteLength);
@@ -139,7 +160,7 @@ describe('GeometryStore', () => {
 
     test('edgesOf lists a piece\'s edge ids', () => {
         const { pieces } = twoPieces();
-        const store = new GeometryStore(pieces);
+        const store = new GeometryStore(pieces, (id) => id);
 
         expect(store.edgesOf(1)).toEqual([4, 5, 6, 7]);
         expect(store.edgesOf(9)).toEqual([]);
@@ -149,7 +170,7 @@ describe('GeometryStore', () => {
         const piece = makeRectPiece({ id: 0 });
         const mesh = buildPieceFill(piece, 0.05);
         const strokes = buildPieceStrokes(mesh);
-        const store = new GeometryStore([piece]);
+        const store = new GeometryStore([piece], (id) => id);
         store.addStrokes(mesh, strokes);
 
         const { band, startCap, endCap } = store.strokeParts(0)!;
@@ -167,7 +188,7 @@ describe('GeometryStore', () => {
 
     test('a near-duplicate final point still yields an end cap', () => {
         const polyline = [{ x: 10, y: 0 }, { x: 0, y: 0 }, { x: 0, y: 1e-10 }];
-        const store = new GeometryStore([makeRectPiece({ id: 0 })]);
+        const store = new GeometryStore([makeRectPiece({ id: 0 })], (id) => id);
         store.addStrokes(
             { pieceId: 0, edgeOutlines: [{ edgeId: 0, polyline, interiorSide: 1, loop: 0 }] },
             new Map([[0, buildStrokeMesh(polyline, false, 1)]]),
@@ -189,7 +210,7 @@ describe('GeometryStore', () => {
             { x: 50, y: 50 }, { x: 50, y: 100 }, { x: 0, y: 100 },
         ]);
         const mesh = buildPieceFill(piece, 0.05);
-        const store = new GeometryStore([piece]);
+        const store = new GeometryStore([piece], (id) => id);
         store.addStrokes(mesh, buildPieceStrokes(mesh));
 
         expect(store.cornersOf(0)).toEqual({ prev: 5, next: 1, startConvex: true, endConvex: true });
@@ -204,7 +225,7 @@ describe('GeometryStore', () => {
             [{ x: 25, y: 25 }, { x: 25, y: 75 }, { x: 75, y: 75 }, { x: 75, y: 25 }],
         );
         const mesh = buildPieceFill(piece, 0.05);
-        const store = new GeometryStore([piece]);
+        const store = new GeometryStore([piece], (id) => id);
         store.addStrokes(mesh, buildPieceStrokes(mesh));
 
         expect(store.cornersOf(3)).toEqual({ prev: 2, next: 0, startConvex: true, endConvex: true });

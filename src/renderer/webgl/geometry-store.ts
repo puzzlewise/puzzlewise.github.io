@@ -37,14 +37,16 @@ export class GeometryStore {
     private readonly corners = new Map<number, EdgeCorners>();
     private readonly stroked = new Set<number>();
 
-    constructor(pieces: readonly Piece[]) {
-        pieces.forEach((piece, slot) => {
+    constructor(pieces: readonly Piece[], slotOf: (pieceId: number) => number | undefined) {
+        for (const piece of pieces) {
+            const slot = slotOf(piece.id);
+            if (slot === undefined) continue;
             this.pieces.set(piece.id, {
                 slot,
                 imageOffset: piece.imageOffset,
                 edgeIds: piece.edges.map((edge) => edge.id),
             });
-        });
+        }
     }
 
     vertices(): Float32Array {
