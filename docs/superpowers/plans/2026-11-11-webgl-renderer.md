@@ -904,6 +904,16 @@ Open the Milestone 5 PR.
     filter rules are gone nothing reads them, and the Shadow look would
     otherwise be defined twice: once as a dead `drop-shadow(...)` string, and
     once live in `halo-recipe.ts`.
+  - `src/app/start-renderer.ts`, the renderer's `ContextLossMonitor` and
+    `src/analytics/umami.ts` (+ tests): before WebGL becomes the default, make
+    the 5 s restore cut-off (`CONTEXT_RESTORE_TIMEOUT_MS`) judgeable from data.
+    Send `renderer-context-restored { latencyMs }` on an in-time restore, and
+    `renderer-context-restored { latencyMs, late: true }` once for a restore
+    that arrives after the give-up (still ignored for drawing). Without these,
+    tabs closed inside the window look like recoveries, and a message shown for
+    a context the browser was about to return goes unnoticed. While WebGL is
+    behind the dev flag almost nobody would send these, so they wait for the
+    switch.
 
 - [ ] **Step 1:** Make the edits.
 - [ ] **Step 2:** `fnm exec npm test && fnm exec npm run lint && fnm exec npm run build`.
