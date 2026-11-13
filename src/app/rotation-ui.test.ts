@@ -135,6 +135,7 @@ describe('createRotationUi', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
+        vi.useFakeTimers({ toFake: ['requestAnimationFrame', 'cancelAnimationFrame'] });
         snapStart = vi.spyOn(SnapProximityPositionController.prototype, 'start');
         snapStop = vi.spyOn(SnapProximityPositionController.prototype, 'stop');
         container = document.createElement('div');
@@ -149,6 +150,7 @@ describe('createRotationUi', () => {
     });
 
     afterEach(() => {
+        vi.useRealTimers();
         snapStart.mockRestore();
         snapStop.mockRestore();
         container.remove();
@@ -309,11 +311,39 @@ describe('createRotationUi', () => {
             renderer.setGroupSelected.mockClear();
 
             handleOptions().onRotate(9, 12);
+            vi.advanceTimersToNextFrame();
 
             expect(state!.groupsById.get(9)!.rotation).toBe(12);
             expect(renderer.renderState).toHaveBeenCalledWith(state);
             expect(renderer.setGroupSelected).toHaveBeenCalledWith(9, true);
             expect(save).not.toHaveBeenCalled();
+        });
+
+        it('renders several handle moves in one frame once, on that frame', () => {
+            make();
+
+            handleOptions().onRotate(9, 5);
+            handleOptions().onRotate(9, 5);
+            handleOptions().onRotate(9, 5);
+            expect(renderer.renderState).not.toHaveBeenCalled();
+            vi.advanceTimersToNextFrame();
+
+            expect(renderer.renderState).toHaveBeenCalledTimes(1);
+            expect(state!.groupsById.get(9)!.rotation).toBe(15);
+        });
+
+        it.each([
+            ['commits', () => handleOptions().onCommit(9)],
+            ['is canceled', () => handleOptions().onRotateEnd(9)],
+        ])('renders a pending move at once when the drag %s, and not again on the next frame', (_, end) => {
+            make();
+            handleOptions().onRotate(9, 12);
+
+            end();
+            expect(renderer.renderState).toHaveBeenCalledTimes(1);
+            vi.advanceTimersToNextFrame();
+
+            expect(renderer.renderState).toHaveBeenCalledTimes(1);
         });
 
         it('does not open a snap-proximity gesture when no mate is in range', () => {
