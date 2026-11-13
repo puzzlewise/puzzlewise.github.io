@@ -2,7 +2,7 @@ import type { Piece, Point } from '../../model/types.js';
 import { CHAIN_EPSILON } from '../../model/build-shape.js';
 import type { EdgeOutline, PieceMesh } from './piece-mesh.js';
 import { KIND_FILL, KIND_FRINGE, KIND_STROKE, MAIN_ATTRIBUTES, MAIN_VERTEX_FLOATS } from './shaders.js';
-import type { StrokeMesh } from './stroke-mesh.js';
+import type { IndexRange, StrokeMesh } from './stroke-mesh.js';
 
 const INITIAL_VERTICES = 4096;
 const A = MAIN_ATTRIBUTES;
@@ -85,11 +85,10 @@ export class GeometryStore {
     addStrokes(mesh: Pick<PieceMesh, 'pieceId' | 'edgeOutlines'>, strokes: ReadonlyMap<number, StrokeMesh>): void {
         const info = this.pieces.get(mesh.pieceId);
         if (!info) return;
-        const polylines = new Map(mesh.edgeOutlines.map((outline) => [outline.edgeId, outline.polyline]));
         for (const [edgeId, stroke] of strokes) {
             const base = this.reserve(stroke.sides.length);
             for (let i = 0; i < stroke.sides.length; i++) this.writeStrokeVertex(base + i, info, stroke, i, KIND_STROKE);
-            this.parts.set(edgeId, splitCaps(stroke, offsetIndices(stroke.indices, base), polylines.get(edgeId)));
+            this.parts.set(edgeId, splitCaps(stroke, offsetIndices(stroke.indices, base)));
             this.fringes.set(edgeId, this.addFringe(info, stroke));
         }
         for (const [edgeId, corners] of findCorners(mesh.edgeOutlines)) this.corners.set(edgeId, corners);
@@ -166,24 +165,15 @@ function offsetIndices(indices: ArrayLike<number>, base: number): Uint32Array {
     return out;
 }
 
-/** Cap triangles are the fans whose hub (side 0) sits on the polyline's first or last point. */
-function splitCaps(stroke: StrokeMesh, indices: Uint32Array, polyline: readonly Point[] | undefined): StrokeParts {
-    if (!polyline || polyline.length < 2) return { band: indices, startCap: new Uint32Array(0), endCap: new Uint32Array(0) };
-    const first = polyline[0];
-    const last = polyline[polyline.length - 1];
-    const hubAt = (v: number, p: Point): boolean => stroke.sides[v] === 0
-        && stroke.centers[2 * v] === Math.fround(p.x) && stroke.centers[2 * v + 1] === Math.fround(p.y);
-    const band: number[] = [];
-    const startCap: number[] = [];
-    const endCap: number[] = [];
-    for (let t = 0; t < stroke.indices.length; t += 3) {
-        const triangle = [stroke.indices[t], stroke.indices[t + 1], stroke.indices[t + 2]];
-        const target = triangle.some((v) => hubAt(v, first)) ? startCap
-            : triangle.some((v) => hubAt(v, last)) ? endCap
-                : band;
-        target.push(indices[t], indices[t + 1], indices[t + 2]);
-    }
-    return { band: new Uint32Array(band), startCap: new Uint32Array(startCap), endCap: new Uint32Array(endCap) };
+function splitCaps(stroke: StrokeMesh, indices: Uint32Array): StrokeParts {
+    const { startCap, endCap } = stroke;
+    const within = (i: number, range: IndexRange): boolean => i >= range.offset && i < range.offset + range.count;
+    const slice = (range: IndexRange): Uint32Array => indices.slice(range.offset, range.offset + range.count);
+    return {
+        band: indices.filter((_, i) => !within(i, startCap) && !within(i, endCap)),
+        startCap: slice(startCap),
+        endCap: slice(endCap),
+    };
 }
 
 function direction(from: Point, to: Point): Point {
@@ -218,9 +208,7 @@ function findCorners(outlines: readonly EdgeOutline[]): Map<number, EdgeCorners>
     let loopStart = 0;
     outlines.forEach((outline, i) => {
         const next = outlines[i + 1];
-        const continues = next !== undefined && next.polyline.length > 0 && outline.polyline.length > 0
-            && samePoint(outline.polyline[outline.polyline.length - 1], next.polyline[0]);
-        if (continues) {
+        if (next?.loop === outline.loop) {
             link(outline, next);
         } else {
             link(outline, outlines[loopStart]);

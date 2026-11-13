@@ -199,6 +199,14 @@ describe('buildPieceFill and buildPieceStrokes', () => {
         expect(fineLength).toBeGreaterThan(coarseLength);
     });
 
+    test('edge outlines carry the index of the loop they belong to', () => {
+        const mesh = buildPieceFill(pieceFromLoops([square(0, 0, 100, false), square(25, 25, 50, true)]), TOL);
+
+        expect(mesh.edgeOutlines.map(o => [o.edgeId, o.loop])).toEqual([
+            [0, 0], [1, 0], [2, 0], [3, 0], [4, 1], [5, 1], [6, 1], [7, 1],
+        ]);
+    });
+
     test('buildPieceStrokes gives one stroke per edge with interiorSide pointing into the piece', () => {
         const venn = sealPieceGeometry(generateComposablePuzzle(1, 1, { width: 1080, height: 720 }, 1, {
             baseCutGenerator: 'venn',
