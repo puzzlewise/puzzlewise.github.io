@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'vitest';
 import type { Rgba } from '../index.js';
-import { gaussianKernel, haloMargin, haloSteps, haloTexelsPerUnit } from './halo-recipe.js';
+import { OUTLINE_PRESETS } from './halo-atlas-plan.js';
+import { gaussianKernel, HALO_STATES, haloMargin, haloSteps, haloTexelsPerUnit } from './halo-recipe.js';
+import { MAX_BLUR_TAPS } from './shaders.js';
 
 const GLOW: Rgba = [1, 0.8, 0.2, 1];
 const BLACK: Rgba = [0, 0, 0, 1];
@@ -64,6 +66,17 @@ describe('gaussianKernel', () => {
         expect(k.reduce((a, b) => a + b, 0)).toBeCloseTo(1, 5);
         for (let i = 0; i < k.length; i++) expect(k[i]).toBe(k[k.length - 1 - i]);
         expect(k[5]).toBeGreaterThan(k[4]!);
+    });
+
+    test('every step of every preset and state fits in the blur shader\'s taps', () => {
+        for (const preset of OUTLINE_PRESETS) {
+            for (const state of HALO_STATES) {
+                const steps = haloSteps(state, preset, GLOW);
+                for (const step of steps) {
+                    expect(gaussianKernel(step.sigma, haloTexelsPerUnit(steps)).length).toBeLessThanOrEqual(MAX_BLUR_TAPS);
+                }
+            }
+        }
     });
 });
 
