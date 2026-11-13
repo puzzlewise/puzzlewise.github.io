@@ -1,5 +1,5 @@
 import type { RendererAppearance } from '../appearance.js';
-import { drawPasses } from './draw-list.js';
+import { drawPasses, OUTLINE_HALF_WIDTH } from './draw-list.js';
 import { HALO_STATES, haloMargin, haloSteps, haloTexelsPerUnit, type HaloStep } from './halo-recipe.js';
 
 export const ATLAS_LAYER_SIZE = 2048;
@@ -11,8 +11,6 @@ const ALIGN = 1 << (ATLAS_LEVELS - 1);
 export const ATLAS_LAYER_BYTES = (ATLAS_LAYER_SIZE * ATLAS_LAYER_SIZE * 4 * 4) / 3;
 /** The halo image (RGBA8) plus the silhouette and blur pass targets (R8 each). */
 const SCRATCH_BYTES_PER_TEXEL = 4 + 1 + 1;
-/** World units the outline stroke reaches past the piece edge. */
-export const OUTLINE_HALF_WIDTH = 1.5;
 /** 64 MiB with mips; puzzles needing more play without halos. */
 const MAX_LAYERS = 3;
 

@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { makeGameState, makeRectPiece } from '../../test-helpers/fixtures.js';
 import type { GameState, Piece, PieceGroup } from '../../model/types.js';
 import type { RendererAppearance } from '../appearance.js';
-import { assembleIndices, drawPasses, type DrawPasses } from './draw-list.js';
+import { assembleIndices, drawPasses, type DrawPasses, silhouetteIndices } from './draw-list.js';
 import { GeometryStore } from './geometry-store.js';
 import { buildPieceFill, buildPieceStrokes } from './piece-mesh.js';
 import { Scene } from './scene.js';
@@ -145,5 +145,31 @@ describe('assembleIndices', () => {
 
         expect(indices.buffer).toBe(scratch.buffer);
         expect(Array.from(indices)).toEqual(Array.from(assembleIndices(scene, store, OUTLINE)));
+    });
+
+    test('each group\'s halos go first, under its strokes and fills, in z-order', () => {
+        const { scene, store } = setup([group(10, [[0, 0]]), group(11, [[1, 200]])]);
+        const halo = (n: number) => Uint32Array.of(n, n, n);
+        const halos = (groupId: number) => (groupId === 10 ? [halo(900), halo(901)] : [halo(911)]);
+        const fillsOnly = { strokesUnder: false, fringe: false, strokesOver: false };
+
+        expect(Array.from(assembleIndices(scene, store, fillsOnly, undefined, halos))).toEqual(concat(
+            halo(900), halo(901), store.fillIndices(0), halo(911), store.fillIndices(1),
+        ));
+    });
+});
+
+describe('silhouetteIndices', () => {
+    test('fills plus whole outer strokes with the stroke, fills plus outer fringes without', () => {
+        const { scene, store } = setup([group(10, [[0, 0], [1, 100]])]);
+        const s = (id: number) => wholeStroke(store, id);
+        const f = (id: number) => store.fringeIndices(id);
+
+        expect(Array.from(silhouetteIndices(scene, store, 10, true))).toEqual(concat(
+            store.fillIndices(0), store.fillIndices(1), s(0), s(2), s(3), s(4), s(5), s(6),
+        ));
+        expect(Array.from(silhouetteIndices(scene, store, 10, false))).toEqual(concat(
+            store.fillIndices(0), store.fillIndices(1), f(0), f(2), f(3), f(4), f(5), f(6),
+        ));
     });
 });

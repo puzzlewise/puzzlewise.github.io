@@ -226,6 +226,16 @@ describe('Scene', () => {
         expect(slot(t, 0).slice(0, 4)).toEqual([1, 0, 100, 100]);
     });
 
+    test('groupOfPiece follows a piece into the group that absorbs it', () => {
+        const state = pairState();
+        const scene = makeScene(state);
+        expect(scene.groupOfPiece(1)).toBe(11);
+        mergePair(state);
+        scene.sync(state);
+        expect(scene.groupOfPiece(1)).toBe(10);
+        expect(scene.groupOfPiece(42)).toBeUndefined();
+    });
+
     test('groupLayout lists a group\'s pieces and slotOfPiece maps ids to state.pieces indexes', () => {
         const scene = makeScene(pairState());
         expect(scene.groupLayout(11).map((p) => p.id)).toEqual([1]);

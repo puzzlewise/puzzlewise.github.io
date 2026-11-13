@@ -2,8 +2,25 @@ import type { GameState, Point, Size } from '../../model/types.js';
 import type { RendererAppearance } from '../appearance.js';
 import type { Renderer } from '../types.js';
 import { TransitionController, type ViewportValue } from './animation.js';
-import { assembleIndices, drawPasses } from './draw-list.js';
+import { assembleIndices, drawPasses, OUTLINE_HALF_WIDTH, silhouetteIndices } from './draw-list.js';
 import { GeometryStore } from './geometry-store.js';
+import {
+    type AtlasPlan,
+    AtlasTooLargeError,
+    type Bounds,
+    planAtlas,
+    silhouetteBounds,
+    silhouetteStroke,
+    slotSize,
+} from './halo-atlas-plan.js';
+import {
+    createHaloPrograms,
+    deleteHaloPrograms,
+    HaloAtlas,
+    type HaloPrograms,
+} from './halo-gl.js';
+import { HALO_STATES, haloSteps } from './halo-recipe.js';
+import type { HaloSlots, HaloSource } from './halo-slots.js';
 import { ContextLossMonitor, type ContextEventPhase } from './context-loss.js';
 import { FrameScheduler } from './frame-scheduler.js';
 import { createGl, createProgram, onContextLoss, ShaderBuildError } from './gl-context.js';
@@ -18,12 +35,16 @@ import {
     type Dirt,
     gameIdentity,
     type GameIdentity,
+    groupStateDirt,
+    haloKey,
+    haloState,
     NO_DIRT,
     sameGame,
     sceneDirt,
 } from './render-plan.js';
 import { Scene, TRANSFORM_STRIDE } from './scene.js';
 import {
+    HALO_TEXTURE_UNIT,
     MAIN_ATTRIBUTES,
     MAIN_FS,
     MAIN_UNIFORMS,
@@ -48,7 +69,7 @@ export interface WebGlRendererOptions {
 
 // World units: half a CSS pixel at the maximum zoom of 5.
 const FLATTEN_TOLERANCE = 0.1;
-const OUTLINE_HALF_WIDTH = 1.5;
+const HALO_BUDGET_MS = 4;
 
 const DEFAULT_APPEARANCE: RendererAppearance = {
     outline: 'outline',
@@ -62,7 +83,7 @@ const DEFAULT_APPEARANCE: RendererAppearance = {
     matelessEdges: false,
 };
 
-const ALL_DIRT: Readonly<Dirt> = { vertices: true, indices: true, transforms: true, frame: true };
+const ALL_DIRT: Readonly<Dirt> = { vertices: true, indices: true, transforms: true, halos: true, frame: true };
 
 type UniformLocations = Record<keyof typeof MAIN_UNIFORMS, WebGLUniformLocation | null>;
 
@@ -73,9 +94,14 @@ interface GlResources {
     vertexBuffer: WebGLBuffer;
     indexBuffer: WebGLBuffer;
     photoTexture: WebGLTexture;
+    emptyHaloTexture: WebGLTexture;
     transformTexture: WebGLTexture | null;
     transformRows: number;
     indexCount: number;
+    haloPrograms: HaloPrograms | null;
+    halos: HaloAtlas | null;
+    /** The atlas `layoutRevision` the index buffer was built from. */
+    haloLayout: number;
 }
 
 interface Game {
@@ -85,6 +111,10 @@ interface Game {
     store: GeometryStore;
     strokesReady: boolean;
     cancelStrokes: () => void;
+    /** Fill bounds of the completed puzzle, the largest halo a merge can produce. */
+    solvedFills: Bounds;
+    haloLayers: number;
+    halosUnavailable: boolean;
 }
 
 export class WebGlRenderer implements Renderer {
@@ -107,6 +137,8 @@ export class WebGlRenderer implements Renderer {
     private photoPixels: TexImageSource | null = null;
     private photoDirty = false;
     private indexScratch: Uint32Array | undefined;
+    private halosUnavailable = false;
+    private cancelHaloCompile: (() => void) | null = null;
     private readonly photos = new PhotoLoader((image) => this.setPhoto(image));
     private readonly transitions = new TransitionController({
         viewport: (value) => {
@@ -116,7 +148,7 @@ export class WebGlRenderer implements Renderer {
         rotation: (groupId, deg, pivot) => this.overrideRotation(groupId, deg, pivot),
     });
     private readonly frames = new FrameScheduler(window, {
-        draw: () => this.drawIfDirty(),
+        draw: (inFrame) => this.drawIfDirty(inFrame),
         tick: (now) => this.transitions.tick(now),
     });
 
@@ -210,11 +242,11 @@ export class WebGlRenderer implements Renderer {
     }
 
     setGroupDragging(groupId: number, dragging: boolean): void {
-        this.game?.scene.setDragging(groupId, dragging);
+        this.setGroupFlag(groupId, (scene) => scene.setDragging(groupId, dragging));
     }
 
     setGroupSelected(groupId: number, selected: boolean): void {
-        this.game?.scene.setSelected(groupId, selected);
+        this.setGroupFlag(groupId, (scene) => scene.setSelected(groupId, selected));
     }
 
     setRingsEnabled(_enabled: boolean): void {}
@@ -245,6 +277,8 @@ export class WebGlRenderer implements Renderer {
 
     destroy(): void {
         this.frames.cancel();
+        this.cancelHaloCompile?.();
+        this.cancelHaloCompile = null;
         this.resizeObserver?.disconnect();
         this.resizeObserver = null;
         this.stopPixelRatioWatch?.();
@@ -273,10 +307,12 @@ export class WebGlRenderer implements Renderer {
         this.game?.cancelStrokes();
         this.transitions.newGame();
         this.photos.load(state.imageUrl);
+        if (this.res) this.dropHalos(this.res);
 
         const meshes = state.pieces.map((piece) => buildPieceFill(piece, FLATTEN_TOLERANCE));
         const scene = new Scene(meshes, state);
-        const store = new GeometryStore(state.pieces, (id) => scene.slotOfPiece(id));
+        // Merges keep earlier halos until theirs is built, so slots can briefly outnumber groups.
+        const store = new GeometryStore(state.pieces, (id) => scene.slotOfPiece(id), 2 * state.pieces.length + 16);
         for (const mesh of meshes) store.addFill(mesh);
         const game: Game = {
             identity,
@@ -285,6 +321,16 @@ export class WebGlRenderer implements Renderer {
             store,
             strokesReady: meshes.length === 0,
             cancelStrokes: () => {},
+            solvedFills: silhouetteBounds(
+                meshes.map((mesh, i) => ({
+                    bounds: mesh.bounds,
+                    x: -state.pieces[i].imageOffset.x,
+                    y: -state.pieces[i].imageOffset.y,
+                })),
+                false,
+            ),
+            haloLayers: 1,
+            halosUnavailable: false,
         };
         this.game = game;
         this.markDirty(ALL_DIRT);
@@ -296,6 +342,14 @@ export class WebGlRenderer implements Renderer {
             game.strokesReady = true;
             this.markDirty({ vertices: true, indices: true, frame: true });
         });
+    }
+
+    private setGroupFlag(groupId: number, set: (scene: Scene) => void): void {
+        const game = this.game;
+        if (!game) return;
+        const before = game.scene.groupState(groupId);
+        set(game.scene);
+        this.markDirty(groupStateDirt(before, game.scene.groupState(groupId), this.appearance));
     }
 
     private overrideRotation(groupId: number, deg: number, pivot: Point): void {
@@ -317,17 +371,29 @@ export class WebGlRenderer implements Renderer {
         d.vertices ||= dirt.vertices ?? false;
         d.indices ||= dirt.indices ?? false;
         d.transforms ||= dirt.transforms ?? false;
+        d.halos ||= dirt.halos ?? false;
         d.frame ||= dirt.frame ?? false;
-        if (!d.frame) return;
+        if (!d.frame && !d.halos) return;
         if (afterTask) this.frames.drawAfterTask();
         else this.frames.drawNextFrame();
     }
 
-    private drawIfDirty(): void {
-        if (!this.dirty.frame || this.contextLoss.isLost || !this.gl || !this.res) return;
-        this.upload(this.gl, this.res);
-        this.draw(this.gl, this.res);
+    private drawIfDirty(inFrame: boolean): void {
+        const { gl, res, game } = this;
+        if (this.contextLoss.isLost || !gl || !res) return;
+        if (!this.dirty.frame) {
+            // Halo work alone doesn't draw: the app's drag render may draw later in this frame,
+            // and a second full draw would cost more than showing the new halos a frame later.
+            if (inFrame && game?.strokesReady && (this.dirty.halos || res.halos?.pending)) {
+                this.updateHalos(gl, res, game, true);
+                if (this.dirty.frame || res.halos?.pending) this.frames.drawNextFrame();
+            }
+            return;
+        }
+        this.upload(gl, res, inFrame);
+        this.draw(gl, res);
         this.dirty = { ...NO_DIRT };
+        if (res.halos?.pending) this.frames.drawNextFrame();
     }
 
     private resize(): void {
@@ -347,7 +413,7 @@ export class WebGlRenderer implements Renderer {
         canvas.height = backingHeight;
         // Resizing clears the canvas; drawing now avoids presenting a blank frame.
         this.dirty.frame = true;
-        this.drawIfDirty();
+        this.drawIfDirty(false);
     }
 
     private createResources(): boolean {
@@ -371,11 +437,14 @@ export class WebGlRenderer implements Renderer {
         gl.bindVertexArray(null);
 
         const photoTexture = gl.createTexture();
+        const emptyHaloTexture = gl.createTexture();
+        gl.activeTexture(gl.TEXTURE0 + HALO_TEXTURE_UNIT);
+        gl.bindTexture(gl.TEXTURE_2D_ARRAY, emptyHaloTexture);
+        gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 1, gl.RGBA8, 1, 1, 1);
         gl.useProgram(program);
         gl.uniform1i(uniforms.transforms, TRANSFORM_TEXTURE_UNIT);
         gl.uniform1i(uniforms.photo, PHOTO_TEXTURE_UNIT);
-        gl.enable(gl.BLEND);
-        gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+        gl.uniform1i(uniforms.halo, HALO_TEXTURE_UNIT);
         if (gl.isContextLost()) return false;
 
         this.res = {
@@ -385,13 +454,37 @@ export class WebGlRenderer implements Renderer {
             vertexBuffer,
             indexBuffer,
             photoTexture,
+            emptyHaloTexture,
             transformTexture: null,
             transformRows: 0,
             indexCount: 0,
+            haloPrograms: null,
+            halos: null,
+            haloLayout: -1,
         };
         this.photoDirty = true;
         this.markDirty(ALL_DIRT);
+        const res = this.res;
+        this.cancelHaloCompile?.();
+        this.cancelHaloCompile = this.runInIdle([res], (target) => this.compileHaloPrograms(target));
         return true;
+    }
+
+    // Four programs: compiling them in idle time keeps them off the frame that first needs a halo.
+    private compileHaloPrograms(res: GlResources): void {
+        const gl = this.gl;
+        if (!gl || res !== this.res || res.haloPrograms || this.halosUnavailable) return;
+        try {
+            res.haloPrograms = createHaloPrograms(gl);
+        } catch (error) {
+            if (!(error instanceof ShaderBuildError)) throw error;
+            // Halos are an enhancement: the table keeps drawing without them.
+            this.halosUnavailable = true;
+            // eslint-disable-next-line no-console
+            console.error('Halo shaders failed to build; drawing without shadows and glow', error, error.log);
+            return;
+        }
+        if (res.haloPrograms) this.markDirty({ halos: true, frame: true });
     }
 
     private deleteResources(): void {
@@ -403,7 +496,16 @@ export class WebGlRenderer implements Renderer {
         gl.deleteBuffer(res.vertexBuffer);
         gl.deleteBuffer(res.indexBuffer);
         gl.deleteTexture(res.photoTexture);
+        gl.deleteTexture(res.emptyHaloTexture);
         if (res.transformTexture) gl.deleteTexture(res.transformTexture);
+        res.halos?.dispose();
+        if (res.haloPrograms) deleteHaloPrograms(gl, res.haloPrograms);
+    }
+
+    private dropHalos(res: GlResources): void {
+        res.halos?.dispose();
+        res.halos = null;
+        res.haloLayout = -1;
     }
 
     private handleContextLost(): void {
@@ -424,10 +526,10 @@ export class WebGlRenderer implements Renderer {
         }
         // A null program means the context was lost again mid-rebuild; its own events follow.
         if (!created) return;
-        this.contextLoss.restored(() => this.drawIfDirty());
+        this.contextLoss.restored(() => this.drawIfDirty(false));
     }
 
-    private upload(gl: WebGL2RenderingContext, res: GlResources): void {
+    private upload(gl: WebGL2RenderingContext, res: GlResources, inFrame: boolean): void {
         if (this.photoDirty) this.uploadPhoto(gl, res);
         const game = this.game;
         const dirty = this.dirty;
@@ -436,16 +538,132 @@ export class WebGlRenderer implements Renderer {
             gl.bindBuffer(gl.ARRAY_BUFFER, res.vertexBuffer);
             gl.bufferData(gl.ARRAY_BUFFER, game.store.vertices(), gl.STATIC_DRAW);
         }
+        if (dirty.transforms) this.uploadTransforms(gl, res, game.scene.pieceTransforms());
+        if (game.strokesReady) this.updateHalos(gl, res, game, inFrame);
         if (dirty.indices) {
             const passes = drawPasses(this.appearance, game.strokesReady);
-            const indices = assembleIndices(game.scene, game.store, passes, this.indexScratch);
+            const halos = res.halos;
+            const store = game.store;
+            const haloIndices = halos
+                ? (groupId: number) => halos.slots.slotsOf(groupId).map((index) => store.haloIndices(index))
+                : undefined;
+            const indices = assembleIndices(game.scene, store, passes, this.indexScratch, haloIndices);
             if (indices.buffer !== this.indexScratch?.buffer) this.indexScratch = indices;
             gl.bindVertexArray(res.vao);
             gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.DYNAMIC_DRAW);
             gl.bindVertexArray(null);
             res.indexCount = indices.length;
         }
-        if (dirty.transforms) this.uploadTransforms(gl, res, game.scene.pieceTransforms());
+    }
+
+    private updateHalos(gl: WebGL2RenderingContext, res: GlResources, game: Game, inFrame: boolean): void {
+        let atlas = res.halos;
+        if (!atlas && !this.halosUnavailable && !game.halosUnavailable) {
+            atlas = this.createHalos(gl, res, game);
+            if (atlas) this.dirty.halos = true;
+        }
+        if (!atlas) {
+            // Creating the atlas syncs every group, so nothing is lost by dropping the request.
+            this.dirty.halos = false;
+            return;
+        }
+        if (this.dirty.halos) {
+            this.syncHalos(game, atlas.slots);
+            this.dirty.halos = false;
+        }
+        if (inFrame && atlas.pending && res.transformTexture) {
+            gl.activeTexture(gl.TEXTURE0 + TRANSFORM_TEXTURE_UNIT);
+            gl.bindTexture(gl.TEXTURE_2D, res.transformTexture);
+            atlas.buildPending(HALO_BUDGET_MS);
+        }
+        if (atlas.slots.layoutRevision !== res.haloLayout) {
+            res.haloLayout = atlas.slots.layoutRevision;
+            this.dirty.indices = true;
+            this.dirty.frame = true;
+        }
+        const changed = atlas.slots.takeChangedSlots();
+        if (changed.length === 0) return;
+        const { store } = game;
+        gl.bindBuffer(gl.ARRAY_BUFFER, res.vertexBuffer);
+        for (const index of changed) {
+            store.writeHalo(index, atlas.slots.quad(index));
+            const vertices = store.haloVertices(index);
+            gl.bufferSubData(gl.ARRAY_BUFFER, vertices.byteOffset, vertices);
+        }
+        this.dirty.frame = true;
+    }
+
+    private createHalos(gl: WebGL2RenderingContext, res: GlResources, game: Game): HaloAtlas | null {
+        const programs = res.haloPrograms;
+        if (!programs) return null;
+        const { scene } = game;
+        const source = this.haloSource(game);
+        const groups = scene.orderedGroupIds().map((id) => ({ id, ...slotSize(source.layout(id)!.fills) }));
+        let plan: AtlasPlan;
+        try {
+            plan = planAtlas(groups, slotSize(game.solvedFills), game.haloLayers);
+        } catch (error) {
+            if (!(error instanceof AtlasTooLargeError)) throw error;
+            // Only puzzles far larger than the bundled sizes; they play on without halos.
+            game.halosUnavailable = true;
+            // eslint-disable-next-line no-console
+            console.warn('Halo atlas does not fit; drawing without shadows and glow', error);
+            return null;
+        }
+        game.haloLayers = plan.layers;
+        res.halos = new HaloAtlas(gl, programs, source, {
+            plan,
+            capacity: game.store.haloCapacity,
+            vertexBuffer: res.vertexBuffer,
+        });
+        res.haloLayout = -1;
+        return res.halos;
+    }
+
+    private haloSource(game: Game): HaloSource {
+        const { scene, store } = game;
+        const bounds = (groupId: number, stroke: boolean) => {
+            const layout = scene.groupLayout(groupId);
+            const ref = layout[0];
+            if (!ref) return null;
+            const pieces = layout.map(({ id, x, y }) => ({ bounds: scene.meshFor(id)!.bounds, x: x - ref.x, y: y - ref.y }));
+            return { ref: ref.id, bounds: silhouetteBounds(pieces, stroke) };
+        };
+        return {
+            layout: (groupId) => {
+                const group = bounds(groupId, false);
+                return group && { refPiece: group.ref, fills: group.bounds };
+            },
+            silhouette: (groupId) => {
+                const stroke = silhouetteStroke(this.appearance);
+                const group = bounds(groupId, stroke);
+                if (!group) return null;
+                const refSlot = scene.slotOfPiece(group.ref);
+                if (refSlot === undefined) return null;
+                return { refSlot, bounds: group.bounds, indices: silhouetteIndices(scene, store, groupId, stroke) };
+            },
+            steps: (state) => haloSteps(state, this.appearance.outline, this.appearance.selectionGlowColor),
+            groupOfPiece: (pieceId) => scene.groupOfPiece(pieceId),
+        };
+    }
+
+    private syncHalos(game: Game, slots: HaloSlots): void {
+        const { scene } = game;
+        const { outline, selectionGlowColor } = this.appearance;
+        const keys = new Map(HALO_STATES.map((state) => [state, haloKey(this.appearance, state)]));
+        for (const groupId of scene.orderedGroupIds()) {
+            const state = haloState(scene.groupState(groupId));
+            if (haloSteps(state, outline, selectionGlowColor).length === 0) {
+                slots.hide(groupId);
+                continue;
+            }
+            const pieces = scene.groupLayout(groupId).map((piece) => piece.id).join(',');
+            slots.request(groupId, state, `${pieces}|${keys.get(state)!}`);
+        }
+        // After the requests, so an absorbed group's halo goes to a survivor whose want is already post-merge.
+        for (const groupId of slots.groupIds()) {
+            if (scene.groupLayout(groupId).length === 0) slots.release(groupId);
+        }
     }
 
     private uploadTransforms(gl: WebGL2RenderingContext, res: GlResources, transforms: Float32Array): void {
@@ -501,6 +719,8 @@ export class WebGlRenderer implements Renderer {
 
     private draw(gl: WebGL2RenderingContext, res: GlResources): void {
         const [r, g, b] = this.appearance.backgroundColor;
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        gl.disable(gl.SCISSOR_TEST);
         gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
         gl.clearColor(r, g, b, 1);
         gl.clear(gl.COLOR_BUFFER_BIT);
@@ -515,10 +735,15 @@ export class WebGlRenderer implements Renderer {
             : { scale: { x: 1, y: 1 }, offset: { x: 0, y: 0 } };
 
         gl.useProgram(res.program);
+        gl.enable(gl.BLEND);
+        gl.blendEquation(gl.FUNC_ADD);
+        gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
         gl.activeTexture(gl.TEXTURE0 + TRANSFORM_TEXTURE_UNIT);
         gl.bindTexture(gl.TEXTURE_2D, res.transformTexture);
         gl.activeTexture(gl.TEXTURE0 + PHOTO_TEXTURE_UNIT);
         gl.bindTexture(gl.TEXTURE_2D, res.photoTexture);
+        gl.activeTexture(gl.TEXTURE0 + HALO_TEXTURE_UNIT);
+        gl.bindTexture(gl.TEXTURE_2D_ARRAY, res.halos?.texture ?? res.emptyHaloTexture);
         gl.uniform1f(u.scale, this.viewport.scale);
         gl.uniform2f(u.offset, this.viewport.offsetX, this.viewport.offsetY);
         gl.uniform2f(u.viewportSize, this.cssSize.width, this.cssSize.height);

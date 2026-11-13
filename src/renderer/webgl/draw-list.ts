@@ -13,6 +13,9 @@ export interface DrawOrder {
     isOuterEdge(edgeId: number): boolean;
 }
 
+/** World units the outline stroke reaches past the piece edge. */
+export const OUTLINE_HALF_WIDTH = 1.5;
+
 /** The fringe is the only edge antialiasing without an outline; strokes and fringe share the stroke vertices. */
 export function drawPasses(appearance: Pick<RendererAppearance, 'outline' | 'innerOutline'>, strokesReady: boolean): DrawPasses {
     const outline = strokesReady && appearance.outline === 'outline';
@@ -23,12 +26,54 @@ export function drawPasses(appearance: Pick<RendererAppearance, 'outline' | 'inn
     };
 }
 
-/** Returns a view of `scratch` when it is large enough. */
+function outerEdgesOf(order: DrawOrder, store: GeometryStore, groupId: number, out: number[]): number[] {
+    out.length = 0;
+    for (const { id } of order.groupLayout(groupId)) {
+        for (const edgeId of store.edgesOf(id)) {
+            if (order.isOuterEdge(edgeId)) out.push(edgeId);
+        }
+    }
+    return out;
+}
+
+function concatenate(parts: readonly Uint32Array[], scratch?: Uint32Array): Uint32Array {
+    let length = 0;
+    for (const part of parts) length += part.length;
+    const out = scratch && scratch.length >= length ? scratch.subarray(0, length) : new Uint32Array(length);
+    let offset = 0;
+    for (const part of parts) {
+        out.set(part, offset);
+        offset += part.length;
+    }
+    return out;
+}
+
+/** What a group's drop-shadows are cast from: its fills, plus the outline stroke or else the AA fringe. */
+export function silhouetteIndices(order: DrawOrder, store: GeometryStore, groupId: number, stroke: boolean): Uint32Array {
+    const parts: Uint32Array[] = [];
+    for (const { id } of order.groupLayout(groupId)) {
+        const fill = store.fillIndices(id);
+        if (fill) parts.push(fill);
+    }
+    for (const edgeId of outerEdgesOf(order, store, groupId, [])) {
+        if (stroke) {
+            const strokeParts = store.strokeParts(edgeId);
+            if (strokeParts) parts.push(strokeParts.band, strokeParts.startCap, strokeParts.endCap);
+        } else {
+            const fringe = store.fringeIndices(edgeId);
+            if (fringe) parts.push(fringe);
+        }
+    }
+    return concatenate(parts);
+}
+
+/** Returns a view of `scratch` when it is large enough. `halos` lists index runs drawn under each group. */
 export function assembleIndices(
     order: DrawOrder,
     store: GeometryStore,
     passes: DrawPasses,
     scratch?: Uint32Array,
+    halos?: (groupId: number) => readonly Uint32Array[],
 ): Uint32Array {
     const result: Uint32Array[] = [];
     const outerEdges: number[] = [];
@@ -52,14 +97,9 @@ export function assembleIndices(
 
     for (const groupId of order.orderedGroupIds()) {
         const layout = order.groupLayout(groupId);
-        outerEdges.length = 0;
-        if (needsEdges) {
-            for (const { id } of layout) {
-                for (const edgeId of store.edgesOf(id)) {
-                    if (order.isOuterEdge(edgeId)) outerEdges.push(edgeId);
-                }
-            }
-        }
+        if (halos) result.push(...halos(groupId));
+        if (needsEdges) outerEdgesOf(order, store, groupId, outerEdges);
+        else outerEdges.length = 0;
         if (passes.strokesUnder) {
             for (const edgeId of outerEdges) pushStroke(edgeId);
         }
@@ -78,13 +118,5 @@ export function assembleIndices(
         }
     }
 
-    let length = 0;
-    for (const part of result) length += part.length;
-    const out = scratch && scratch.length >= length ? scratch.subarray(0, length) : new Uint32Array(length);
-    let offset = 0;
-    for (const part of result) {
-        out.set(part, offset);
-        offset += part.length;
-    }
-    return out;
+    return concatenate(result, scratch);
 }

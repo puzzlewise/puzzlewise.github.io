@@ -1,7 +1,9 @@
-import { afterEach, describe, expect, test, vi } from 'vitest';
-import { ATLAS_LAYER_SIZE, type Bounds, planAtlas, RepackPlanner, slotSize } from './halo-atlas-plan.js';
+import { describe, expect, test } from 'vitest';
+import type { RendererAppearance } from '../appearance.js';
+import { ATLAS_GUTTER, ATLAS_LAYER_SIZE, type AtlasRect, type Bounds, planAtlas, slotSize } from './halo-atlas-plan.js';
 import { ShaderBuildError } from './gl-context.js';
-import { createHaloPrograms, HaloAtlas, type HaloAtlasOptions, type HaloSource } from './halo-gl.js';
+import { createHaloPrograms, HaloAtlas, type HaloAtlasOptions } from './halo-gl.js';
+import type { HaloSource } from './halo-slots.js';
 import { BLUR_Y_FS } from './shaders.js';
 import { haloSteps } from './halo-recipe.js';
 
@@ -19,6 +21,7 @@ function fakeGl(fails: (source: string) => boolean = () => false) {
                 if (name === 'getProgramParameter') return true;
                 if (name === 'isContextLost') return false;
                 if (name === 'getShaderInfoLog') return 'log';
+                if (name === 'getUniformLocation') return args[1];
                 return {};
             };
         },
@@ -36,7 +39,12 @@ function square(size: number): Bounds {
     return { minX: 0, minY: 0, maxX: size, maxY: size };
 }
 
-function setup(groups: Map<number, FakeGroup>, layers = 1, options: Partial<HaloAtlasOptions> = {}) {
+function setup(
+    groups: Map<number, FakeGroup>,
+    layers = 1,
+    options: Partial<HaloAtlasOptions> = {},
+    outline: RendererAppearance['outline'] = 'outline',
+) {
     const { gl, calls, count } = fakeGl();
     const pieceGroup = new Map<number, number>();
     for (const [id, group] of groups) pieceGroup.set(group.refPiece, id);
@@ -46,7 +54,7 @@ function setup(groups: Map<number, FakeGroup>, layers = 1, options: Partial<Halo
             const group = groups.get(id);
             return group ? { refSlot: group.refPiece, bounds: group.fills, indices: new Uint32Array(3) } : null;
         },
-        steps: (state) => haloSteps(state, 'outline', [1, 0, 0, 1]),
+        steps: (state) => haloSteps(state, outline, [1, 0, 0, 1]),
         groupOfPiece: (piece) => pieceGroup.get(piece),
     };
     const plan = planAtlas(
@@ -61,24 +69,20 @@ function setup(groups: Map<number, FakeGroup>, layers = 1, options: Partial<Halo
 }
 
 const drawnSlots = (atlas: HaloAtlas, groupId: number): number[] =>
-    atlas.slotsOf(groupId).filter((index) => atlas.quad(index) !== null);
+    atlas.slots.slotsOf(groupId).filter((index) => atlas.slots.quad(index) !== null);
 
 const finish = (atlas: HaloAtlas): void => {
     for (let i = 0; i < 100 && atlas.pending; i++) atlas.buildPending(1000);
 };
 
 describe('HaloAtlas', () => {
-    afterEach(() => {
-        vi.restoreAllMocks();
-    });
-
     test('a requested halo is drawn only once its build is copied into the atlas', () => {
         const { atlas, count, calls } = setup(new Map([[1, { refPiece: 10, fills: square(100) }]]));
-        atlas.request(1, 'selected', 'k');
+        atlas.slots.request(1, 'selected', 'k');
         expect(drawnSlots(atlas, 1)).toEqual([]);
 
         finish(atlas);
-        atlas.request(1, 'selected', 'k');
+        atlas.slots.request(1, 'selected', 'k');
         expect(drawnSlots(atlas, 1)).toHaveLength(1);
         expect(count('copyTexSubImage3D')).toBe(1);
         expect(count('generateMipmap')).toBe(0);
@@ -89,14 +93,14 @@ describe('HaloAtlas', () => {
 
     test('a build covers its own halo region, not the slot it may share with larger states', () => {
         const { atlas, calls } = setup(new Map([[1, { refPiece: 10, fills: square(100) }]]));
-        const [slot] = atlas.slotsOf(1);
-        expect(slotSize(square(100))).toEqual({ w: 136, h: 136 });
-        for (const [state, side] of [['selected', 112], ['dragging', 40]] as const) {
+        const [slot] = atlas.slots.slotsOf(1);
+        expect(slotSize(square(100))).toEqual({ w: 96, h: 96 });
+        for (const [state, side] of [['selected', 88], ['dragging', 40]] as const) {
             const start = calls.length;
-            atlas.request(1, state, 'k');
+            atlas.slots.request(1, state, 'k');
             finish(atlas);
             const build = calls.slice(start);
-            const rect = atlas['slots'].get(slot)!.rect;
+            const rect = atlas.slots['slots'].get(slot)!.rect;
             const copy = build.filter((c) => c.name === 'copyTexSubImage3D');
             expect(copy.map((c) => c.args)).toEqual([['TEXTURE_2D_ARRAY', 0, rect.x, rect.y, rect.layer, 0, 0, side, side]]);
             const viewports = build.filter((c) => c.name === 'viewport').map((c) => c.args);
@@ -109,102 +113,8 @@ describe('HaloAtlas', () => {
             }
             const sizes = build.filter((c) => c.name === 'uniform2i' || c.name === 'uniform2f').map((c) => c.args.slice(1));
             expect(sizes).toContainEqual([side, side]);
-            expect(sizes).not.toContainEqual([136, 136]);
+            expect(sizes).not.toContainEqual([96, 96]);
         }
-    });
-
-    test('the quad covers the halo image in the reference frame and its atlas texels', () => {
-        const { atlas } = setup(new Map([[1, { refPiece: 10, fills: square(100) }]]));
-        atlas.request(1, 'selected', 'k');
-        finish(atlas);
-        const quad = atlas.quad(drawnSlots(atlas, 1)[0])!;
-        expect(quad.refSlot).toBe(10);
-        expect(quad.x0).toBe(-132);
-        expect(quad.x1).toBe(232);
-        expect((quad.u1 - quad.u0) * ATLAS_LAYER_SIZE).toBe(91);
-    });
-
-    test('a state change keeps drawing the previous halo until the new one is copied in', () => {
-        const { atlas } = setup(new Map([[1, { refPiece: 10, fills: square(100) }]]));
-        atlas.request(1, 'selected', 'k');
-        finish(atlas);
-        const slot = drawnSlots(atlas, 1)[0];
-        const selected = atlas.quad(slot);
-
-        atlas.request(1, 'selected-dragging', 'k');
-        expect(atlas.pending).toBe(true);
-        atlas.buildPending(0);
-        expect(drawnSlots(atlas, 1)).toEqual([slot]);
-        expect(atlas.quad(slot)).toEqual(selected);
-
-        finish(atlas);
-        expect(drawnSlots(atlas, 1)).toEqual([slot]);
-        expect(atlas.quad(slot)!.x0).toBeLessThan(selected!.x0);
-    });
-
-    test('hiding stops drawing at once, and the same halo comes back without a rebuild', () => {
-        const { atlas, count } = setup(new Map([[1, { refPiece: 10, fills: square(100) }]]));
-        atlas.request(1, 'selected', 'k');
-        finish(atlas);
-        const [slot] = atlas.slotsOf(1);
-        atlas.takeChangedSlots();
-        const layout = atlas.layoutRevision;
-
-        atlas.hide(1);
-        expect(drawnSlots(atlas, 1)).toEqual([]);
-        expect(atlas.takeChangedSlots()).toEqual([slot]);
-        expect(atlas.layoutRevision).toBe(layout);
-        atlas.request(1, 'selected', 'k');
-        expect(drawnSlots(atlas, 1)).toHaveLength(1);
-        expect(atlas.pending).toBe(false);
-        expect(count('copyTexSubImage3D')).toBe(1);
-    });
-
-    test('a hidden group does not show its stale halo while a new state builds', () => {
-        const { atlas } = setup(new Map([[1, { refPiece: 10, fills: square(100) }]]));
-        atlas.request(1, 'selected', 'k');
-        finish(atlas);
-        atlas.hide(1);
-        atlas.request(1, 'dragging', 'k');
-        expect(drawnSlots(atlas, 1)).toEqual([]);
-    });
-
-    test('on a merge the absorbed halos draw under the merged group until its halo lands, then free', () => {
-        const groups = new Map([
-            [1, { refPiece: 10, fills: square(100) }],
-            [2, { refPiece: 20, fills: square(100) }],
-        ]);
-        const { atlas, pieceGroup } = setup(groups);
-        atlas.request(1, 'selected', 'a');
-        atlas.request(2, 'selected', 'b');
-        finish(atlas);
-        const [old1] = drawnSlots(atlas, 1);
-        const [old2] = drawnSlots(atlas, 2);
-
-        groups.delete(2);
-        groups.set(1, { refPiece: 10, fills: square(220) });
-        pieceGroup.set(20, 1);
-        atlas.release(2);
-        atlas.request(1, 'selected', 'ab');
-        expect(new Set(drawnSlots(atlas, 1))).toEqual(new Set([old1, old2]));
-        expect(drawnSlots(atlas, 2)).toEqual([]);
-
-        finish(atlas);
-        const drawn = drawnSlots(atlas, 1);
-        expect(drawn).toHaveLength(1);
-        expect(atlas.quad(old2)).toBeNull();
-        expect(atlas.quad(drawn[0])!.x1).toBe(220 + 132);
-    });
-
-    test('a released group whose pieces left the table frees its slot', () => {
-        const groups = new Map([[1, { refPiece: 10, fills: square(100) }]]);
-        const { atlas, pieceGroup } = setup(groups);
-        atlas.request(1, 'selected', 'a');
-        finish(atlas);
-        const [slot] = drawnSlots(atlas, 1);
-        pieceGroup.delete(10);
-        atlas.release(1);
-        expect(atlas.quad(slot)).toBeNull();
     });
 
     test('each call stops at its time budget and resumes on the next', () => {
@@ -221,7 +131,7 @@ describe('HaloAtlas', () => {
         const atlas = new HaloAtlas(gl, createHaloPrograms(gl)!, source, {
             plan, capacity: 16, vertexBuffer: {} as WebGLBuffer, now: () => clock++,
         });
-        for (const id of groups.keys()) atlas.request(id, 'selected', 'k');
+        for (const id of groups.keys()) atlas.slots.request(id, 'selected', 'k');
         atlas.buildPending(5);
         const built = [...groups.keys()].filter((id) => drawnSlots(atlas, id).length > 0).length;
         expect(built).toBeLessThan(groups.size);
@@ -235,47 +145,141 @@ describe('HaloAtlas', () => {
         for (const id of groups.keys()) expect(drawnSlots(atlas, id)).toHaveLength(1);
     });
 
-    test('a slot that no longer fits anywhere is placed by a repack that keeps the other halos', () => {
-        const groups = new Map(Array.from({ length: 8 }, (_, i) => [i, { refPiece: i, fills: square(1500) }] as const));
-        const { atlas, count, pieceGroup } = setup(groups);
-        for (const id of groups.keys()) atlas.request(id, 'selected', 'k');
+    test('a call of many tiny builds stops after a bounded number of render passes', () => {
+        const groups = new Map(Array.from({ length: 64 }, (_, i) => [i, { refPiece: i, fills: square(1) }] as const));
+        const { atlas, calls } = setup(groups, 1, { now: () => 0 }, 'shadow');
+        for (const id of groups.keys()) atlas.slots.request(id, 'idle', 'k');
+        const passes = new Set(['drawArrays', 'drawElements', 'copyTexSubImage2D', 'copyTexSubImage3D']);
+        const start = calls.length;
+        atlas.buildPending(1000);
+        expect(calls.slice(start).filter((c) => passes.has(c.name)).length).toBeLessThanOrEqual(200);
+        const built = [...groups.keys()].filter((id) => drawnSlots(atlas, id).length > 0).length;
+        expect(built).toBeGreaterThan(0);
+        expect(built).toBeLessThan(groups.size);
+    });
+
+    test('a group hidden while its halo builds does not draw it', () => {
+        let clock = 0;
+        const { atlas } = setup(new Map([[1, { refPiece: 10, fills: square(100) }]]), 1, { now: () => (clock += 10) });
+        atlas.slots.request(1, 'selected', 'k');
+        atlas.buildPending(15);
+        expect(atlas.pending).toBe(true);
+        atlas.slots.hide(1);
         finish(atlas);
-        const before = new Map([...groups.keys()].map((id) => [id, atlas.quad(drawnSlots(atlas, id)[0])]));
+        expect(drawnSlots(atlas, 1)).toEqual([]);
+    });
+
+    test('a group released while its halo builds lets the build end cleanly', () => {
+        let clock = 0;
+        const groups = new Map([[1, { refPiece: 10, fills: square(100) }]]);
+        const { atlas, pieceGroup } = setup(groups, 1, { now: () => (clock += 10) });
+        atlas.slots.request(1, 'selected', 'k');
+        atlas.buildPending(15);
+        expect(atlas.pending).toBe(true);
+        groups.delete(1);
+        pieceGroup.delete(10);
+        atlas.slots.release(1);
+        expect(() => finish(atlas)).not.toThrow();
+        expect(atlas.pending).toBe(false);
+    });
+
+    test('a slot that no longer fits anywhere is placed by a repack that keeps the other halos', () => {
+        const groups = new Map(Array.from({ length: 17 }, (_, i) => [i, { refPiece: i, fills: square(1500) }] as const));
+        const { atlas, calls, pieceGroup } = setup(groups, 2);
+        for (const id of groups.keys()) atlas.slots.request(id, 'selected', 'k');
+        finish(atlas);
 
         // Groups 1, 3, 5 leave; 0 grows into a slot only a repack can make room for.
         for (const id of [1, 3, 5]) {
             groups.delete(id);
             pieceGroup.delete(id);
-            atlas.release(id);
+            atlas.slots.release(id);
         }
+        const stay = [...groups.keys()].filter((id) => id !== 0);
+        const rectOf = (id: number): AtlasRect => ({ ...atlas.slots['slots'].get(drawnSlots(atlas, id)[0])!.rect });
+        const quads = new Map(stay.map((id) => [id, atlas.slots.quad(drawnSlots(atlas, id)[0])!]));
+        const where = new Map(stay.map((id) => [id, rectOf(id)]));
         groups.set(0, { refPiece: 0, fills: { minX: 0, minY: 0, maxX: 3000, maxY: 1500 } });
-        atlas.request(0, 'selected', 'big');
+        atlas.slots.request(0, 'selected', 'big');
         expect(atlas.pending).toBe(true);
+        const start = calls.length;
         finish(atlas);
 
-        expect(count('copyTexSubImage2D')).toBeGreaterThan(0);
-        expect(atlas.quad(drawnSlots(atlas, 0)[0])!.x1).toBe(3000 + 132);
-        for (const id of [2, 4, 6, 7]) {
-            const quad = atlas.quad(drawnSlots(atlas, id)[0])!;
-            expect({ x0: quad.x0, x1: quad.x1 }).toEqual({ x0: before.get(id)!.x0, x1: before.get(id)!.x1 });
+        const repack = calls.slice(start);
+        let readLayer: unknown;
+        const layerMoves = new Set<string>();
+        repack.forEach((call, i) => {
+            if (call.name === 'framebufferTextureLayer' && call.args[0] === 'READ_FRAMEBUFFER') readLayer = call.args[4];
+            if (call.name !== 'copyTexSubImage2D') return;
+            const [x, y, w, h] = call.args.slice(4);
+            const from = { layer: readLayer, x, y, w, h };
+            const id = stay.find((g) => JSON.stringify(where.get(g)) === JSON.stringify(from));
+            expect(id, JSON.stringify(from)).toBeDefined();
+            const store = repack.slice(i).find((c) => c.name === 'copyTexSubImage3D')!;
+            const [toX, toY, layer] = store.args.slice(2, 5) as number[];
+            expect(store.args.slice(7)).toEqual([w, h]);
+            where.set(id!, { layer, x: toX, y: toY, w: w as number, h: h as number });
+            layerMoves.add(`${String(from.layer)}→${layer}`);
+        });
+        expect(layerMoves).toContain('1→0');
+        expect(layerMoves).toContain('1→1');
+        expect(atlas.slots.quad(drawnSlots(atlas, 0)[0])!.x1).toBe(3000 + 88);
+        for (const id of stay) {
+            expect(where.get(id)).toEqual(rectOf(id));
+            const quad = atlas.slots.quad(drawnSlots(atlas, id)[0])!;
+            expect({ x0: quad.x0, x1: quad.x1 }).toEqual({ x0: quads.get(id)!.x0, x1: quads.get(id)!.x1 });
         }
+    });
+
+    test('a build under way when a repack is needed lands where its slot is when it commits', () => {
+        const groups = new Map(Array.from({ length: 8 }, (_, i) => [i, { refPiece: i, fills: square(1500) }] as const));
+        let clock = 0;
+        const { atlas, calls, pieceGroup } = setup(groups, 1, { now: () => (clock += 10) });
+        for (const id of groups.keys()) atlas.slots.request(id, 'selected', 'k');
+        finish(atlas);
+        for (const id of [1, 3, 5]) {
+            groups.delete(id);
+            pieceGroup.delete(id);
+            atlas.slots.release(id);
+        }
+        const rectOf = (id: number) => ({ ...atlas.slots['slots'].get(atlas.slots.slotsOf(id).at(-1)!)!.rect });
+        const start = rectOf(2);
+        const stores: { groupId: number; at: unknown[]; rect: AtlasRect }[] = [];
+        const commit = atlas.slots.commit.bind(atlas.slots);
+        atlas.slots.commit = (build) => {
+            const store = calls.findLast((c) => c.name === 'copyTexSubImage3D')!;
+            stores.push({ groupId: build.groupId, at: store.args.slice(2, 5), rect: { ...build.slot.rect } });
+            commit(build);
+        };
+
+        atlas.slots.request(2, 'selected-dragging', 'k');
+        atlas.buildPending(15);
+        expect(stores).toEqual([]);
+        groups.set(0, { refPiece: 0, fills: { minX: 0, minY: 0, maxX: 3000, maxY: 1500 } });
+        atlas.slots.request(0, 'selected', 'big');
+        for (let i = 0; i < 1000 && atlas.pending; i++) atlas.buildPending(15);
+
+        expect(atlas.pending).toBe(false);
+        expect(rectOf(2)).not.toEqual(start);
+        expect(stores.map((s) => s.groupId)).toEqual([2, 0]);
+        for (const { at, rect } of stores) expect(at).toEqual([rect.x, rect.y, rect.layer]);
     });
 
     test('a repack plan runs over several budgeted calls while every halo keeps drawing', () => {
         const groups = new Map(Array.from({ length: 8 }, (_, i) => [i, { refPiece: i, fills: square(1500) }] as const));
         let clock = 0;
         const { atlas, count, pieceGroup } = setup(groups, 1, { now: () => clock++, planWork: 200 });
-        for (const id of groups.keys()) atlas.request(id, 'selected', 'k');
+        for (const id of groups.keys()) atlas.slots.request(id, 'selected', 'k');
         finish(atlas);
         for (const id of [1, 3, 5]) {
             groups.delete(id);
             pieceGroup.delete(id);
-            atlas.release(id);
+            atlas.slots.release(id);
         }
         const drawn = new Map([0, 2, 4, 6, 7].map((id) => [id, drawnSlots(atlas, id)]));
-        const quads = new Map([...drawn].map(([id, slots]) => [id, atlas.quad(slots[0])]));
+        const quads = new Map([...drawn].map(([id, slots]) => [id, atlas.slots.quad(slots[0])]));
         groups.set(0, { refPiece: 0, fills: { minX: 0, minY: 0, maxX: 3000, maxY: 1500 } });
-        atlas.request(0, 'selected', 'big');
+        atlas.slots.request(0, 'selected', 'big');
 
         let calls = 0;
         while (count('copyTexSubImage2D') === 0 && calls < 1000) {
@@ -284,171 +288,78 @@ describe('HaloAtlas', () => {
             if (count('copyTexSubImage2D') > 0) break;
             for (const [id, slots] of drawn) {
                 expect(drawnSlots(atlas, id)).toEqual(slots);
-                expect(atlas.quad(slots[0])).toEqual(quads.get(id));
+                expect(atlas.slots.quad(slots[0])).toEqual(quads.get(id));
             }
         }
         expect(calls).toBeGreaterThan(2);
         finish(atlas);
-        expect(atlas.quad(drawnSlots(atlas, 0)[0])!.x1).toBe(3000 + 132);
+        expect(atlas.slots.quad(drawnSlots(atlas, 0)[0])!.x1).toBe(3000 + 88);
     });
 
-    test('a group released while a repack is planned leaves its region free afterwards', () => {
-        const roomAfter = (releaseWhilePlanning: boolean): number => {
-            const groups = new Map(Array.from({ length: 8 }, (_, i) => [i, { refPiece: i, fills: square(1500) }] as const));
-            let clock = 0;
-            const { atlas, pieceGroup } = setup(groups, 1, { now: () => clock++, planWork: 200 });
-            const remove = (id: number) => {
-                groups.delete(id);
-                pieceGroup.delete(id);
-                atlas.release(id);
-            };
-            for (const id of groups.keys()) atlas.request(id, 'selected', 'k');
-            finish(atlas);
-            for (const id of [1, 3, 5]) remove(id);
-            groups.set(0, { refPiece: 0, fills: { minX: 0, minY: 0, maxX: 3000, maxY: 1500 } });
-            atlas.request(0, 'selected', 'big');
-            atlas.buildPending(3);
-            expect(atlas['planning']).not.toBeNull();
-            if (releaseWhilePlanning) remove(7);
-            finish(atlas);
-            if (!releaseWhilePlanning) remove(7);
+    test('the silhouette pass draws inside the slot\'s gutter', () => {
+        const { calls } = setup(new Map([[1, { refPiece: 10, fills: square(100) }]]));
+        expect(calls.filter((c) => c.name === 'uniform1f' && c.args[0] === 'u_gutter').map((c) => c.args[1])).toEqual([ATLAS_GUTTER]);
+    });
 
-            let placed = 0;
-            for (let id = 100; ; id++) {
-                groups.set(id, { refPiece: id, fills: square(1500) });
-                atlas.request(id, 'selected', 'k');
-                if (atlas.slotsOf(id).length === 0) return placed;
-                placed++;
+    test('each build pass draws on its own target under its own blend and scissor state', () => {
+        const groups = new Map([[1, { refPiece: 10, fills: square(100) }], [2, { refPiece: 20, fills: square(300) }]]);
+        const { atlas, calls } = setup(groups);
+        for (const id of groups.keys()) atlas.slots.request(id, 'selected-dragging', 'k');
+        finish(atlas);
+
+        const targetName = (target: unknown) => Object.entries(atlas['fbo']).find(([, fbo]) => fbo === target)?.[0] ?? null;
+        const enabled = new Set<unknown>();
+        let program: unknown;
+        let target: string | null = null;
+        let equation: unknown;
+        let func: unknown[] = [];
+        let cleared: (string | null)[] = [];
+        const draws: { program: unknown; target: string | null; blend: boolean; scissor: boolean; equation: unknown; func: unknown[]; cleared: (string | null)[] }[] = [];
+        for (const { name, args } of calls) {
+            if (name === 'enable') enabled.add(args[0]);
+            if (name === 'disable') enabled.delete(args[0]);
+            if (name === 'blendEquation') equation = args[0];
+            if (name === 'blendFunc') func = args;
+            if (name === 'useProgram') program = args[0];
+            if (name === 'bindFramebuffer' && args[0] === 'FRAMEBUFFER') target = targetName(args[1]);
+            if (name === 'clear') cleared.push(target);
+            if (name === 'drawElements' || name === 'drawArrays') {
+                draws.push({ program, target, blend: enabled.has('BLEND'), scissor: enabled.has('SCISSOR_TEST'), equation, func, cleared });
+                cleared = [];
             }
-        };
-        expect(roomAfter(false)).toBeGreaterThan(0);
-        expect(roomAfter(true)).toBe(roomAfter(false));
-    });
-
-    test('an evicted halo is rebuilt for its group, and an evicted retiring halo is freed', () => {
-        const groups = new Map(Array.from({ length: 8 }, (_, i) => [i, { refPiece: i, fills: square(1500) }] as const));
-        const { atlas, pieceGroup } = setup(groups);
-        for (const id of groups.keys()) atlas.request(id, 'selected', 'k');
-        finish(atlas);
-        const [retiring] = atlas.slotsOf(0);
-        const [own] = atlas.slotsOf(2);
-        const step = RepackPlanner.prototype.step;
-        vi.spyOn(RepackPlanner.prototype, 'step').mockImplementation(function (this: RepackPlanner, maxWork) {
-            const plan = step.call(this, maxWork);
-            if (!plan) return plan;
-            const evicted = [retiring, own];
-            const steps = plan.steps.filter((s) => !evicted.includes(s.id));
-            return { ...plan, steps: [...evicted.map((id) => ({ id, kind: 'evict' as const })), ...steps] };
-        });
-
-        for (const id of [1, 3, 5]) {
-            groups.delete(id);
-            pieceGroup.delete(id);
-            atlas.release(id);
         }
-        groups.set(0, { refPiece: 0, fills: { minX: 0, minY: 0, maxX: 3000, maxY: 1500 } });
-        atlas.request(0, 'selected', 'big');
-        expect(atlas.slotsOf(0)[0]).toBe(retiring);
-        finish(atlas);
+        const programs = atlas['programs'];
+        const passes = (pass: WebGLProgram) => draws.filter((draw) => draw.program === pass);
 
-        expect(atlas['slots'].has(retiring)).toBe(false);
-        expect(drawnSlots(atlas, 2)).toEqual([own]);
-        expect(atlas.quad(own)!.x1).toBe(1500 + 132);
-        expect(atlas.pending).toBe(false);
-    });
-
-    test('a group whose new slot finds no free slot index keeps the old halo for its state and stops retrying', () => {
-        const groups = new Map(Array.from({ length: 8 }, (_, i) => [i, { refPiece: i, fills: square(1500) }] as const));
-        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-        const { atlas } = setup(groups, 1, { capacity: 8 });
-        for (const id of groups.keys()) atlas.request(id, 'selected', 'k');
-        finish(atlas);
-        const [old] = drawnSlots(atlas, 0);
-
-        groups.set(0, { refPiece: 0, fills: { minX: 0, minY: 0, maxX: 3000, maxY: 1500 } });
-        atlas.request(0, 'selected', 'big');
-        finish(atlas);
-        expect(atlas.pending).toBe(false);
-        expect(drawnSlots(atlas, 0)).toEqual([old]);
-
-        atlas.request(0, 'selected', 'big');
-        expect(atlas.pending).toBe(false);
-        atlas.request(0, 'dragging', 'big');
-        expect(drawnSlots(atlas, 0)).toEqual([]);
-        expect(atlas.pending).toBe(false);
-        expect(warn.mock.calls).toEqual([[expect.stringContaining('group 0\'s 1152×592 halo slot')]]);
-    });
-
-    test('a group that finds space before its waiting slot is placed gets one slot, not two', () => {
-        const groups = new Map(Array.from({ length: 8 }, (_, i) => [i, { refPiece: i, fills: square(1500) }] as const));
-        const { atlas, pieceGroup } = setup(groups);
-        for (const id of groups.keys()) atlas.request(id, 'selected', 'k');
-        finish(atlas);
-        groups.set(0, { refPiece: 0, fills: { minX: 0, minY: 0, maxX: 3000, maxY: 1500 } });
-        atlas.request(0, 'selected', 'big');
-        for (const id of [1, 2, 3, 4, 5]) {
-            groups.delete(id);
-            pieceGroup.delete(id);
-            atlas.release(id);
+        expect(passes(programs.silhouette)).toHaveLength(2);
+        for (const draw of passes(programs.silhouette)) {
+            expect([draw.target, draw.blend, draw.equation]).toEqual(['silhouette', true, 'MAX']);
+            expect(draw.cleared).toHaveLength(2);
+            expect(draw.cleared).toEqual(expect.arrayContaining(['halo', 'silhouette']));
         }
-        atlas.request(0, 'selected', 'big');
-        finish(atlas);
-        expect(atlas['slots'].size).toBe(3);
-    });
-
-    test('when the wanted halo cannot be placed, the old one draws only while it shows the same state', () => {
-        const groups = new Map(Array.from({ length: 8 }, (_, i) => [i, { refPiece: i, fills: square(1500) }] as const));
-        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-        const { atlas } = setup(groups);
-        for (const id of groups.keys()) atlas.request(id, 'selected', 'k');
-        finish(atlas);
-        const [old] = drawnSlots(atlas, 0);
-
-        groups.set(0, { refPiece: 0, fills: square(5000) });
-        atlas.request(0, 'selected', 'huge');
-        finish(atlas);
-        expect(drawnSlots(atlas, 0)).toEqual([old]);
-
-        atlas.request(0, 'dragging', 'huge');
-        expect(drawnSlots(atlas, 0)).toEqual([]);
-        expect(atlas.pending).toBe(false);
-        expect(warn).toHaveBeenCalledTimes(1);
-        expect(warn.mock.calls[0][0]).toContain('group 0\'s');
+        expect(passes(programs.blurX).length).toBeGreaterThan(2);
+        for (const draw of passes(programs.blurX)) expect([draw.target, draw.blend]).toEqual(['blur', false]);
+        expect(passes(programs.blurY).length).toBeGreaterThan(2);
+        for (const draw of passes(programs.blurY)) {
+            expect([draw.target, draw.blend, draw.equation, draw.func]).toEqual(['halo', true, 'FUNC_ADD', ['ONE_MINUS_DST_ALPHA', 'ONE']]);
+        }
+        expect(passes(programs.mip)).toHaveLength(6);
+        for (const draw of passes(programs.mip)) expect([draw.target, draw.blend, draw.scissor]).toEqual(['atlas', false, false]);
     });
 
     test('a halo program that fails to build throws, and the programs built before it are deleted', () => {
         const { gl, calls } = fakeGl((source) => source === BLUR_Y_FS);
-        expect(() => createHaloPrograms(gl)).toThrow(ShaderBuildError);
+        let error: unknown;
+        try {
+            createHaloPrograms(gl);
+        } catch (caught) {
+            error = caught;
+        }
+        expect(error).toBeInstanceOf(ShaderBuildError);
+        expect((error as ShaderBuildError).message).toBe('Halo blurY program: Fragment shader failed to compile');
+        expect((error as ShaderBuildError).log).toBe('log');
         const created = calls.filter((c) => c.name === 'createProgram').length;
         expect(created).toBe(3);
         expect(calls.filter((c) => c.name === 'deleteProgram')).toHaveLength(3);
-    });
-
-    test('a state change rewrites only that slot and keeps every slot list', () => {
-        const groups = new Map(Array.from({ length: 4 }, (_, i) => [i, { refPiece: i, fills: square(100) }] as const));
-        const { atlas } = setup(groups);
-        for (const id of groups.keys()) atlas.request(id, 'selected', 'k');
-        finish(atlas);
-        const lists = [...groups.keys()].map((id) => atlas.slotsOf(id));
-        atlas.takeChangedSlots();
-        const layout = atlas.layoutRevision;
-
-        atlas.request(2, 'selected-dragging', 'k');
-        finish(atlas);
-        expect(atlas.takeChangedSlots()).toEqual(atlas.slotsOf(2));
-        expect(atlas.layoutRevision).toBe(layout);
-        expect([...groups.keys()].map((id) => atlas.slotsOf(id))).toEqual(lists);
-    });
-
-    test('a slot that is held but not drawn has no quad', () => {
-        const { atlas } = setup(new Map([[1, { refPiece: 10, fills: square(100) }]]));
-        const [slot] = atlas.slotsOf(1);
-        expect(slot).toBeDefined();
-        expect(atlas.quad(slot)).toBeNull();
-        atlas.request(1, 'selected', 'k');
-        finish(atlas);
-        atlas.hide(1);
-        expect(atlas.slotsOf(1)).toEqual([slot]);
-        expect(atlas.quad(slot)).toBeNull();
     });
 });

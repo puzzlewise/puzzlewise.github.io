@@ -4,7 +4,7 @@ import type { Edge, Piece, Point } from '../../model/types.js';
 import { makeRectPiece } from '../../test-helpers/fixtures.js';
 import { GeometryStore } from './geometry-store.js';
 import { buildPieceFill, buildPieceStrokes } from './piece-mesh.js';
-import { KIND_FILL, KIND_FRINGE, KIND_STROKE, MAIN_ATTRIBUTES, MAIN_VERTEX_FLOATS } from './shaders.js';
+import { KIND_FILL, KIND_FRINGE, KIND_HALO, KIND_STROKE, MAIN_ATTRIBUTES, MAIN_VERTEX_FLOATS } from './shaders.js';
 import { buildStrokeMesh, type StrokeMesh } from './stroke-mesh.js';
 
 function vertexCount(store: GeometryStore): number {
@@ -247,3 +247,31 @@ function polygonPiece(...loops: Point[][]): Piece {
         bounds: { minX: 0, minY: 0, maxX: 100, maxY: 100 },
     };
 }
+
+describe('GeometryStore halo quads', () => {
+    test('take the first vertices, before any fill', () => {
+        const { pieces, meshes } = twoPieces();
+        const store = new GeometryStore(pieces, (id) => id, 3);
+        store.addFill(meshes[0]);
+        expect(Math.min(...store.fillIndices(0)!)).toBe(12);
+
+        store.writeHalo(2, { refSlot: 7, x0: -5, y0: -6, x1: 50, y1: 60, u0: 0.1, v0: 0.2, u1: 0.3, v1: 0.4, layer: 1 });
+        expect(Array.from(store.haloIndices(2))).toEqual([8, 9, 10, 8, 10, 11]);
+        expect([8, 9, 10, 11].map((i) => vertex(store, i))).toEqual([
+            [-5, -6, 0.1, 0.2], [50, -6, 0.3, 0.2], [50, 60, 0.3, 0.4], [-5, 60, 0.1, 0.4],
+        ].map(([x, y, u, v]) => ({
+            position: [x, y],
+            normal: [1, 0],
+            side: [0],
+            imagePosition: [expect.closeTo(u, 6), expect.closeTo(v, 6)],
+            slot: [7],
+            kind: [KIND_HALO],
+        })));
+        expect(store.haloVertices(2)).toEqual(store.vertices().subarray(8 * MAIN_VERTEX_FLOATS, 12 * MAIN_VERTEX_FLOATS));
+        expect(store.haloIndices(2)).toBe(store.haloIndices(2));
+
+        store.writeHalo(2, null);
+        const positions = [8, 9, 10, 11].map((i) => vertex(store, i).position);
+        expect(new Set(positions.map((p) => p.join()))).toEqual(new Set(['0,0']));
+    });
+});
