@@ -1,12 +1,22 @@
 import type { Point } from '../../model/types.js';
 
+export interface IndexRange {
+    offset: number;
+    count: number;
+}
+
 export interface StrokeMesh {
     centers: Float32Array;
     /** Longer than unit at mitred joints (1 / cos(turn / 2)); the shader must not normalize them. */
     normals: Float32Array;
     sides: Float32Array;
     indices: Uint32Array;
+    /** Ranges of `indices`; empty for a closed stroke. */
+    startCap: IndexRange;
+    endCap: IndexRange;
 }
+
+const NO_CAP: IndexRange = { offset: 0, count: 0 };
 
 const FAN_STEP = Math.PI / 12;
 // Below this turn a miter overshoots the round join by under 0.9% of the half-width.
@@ -45,6 +55,10 @@ class MeshBuilder {
         this.indices.push(a, b, c);
     }
 
+    indexCount(): number {
+        return this.indices.length;
+    }
+
     fan(cx: number, cy: number, start: number, sweep: number, side: -1 | 1): void {
         const steps = Math.max(1, Math.ceil(Math.abs(sweep) / FAN_STEP));
         const hub = this.hub(cx, cy);
@@ -57,12 +71,14 @@ class MeshBuilder {
         }
     }
 
-    build(): StrokeMesh {
+    build(startCap = NO_CAP, endCap = NO_CAP): StrokeMesh {
         return {
             centers: new Float32Array(this.centers),
             normals: new Float32Array(this.normals),
             sides: new Float32Array(this.sides),
             indices: new Uint32Array(this.indices),
+            startCap,
+            endCap,
         };
     }
 }
@@ -186,14 +202,12 @@ export function buildStrokeMesh(
         builder.fan(points[i].x, points[i].y, start, turn, side);
     }
 
-    if (!closed) {
-        const first = points[0];
-        const last = points[count - 1];
-        addCap(builder, first, -dirs[0][0], -dirs[0][1], -interiorSide as -1 | 1);
-        addCap(builder, last, dirs[segmentCount - 1][0], dirs[segmentCount - 1][1], interiorSide);
-    }
-
-    return builder.build();
+    if (closed) return builder.build();
+    const [startX, startY] = dirs[0];
+    const [endX, endY] = dirs[segmentCount - 1];
+    const startCap = addCap(builder, points[0], -startX, -startY, -interiorSide as -1 | 1);
+    const endCap = addCap(builder, points[count - 1], endX, endY, interiorSide);
+    return builder.build(startCap, endCap);
 }
 
 // A cap is a half-turn fan pointing along the outward tangent (tx, ty);
@@ -205,9 +219,11 @@ function addCap(
     tx: number,
     ty: number,
     interiorSide: 1 | -1,
-): void {
+): IndexRange {
+    const offset = builder.indexCount();
     const tip = Math.atan2(ty, tx);
     const quarter = interiorSide * (Math.PI / 2);
     builder.fan(p.x, p.y, tip - quarter, quarter, 1);
     builder.fan(p.x, p.y, tip, quarter, -1);
+    return { offset, count: builder.indexCount() - offset };
 }

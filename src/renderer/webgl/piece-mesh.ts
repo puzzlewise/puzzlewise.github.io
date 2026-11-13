@@ -12,6 +12,7 @@ export interface PieceMesh {
     /** For hit-testing, even-odd. */
     loops: Point[][];
     bounds: PieceBounds;
+    /** Outlines of one loop are contiguous, in boundary order. */
     edgeOutlines: EdgeOutline[];
     tolerance: number;
 }
@@ -20,6 +21,7 @@ export interface EdgeOutline {
     edgeId: number;
     polyline: Point[];
     interiorSide: 1 | -1;
+    loop: number;
 }
 
 interface EdgeLoop {
@@ -170,7 +172,7 @@ export function buildPieceFill(piece: Piece, tolerance: number): PieceMesh {
         // a hole's piece interior is outside its loop.
         const interiorSide = counterClockwise !== isHole ? 1 : -1;
         loop.edges.forEach((edge, k) => {
-            edgeOutlines.push({ edgeId: edge.id, polyline: loop.polylines[k], interiorSide });
+            edgeOutlines.push({ edgeId: edge.id, polyline: loop.polylines[k], interiorSide, loop: i });
         });
     });
 

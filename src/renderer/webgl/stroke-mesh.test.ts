@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'vitest';
-import { buildStrokeMesh, simplifyPolyline, type StrokeMesh } from './stroke-mesh.js';
+import { buildStrokeMesh, type IndexRange, simplifyPolyline, type StrokeMesh } from './stroke-mesh.js';
 import type { Point } from '../../model/types.js';
 
 const SIMPLIFY = 0.0125;
@@ -149,6 +149,27 @@ describe('buildStrokeMesh', () => {
         for (const v of vertices(triangle)) {
             expect(Math.hypot(v.nx, v.ny)).toBeCloseTo(1, 5);
         }
+    });
+
+    test('the cap ranges hold exactly the fans around the first and last points', () => {
+        const mesh = buildStrokeMesh([{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }], false, 1);
+        const hubs = (indices: Uint32Array) => new Set(Array.from(indices)
+            .filter((v) => mesh.sides[v] === 0)
+            .map((v) => `${mesh.centers[2 * v]},${mesh.centers[2 * v + 1]}`));
+        const within = (i: number, r: IndexRange) => i >= r.offset && i < r.offset + r.count;
+        const range = (r: IndexRange) => mesh.indices.filter((_, i) => within(i, r));
+        const rest = mesh.indices.filter((_, i) => !within(i, mesh.startCap) && !within(i, mesh.endCap));
+
+        expect(hubs(range(mesh.startCap))).toEqual(new Set(['0,0']));
+        expect(hubs(range(mesh.endCap))).toEqual(new Set(['10,10']));
+        expect(hubs(rest)).toEqual(new Set(['10,0']));
+    });
+
+    test('a closed stroke has no caps', () => {
+        const mesh = buildStrokeMesh([{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 5, y: 8 }], true, 1);
+
+        expect(mesh.startCap.count).toBe(0);
+        expect(mesh.endCap.count).toBe(0);
     });
 
     test('a gently curving 95-point polyline mitres every joint and simplifies to a fraction of the vertices', () => {
