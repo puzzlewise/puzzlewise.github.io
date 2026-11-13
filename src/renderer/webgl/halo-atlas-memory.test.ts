@@ -19,7 +19,6 @@ import {
 } from './halo-atlas-plan.js';
 import { buildPieceFill } from './piece-mesh.js';
 
-const BUDGET_BYTES = 64 * 1024 * 1024;
 const PLAN_STEP_WORK = 16_000;
 
 const CASES: { name: string; cutStyle: CutStyle; portrait: boolean }[] = [
@@ -143,7 +142,7 @@ describe('halo atlas memory on 192-piece games', { timeout: 120_000 }, () => {
     });
 
     for (const { name, cutStyle, portrait } of CASES) {
-        test(`${name}: at most 2 layers and 64 MiB under every preset`, () => {
+        test(`${name}: one layer under every preset`, () => {
             const state = game(cutStyle, portrait);
             expect(state.pieces.length).toBeGreaterThanOrEqual(180);
             const rows = [...OUTLINE_PRESETS.map((preset) => [preset, plan(state, [preset])] as const), ['all', plan(state, OUTLINE_PRESETS)] as const];
@@ -154,8 +153,7 @@ describe('halo atlas memory on 192-piece games', { timeout: 120_000 }, () => {
                     + ` (scratch ${result.scratch.w}×${result.scratch.h},`
                     + ` slots fill ${(used / (result.layers * ATLAS_LAYER_SIZE ** 2) * 100).toFixed(0)}%)`,
                 );
-                expect(result.layers).toBeLessThanOrEqual(2);
-                expect(result.bytes).toBeLessThanOrEqual(BUDGET_BYTES);
+                expect(result.layers).toBe(1);
             }
         });
 

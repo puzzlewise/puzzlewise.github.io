@@ -20,7 +20,7 @@ import {
     silhouetteStroke,
     slotSize,
 } from './halo-atlas-plan.js';
-import { gaussianKernel, HALO_STATES, haloMargin, haloSteps, haloTexelsPerUnit } from './halo-recipe.js';
+import { gaussianKernel, HALO_STATES, haloMargin, haloSteps, type HaloStep, haloTexelsPerUnit } from './halo-recipe.js';
 
 const GLOW = [1, 0, 0, 1] as const;
 
@@ -65,10 +65,10 @@ describe('haloLayout', () => {
         const steps = haloSteps('selected', 'outline', GLOW);
         const layout = haloLayout({ minX: 10, minY: 20, maxX: 110, maxY: 70 }, steps);
         expect(layout.texelsPerUnit).toBe(0.25);
-        expect(layout.originX).toBe(10 - 132);
-        expect(layout.originY).toBe(20 - 132);
-        expect(layout.width).toBe(Math.ceil((100 + 264) * 0.25));
-        expect(layout.height).toBe(Math.ceil((50 + 264) * 0.25));
+        expect(layout.originX).toBe(10 - 88);
+        expect(layout.originY).toBe(20 - 88);
+        expect(layout.width).toBe(Math.ceil((100 + 176) * 0.25));
+        expect(layout.height).toBe(Math.ceil((50 + 176) * 0.25));
     });
 });
 
@@ -76,9 +76,9 @@ describe('slotSize', () => {
     test('is the largest state over every preset, plus gutters, aligned to 8', () => {
         const bounds = { minX: 0, minY: 0, maxX: 100, maxY: 40 };
         const size = slotSize(bounds);
-        // Shadow selected-dragging: 0.25 texel/unit, margin 3·(4+12+6+14+24).
-        expect(size.w).toBe(Math.ceil((Math.ceil((100 + 360) * 0.25) + 2 * ATLAS_GUTTER) / 8) * 8);
-        expect(size.h).toBe(Math.ceil((Math.ceil((40 + 360) * 0.25) + 2 * ATLAS_GUTTER) / 8) * 8);
+        // Outline selected-dragging: the stroke, then 0.25 texel/unit with a margin of 96.
+        expect(size.w).toBe(Math.ceil((Math.ceil((103 + 192) * 0.25) + 2 * ATLAS_GUTTER) / 8) * 8);
+        expect(size.h).toBe(Math.ceil((Math.ceil((43 + 192) * 0.25) + 2 * ATLAS_GUTTER) / 8) * 8);
     });
 
     test('a large group sizes for the Shadow idle halo at 0.375 texel per unit', () => {
@@ -110,19 +110,50 @@ describe('haloRegion', () => {
         expect(haloRegion({ width: 96, height: 1 })).toEqual({ w: 112, h: 24 });
     });
 
-    test('blur reach past the image plus a texel of edge antialiasing stays inside the gutter', () => {
+    test('past the margin the halo rounds to zero, and the region edge changes nothing inside it', () => {
         for (const outline of OUTLINE_PRESETS) {
             for (const state of HALO_STATES) {
                 const steps = haloSteps(state, outline, GLOW);
                 if (steps.length === 0) continue;
-                const texelsPerUnit = haloTexelsPerUnit(steps);
-                const radii = steps.map((step) => (gaussianKernel(step.sigma, texelsPerUnit).length - 1) / 2);
-                const reach = radii.reduce((a, b) => a + b, 0) - haloMargin(steps) * texelsPerUnit + 1;
-                expect(reach, `${outline} ${state}`).toBeLessThanOrEqual(ATLAS_GUTTER);
+                const margin = haloMargin(steps) * haloTexelsPerUnit(steps);
+                for (const edge of [100, 100.25, 100.5, 100.75]) {
+                    for (const across of ['x', 'y'] as const) {
+                        const label = `${outline} ${state} edge ${edge} across ${across}`;
+                        const open = edgeProfile(steps, edge, across, Infinity);
+                        const outside = open.slice(Math.floor(edge + margin));
+                        expect(Math.max(...outside), label).toBeLessThan(0.5 / 255);
+                        const clipped = edgeProfile(steps, edge, across, Math.ceil(edge + margin) + ATLAS_GUTTER);
+                        expect(clipped, label).toEqual(open);
+                    }
+                }
             }
         }
     });
 });
+
+/**
+ * The halo alpha per texel across a straight silhouette edge at `edge`, as the
+ * build computes it: the blur pass stored in R8 and each step blended into
+ * RGBA8. `across` is the pass that crosses the edge; the other one sees a
+ * constant. Texels from `end` on lie outside the build region and read as zero.
+ */
+function edgeProfile(steps: readonly HaloStep[], edge: number, across: 'x' | 'y', end: number): Float64Array {
+    const q8 = (v: number) => Math.round(v * 255) / 255;
+    const n = Math.ceil(edge) + 200;
+    const read = (values: Float64Array, i: number) => (i < 0 || i >= Math.min(n, end) ? 0 : values[i]);
+    const silhouette = new Float64Array(n).map((_, i) => (i + 0.5 < edge ? 1 : Math.max(0, 0.5 - (i + 0.5 - edge))));
+    let halo = new Float64Array(n);
+    for (const step of steps) {
+        const kernel = gaussianKernel(step.sigma, haloTexelsPerUnit(steps));
+        const radius = (kernel.length - 1) / 2;
+        const blur = (values: Float64Array, i: number) => kernel.reduce((sum, w, k) => sum + w * read(values, i + k - radius), 0);
+        const composite = silhouette.map((s, i) => s + read(halo, i) * (1 - s));
+        const pass = composite.map((_, i) => q8(across === 'x' ? blur(composite, i) : read(composite, i)));
+        const covered = across === 'x' ? pass : pass.map((_, i) => blur(pass, i));
+        halo = halo.map((a, i) => (i >= end ? 0 : q8(a + (1 - a) * step.alpha * covered[i])));
+    }
+    return halo;
+}
 
 describe('ShelfPacker', () => {
     test('allocates disjoint rects and spills into the next layer', () => {

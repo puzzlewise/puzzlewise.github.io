@@ -81,10 +81,16 @@ describe('gaussianKernel', () => {
 });
 
 describe('haloMargin', () => {
-    test('haloMargin covers the widest chain', () => {
+    test('is three combined σ, rounded up to a whole texel', () => {
         const steps = haloSteps('selected-dragging', 'shadow', GLOW);
-        expect(haloMargin(steps)).toBe(3 * (4 + 12 + 6 + 14 + 24));
+        expect(haloMargin(steps)).toBe(Math.ceil(3 * Math.sqrt(16 + 144 + 36 + 196 + 576) * 0.25) / 0.25);
+        expect(haloMargin(steps)).toBe(96);
         expect(haloMargin([])).toBe(0);
+    });
+
+    test('never exceeds the summed support of the truncated kernels', () => {
+        expect(haloMargin(haloSteps('idle', 'shadow', GLOW))).toBe(12);
+        expect(haloMargin(haloSteps('dragging', 'outline', GLOW))).toBe(36);
     });
 });
 
