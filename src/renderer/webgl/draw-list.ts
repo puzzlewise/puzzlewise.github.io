@@ -1,10 +1,13 @@
 import type { RendererAppearance } from '../appearance.js';
-import type { GeometryStore } from './geometry-store.js';
+import type { GeometryStore, StrokeCopyKind } from './geometry-store.js';
+import { KIND_DEBUG_STROKE, KIND_MATELESS } from './shaders.js';
 
 export interface DrawPasses {
     strokesUnder: boolean;
     fringe: boolean;
     strokesOver: boolean;
+    debugStrokes: boolean;
+    mateless: boolean;
 }
 
 export interface DrawOrder {
@@ -17,13 +20,26 @@ export interface DrawOrder {
 export const OUTLINE_HALF_WIDTH = 1.5;
 
 /** The fringe is the only edge antialiasing without an outline; strokes and fringe share the stroke vertices. */
-export function drawPasses(appearance: Pick<RendererAppearance, 'outline' | 'innerOutline'>, strokesReady: boolean): DrawPasses {
+export function drawPasses(
+    appearance: Pick<RendererAppearance, 'outline' | 'innerOutline'>
+        & Partial<Pick<RendererAppearance, 'debugPieces' | 'matelessEdges'>>,
+    strokesReady: boolean,
+): DrawPasses {
     const outline = strokesReady && appearance.outline === 'outline';
     return {
         strokesUnder: outline && !appearance.innerOutline,
         fringe: strokesReady,
         strokesOver: outline && appearance.innerOutline,
+        debugStrokes: strokesReady && (appearance.debugPieces ?? false),
+        mateless: strokesReady && (appearance.matelessEdges ?? false),
     };
+}
+
+/** Returns whether vertices were added. */
+export function addDebugStrokes(store: GeometryStore, passes: DrawPasses): boolean {
+    const mateless = passes.mateless && store.addStrokeCopies(KIND_MATELESS);
+    const debug = passes.debugStrokes && store.addStrokeCopies(KIND_DEBUG_STROKE);
+    return mateless || debug;
 }
 
 function outerEdgesOf(order: DrawOrder, store: GeometryStore, groupId: number, out: number[]): number[] {
@@ -93,6 +109,14 @@ export function assembleIndices(
         if (keepCap(corners?.startConvex, corners?.prev)) result.push(parts.startCap);
         if (keepCap(corners?.endConvex, corners?.next)) result.push(parts.endCap);
     };
+    const pushCopies = (kind: StrokeCopyKind, layout: readonly { id: number }[]): void => {
+        for (const { id } of layout) {
+            for (const edgeId of store.edgesOf(id)) {
+                const copy = store.strokeCopy(kind, edgeId);
+                if (copy) result.push(copy);
+            }
+        }
+    };
     const needsEdges = passes.strokesUnder || passes.fringe || passes.strokesOver;
 
     for (const groupId of order.orderedGroupIds()) {
@@ -113,6 +137,8 @@ export function assembleIndices(
                 if (fringe) result.push(fringe);
             }
         }
+        if (passes.debugStrokes) pushCopies(KIND_DEBUG_STROKE, layout);
+        if (passes.mateless) pushCopies(KIND_MATELESS, layout);
         if (passes.strokesOver) {
             for (const edgeId of outerEdges) pushInnerStroke(edgeId);
         }
