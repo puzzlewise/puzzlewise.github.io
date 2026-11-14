@@ -4,7 +4,16 @@ import type { Edge, Piece, Point } from '../../model/types.js';
 import { makeRectPiece } from '../../test-helpers/fixtures.js';
 import { GeometryStore } from './geometry-store.js';
 import { buildPieceFill, buildPieceStrokes } from './piece-mesh.js';
-import { KIND_FILL, KIND_FRINGE, KIND_HALO, KIND_STROKE, MAIN_ATTRIBUTES, MAIN_VERTEX_FLOATS } from './shaders.js';
+import {
+    KIND_DEBUG_STROKE,
+    KIND_FILL,
+    KIND_FRINGE,
+    KIND_HALO,
+    KIND_MATELESS,
+    KIND_STROKE,
+    MAIN_ATTRIBUTES,
+    MAIN_VERTEX_FLOATS,
+} from './shaders.js';
 import { buildStrokeMesh, type StrokeMesh } from './stroke-mesh.js';
 
 function vertexCount(store: GeometryStore): number {
@@ -230,6 +239,75 @@ describe('GeometryStore', () => {
 
         expect(store.cornersOf(3)).toEqual({ prev: 2, next: 0, startConvex: true, endConvex: true });
         expect(store.cornersOf(4)).toEqual({ prev: 7, next: 5, startConvex: false, endConvex: false });
+    });
+});
+
+describe('GeometryStore debug stroke copies', () => {
+    // Piece 0's right edge (1) mates piece 1's left edge (7).
+    function matedStore(stroked: number[] = [0, 1]) {
+        const { pieces, meshes } = twoPieces();
+        Object.assign(pieces[0].edges[1], { matePieceId: 1, mateEdgeId: 7 });
+        Object.assign(pieces[1].edges[3], { matePieceId: 0, mateEdgeId: 1 });
+        const store = new GeometryStore(pieces, (id) => id);
+        for (const mesh of meshes) store.addFill(mesh);
+        for (const i of stroked) store.addStrokes(meshes[i], buildPieceStrokes(meshes[i]));
+        return store;
+    }
+    const whole = (store: GeometryStore, edgeId: number) => {
+        const { band, startCap, endCap } = store.strokeParts(edgeId)!;
+        return [...band, ...startCap, ...endCap];
+    };
+    const attributes = (store: GeometryStore, indices: Iterable<number>) =>
+        [...indices].map((i) => {
+            const { kind: _kind, ...rest } = vertex(store, i);
+            return rest;
+        });
+
+    test('mateless copies cover only edges without a mate, with the stroke vertices under the mateless kind', () => {
+        const store = matedStore();
+        const before = vertexCount(store);
+
+        expect(store.addStrokeCopies(KIND_MATELESS)).toBe(true);
+
+        expect(vertexCount(store)).toBeGreaterThan(before);
+        expect(store.strokeCopy(KIND_MATELESS, 1)).toBeUndefined();
+        expect(store.strokeCopy(KIND_MATELESS, 7)).toBeUndefined();
+        for (const edgeId of [0, 2, 3, 4, 5, 6]) {
+            const copy = store.strokeCopy(KIND_MATELESS, edgeId)!;
+            expect(Math.min(...copy)).toBeGreaterThanOrEqual(before);
+            expect(new Set([...copy].map((i) => vertex(store, i).kind[0]))).toEqual(new Set([KIND_MATELESS]));
+            expect(attributes(store, copy)).toEqual(attributes(store, whole(store, edgeId)));
+        }
+    });
+
+    test('debug copies cover every edge', () => {
+        const store = matedStore();
+
+        expect(store.addStrokeCopies(KIND_DEBUG_STROKE)).toBe(true);
+
+        for (let edgeId = 0; edgeId < 8; edgeId++) {
+            const copy = store.strokeCopy(KIND_DEBUG_STROKE, edgeId)!;
+            expect(vertex(store, copy[0]).kind).toEqual([KIND_DEBUG_STROKE]);
+            expect(attributes(store, copy)).toEqual(attributes(store, whole(store, edgeId)));
+        }
+    });
+
+    test('copies are made once', () => {
+        const store = matedStore();
+        store.addStrokeCopies(KIND_MATELESS);
+        const count = vertexCount(store);
+
+        expect(store.addStrokeCopies(KIND_MATELESS)).toBe(false);
+        expect(vertexCount(store)).toBe(count);
+    });
+
+    test('no copies before every piece has strokes', () => {
+        const store = matedStore([0]);
+        const count = vertexCount(store);
+
+        expect(store.addStrokeCopies(KIND_DEBUG_STROKE)).toBe(false);
+        expect(vertexCount(store)).toBe(count);
+        expect(store.strokeCopy(KIND_DEBUG_STROKE, 0)).toBeUndefined();
     });
 });
 
