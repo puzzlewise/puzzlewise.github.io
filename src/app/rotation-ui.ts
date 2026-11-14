@@ -4,6 +4,7 @@ import type { Renderer } from '../renderer/index.js';
 import type { ViewportTransform, RotationFocus } from '../interaction/index.js';
 import type { SelectionManager } from '../interaction/selection-manager.js';
 import { createRotateButtons, createRotateHandle } from '../ui/index.js';
+import { createFrameCoalescer } from '../interaction/frame-coalescer.js';
 import { SnapProximityPositionController } from '../interaction/snap-proximity-position-controller.js';
 import { rotateGroup } from '../game/rotate-group.js';
 import { pickManualRotationPivot } from '../game/rotation-pivot.js';
@@ -100,6 +101,16 @@ export function createRotationUi(deps: {
     // the wrong group.
     let manualPivot: { groupId: number; pivotLocal: Point } | null = null;
 
+    const handleRender = createFrameCoalescer(() => {
+        const state = getState();
+        if (!state) return;
+        renderer.renderState(state);
+        // Re-apply selection visuals: renderState may recreate elements.
+        for (const selectedId of selectionManager.selectedGroupIds) {
+            renderer.setGroupSelected(selectedId, true);
+        }
+    });
+
     const rotateHandle = createRotateHandle({
         container,
         rotationFocus,
@@ -141,14 +152,11 @@ export function createRotationUi(deps: {
                 manualPivot?.groupId === groupId ? manualPivot.pivotLocal : undefined,
             );
             snapPosition.onGroupRotated();
-            renderer.renderState(state);
-            // Re-apply selection visuals: renderState may recreate elements.
-            for (const selectedId of selectionManager.selectedGroupIds) {
-                renderer.setGroupSelected(selectedId, true);
-            }
+            handleRender.schedule();
             // Don't autoSave on every drag tick — autoSave fires on commit.
         },
         onCommit: (groupId) => {
+            handleRender.flush();
             const state = getState();
             if (!state) return;
 
@@ -161,6 +169,7 @@ export function createRotationUi(deps: {
             save(state);
         },
         onRotateEnd: () => {
+            handleRender.flush();
             manualPivot = null;
             snapPosition.stop();
         },

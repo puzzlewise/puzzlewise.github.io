@@ -1694,7 +1694,8 @@ details.info-section[open] > .info-section-summary {
 /* Corrupt-save dialog (startup recovery prompt). z-index sits above the
    loading overlay (10003) so it is visible during boot. */
 .corrupt-save-overlay,
-.move-overlay {
+.move-overlay,
+.renderer-failure-overlay {
   position: fixed;
   inset: 0;
   display: flex;
@@ -1706,7 +1707,8 @@ details.info-section[open] > .info-section-summary {
 }
 
 .corrupt-save-dialog,
-.move-dialog {
+.move-dialog,
+.renderer-failure-dialog {
   background: var(--ui-surface);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 16px;
@@ -1727,15 +1729,26 @@ details.info-section[open] > .info-section-summary {
 }
 
 .corrupt-save-body,
-.move-body {
+.move-body,
+.renderer-failure-body {
   font-size: 0.875rem;
   line-height: 1.5;
   opacity: 0.85;
   margin: 0 0 20px;
 }
 
+/* Under the update indicator (10002): a locked-out player can still take an update. */
+.renderer-failure-overlay {
+  z-index: 10001;
+}
+
+.renderer-failure-body:last-child {
+  margin-bottom: 0;
+}
+
 .corrupt-save-buttons,
-.move-buttons {
+.move-buttons,
+.renderer-failure-buttons {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
@@ -1743,7 +1756,8 @@ details.info-section[open] > .info-section-summary {
 }
 
 .corrupt-save-btn,
-.move-btn {
+.move-btn,
+.renderer-failure-btn {
   padding: 10px 16px;
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 10px;
@@ -1756,7 +1770,8 @@ details.info-section[open] > .info-section-summary {
 }
 
 .corrupt-save-btn:hover,
-.move-btn:hover {
+.move-btn:hover,
+.renderer-failure-btn:hover {
   background: rgba(255, 255, 255, 0.18);
   border-color: rgba(255, 255, 255, 0.35);
 }
@@ -1767,14 +1782,16 @@ details.info-section[open] > .info-section-summary {
 }
 
 .corrupt-save-btn--primary,
-.move-btn--primary {
+.move-btn--primary,
+.renderer-failure-btn--primary {
   background: color-mix(in srgb, var(--ui-accent) 22%, transparent);
   border-color: color-mix(in srgb, var(--ui-accent) 45%, transparent);
   color: #fff;
 }
 
 .corrupt-save-btn--primary:hover,
-.move-btn--primary:hover {
+.move-btn--primary:hover,
+.renderer-failure-btn--primary:hover {
   background: color-mix(in srgb, var(--ui-accent) 32%, transparent);
   border-color: color-mix(in srgb, var(--ui-accent) 60%, transparent);
 }

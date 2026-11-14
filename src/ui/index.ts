@@ -67,6 +67,9 @@ export {
 } from './corrupt-save-dialog.js';
 export type { CorruptSaveDialogOptions } from './corrupt-save-dialog.js';
 
+export { showRendererFailure } from './renderer-failure.js';
+export type { RendererFailureKind } from './renderer-failure.js';
+
 export {
     BACKGROUND_COLOR_PRESETS,
     DEFAULT_COLOR_ID,

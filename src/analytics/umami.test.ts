@@ -439,6 +439,27 @@ describe('track', () => {
         });
     });
 
+    it('forwards renderer-failed with the typed payload', () => {
+        const umamiTrack = vi.fn();
+        (window as unknown as { umami: { track: typeof umamiTrack } }).umami = { track: umamiTrack };
+
+        track('renderer-failed', { kind: 'shader' });
+
+        expect(umamiTrack).toHaveBeenCalledWith('renderer-failed', { kind: 'shader' });
+    });
+
+    it('forwards renderer-context-lost with the typed payload', () => {
+        const umamiTrack = vi.fn();
+        (window as unknown as { umami: { track: typeof umamiTrack } }).umami = { track: umamiTrack };
+
+        track('renderer-context-lost', { pieceCount: 192, visibilityState: 'hidden' });
+
+        expect(umamiTrack).toHaveBeenCalledWith('renderer-context-lost', {
+            pieceCount: 192,
+            visibilityState: 'hidden',
+        });
+    });
+
     it('forwards share-failed with source and reason', () => {
         const umamiTrack = vi.fn();
         (window as unknown as { umami: { track: typeof umamiTrack } }).umami = { track: umamiTrack };
