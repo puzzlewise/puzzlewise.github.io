@@ -4,6 +4,12 @@ export const KIND_FILL = 0;
 export const KIND_STROKE = 1;
 export const KIND_HALO = 2;
 export const KIND_FRINGE = 3;
+export const KIND_MATELESS = 4;
+export const KIND_DEBUG_STROKE = 5;
+
+const MATELESS_HALF_WIDTH = 1;
+const DEBUG_STROKE_HALF_WIDTH = 0.5;
+const MATELESS_COLOR = 'vec4(1.0, 105.0 / 255.0, 180.0 / 255.0, 1.0)';
 
 export interface VertexAttribute {
     readonly name: string;
@@ -45,6 +51,7 @@ export const MAIN_UNIFORMS = {
     halfWidth: 'u_halfWidth',
     constantWidth: 'u_constantWidth',
     innerOnly: 'u_innerOnly',
+    debugPieces: 'u_debugPieces',
     halo: 'u_halo',
 } as const;
 
@@ -107,6 +114,10 @@ void main() {
         extent = halfWidth + 0.5 * worldPerPixel;
     } else if (kind == ${KIND_FRINGE}) {
         extent = worldPerPixel;
+    } else if (kind == ${KIND_MATELESS}) {
+        extent = ${MATELESS_HALF_WIDTH.toFixed(1)} + 0.5 * worldPerPixel;
+    } else if (kind == ${KIND_DEBUG_STROKE}) {
+        extent = ${DEBUG_STROKE_HALF_WIDTH.toFixed(1)} + 0.5 * worldPerPixel;
     }
     vec2 offset = ${a.normal.name} * (${a.side.name} * extent);
     vec2 local = ${a.position.name} + offset;
@@ -141,6 +152,7 @@ uniform float ${u.pixelRatio};
 uniform float ${u.halfWidth};
 uniform bool ${u.constantWidth};
 uniform bool ${u.innerOnly};
+uniform bool ${u.debugPieces};
 
 in vec2 v_imagePosition;
 in float v_distance;
@@ -155,6 +167,15 @@ vec4 photo(vec2 imagePosition) {
     return texture(${u.photo}, clamp(uv, 0.0, 1.0));
 }
 
+vec4 pieceColor(vec2 imagePosition) {
+    return ${u.debugPieces} ? vec4(1.0) : photo(imagePosition) * ${u.pieceOpacity};
+}
+
+float centeredCoverage(float halfWidthWorld) {
+    float halfWidth = halfWidthWorld * ${u.scale} * ${u.pixelRatio};
+    return clamp(min(v_distance + 0.5, halfWidth) - max(v_distance - 0.5, -halfWidth), 0.0, 1.0);
+}
+
 vec4 outline() {
     return vec4(${u.outlineColor}.rgb * ${u.outlineColor}.a, ${u.outlineColor}.a);
 }
@@ -162,7 +183,7 @@ vec4 outline() {
 void main() {
     int kind = int(v_kind + 0.5);
     if (kind == ${KIND_FILL}) {
-        fragColor = photo(v_imagePosition) * ${u.pieceOpacity};
+        fragColor = pieceColor(v_imagePosition);
     } else if (kind == ${KIND_STROKE}) {
         if (${u.innerOnly} && v_distance > 0.0) discard;
         float halfWidth = (${u.constantWidth} ? ${u.halfWidth} : ${u.halfWidth} * ${u.scale}) * ${u.pixelRatio};
@@ -170,11 +191,15 @@ void main() {
         float coverage = clamp(far - max(v_distance - 0.5, -halfWidth), 0.0, 1.0);
         fragColor = outline() * coverage;
     } else if (kind == ${KIND_FRINGE}) {
-        vec4 color = ${u.innerOnly} ? outline() : photo(v_imagePosition) * ${u.pieceOpacity};
+        vec4 color = ${u.innerOnly} ? outline() : pieceColor(v_imagePosition);
         if (v_distance < 0.0) discard;
         fragColor = color * clamp(0.5 - v_distance, 0.0, 1.0);
     } else if (kind == ${KIND_HALO}) {
         fragColor = texture(${u.halo}, vec3(v_imagePosition, v_layer));
+    } else if (kind == ${KIND_MATELESS}) {
+        fragColor = ${MATELESS_COLOR} * centeredCoverage(${MATELESS_HALF_WIDTH.toFixed(1)});
+    } else if (kind == ${KIND_DEBUG_STROKE}) {
+        fragColor = vec4(0.0, 0.0, 0.0, 1.0) * centeredCoverage(${DEBUG_STROKE_HALF_WIDTH.toFixed(1)});
     } else {
         discard;
     }

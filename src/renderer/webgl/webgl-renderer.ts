@@ -2,7 +2,8 @@ import type { GameState, Point, Size } from '../../model/types.js';
 import type { RendererAppearance } from '../appearance.js';
 import type { Renderer } from '../types.js';
 import { TransitionController, type ViewportValue } from './animation.js';
-import { assembleIndices, drawPasses, OUTLINE_HALF_WIDTH, silhouetteIndices } from './draw-list.js';
+import { createDebugOverlay, type DebugOverlay } from './debug-overlay.js';
+import { addDebugStrokes, assembleIndices, drawPasses, OUTLINE_HALF_WIDTH, silhouetteIndices } from './draw-list.js';
 import { GeometryStore } from './geometry-store.js';
 import {
     type AtlasPlan,
@@ -139,6 +140,7 @@ export class WebGlRenderer implements Renderer {
     private indexScratch: Uint32Array | undefined;
     private halosUnavailable = false;
     private cancelHaloCompile: (() => void) | null = null;
+    private debugOverlay: DebugOverlay | null = null;
     private readonly photos = new PhotoLoader((image) => this.setPhoto(image));
     private readonly transitions = new TransitionController({
         viewport: (value) => {
@@ -257,6 +259,7 @@ export class WebGlRenderer implements Renderer {
 
     setAppearance(appearance: RendererAppearance): void {
         const dirt = appearanceDirt(this.appearance, appearance);
+        if (appearance.debugPieces !== this.appearance.debugPieces) this.debugOverlay?.setVisible(appearance.debugPieces);
         this.appearance = appearance;
         this.markDirty(dirt);
     }
@@ -297,6 +300,8 @@ export class WebGlRenderer implements Renderer {
         this.deleteResources();
         this.gl?.getExtension('WEBGL_lose_context')?.loseContext();
         this.contextLoss.dispose();
+        this.debugOverlay?.destroy();
+        this.debugOverlay = null;
         this.table?.remove();
         this.table = null;
         this.canvas = null;
@@ -392,6 +397,10 @@ export class WebGlRenderer implements Renderer {
         }
         this.upload(gl, res, inFrame);
         this.draw(gl, res);
+        if (this.appearance.debugPieces && game && this.table) {
+            this.debugOverlay ??= createDebugOverlay(this.table);
+            this.debugOverlay.update(game.scene, this.viewport);
+        }
         this.dirty = { ...NO_DIRT };
         if (res.halos?.pending) this.frames.drawNextFrame();
     }
@@ -534,6 +543,9 @@ export class WebGlRenderer implements Renderer {
         const game = this.game;
         const dirty = this.dirty;
         if (!game) return;
+        if (dirty.indices && addDebugStrokes(game.store, drawPasses(this.appearance, game.strokesReady))) {
+            dirty.vertices = true;
+        }
         if (dirty.vertices) {
             gl.bindBuffer(gl.ARRAY_BUFFER, res.vertexBuffer);
             gl.bufferData(gl.ARRAY_BUFFER, game.store.vertices(), gl.STATIC_DRAW);
@@ -757,6 +769,7 @@ export class WebGlRenderer implements Renderer {
         gl.uniform1f(u.halfWidth, OUTLINE_HALF_WIDTH);
         gl.uniform1i(u.constantWidth, appearance.constantWidth ? 1 : 0);
         gl.uniform1i(u.innerOnly, drawPasses(appearance, game.strokesReady).strokesOver ? 1 : 0);
+        gl.uniform1i(u.debugPieces, appearance.debugPieces ? 1 : 0);
 
         gl.bindVertexArray(res.vao);
         gl.drawElements(gl.TRIANGLES, res.indexCount, gl.UNSIGNED_INT, 0);

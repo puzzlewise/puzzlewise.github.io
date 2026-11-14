@@ -1,7 +1,16 @@
 import type { Piece, Point } from '../../model/types.js';
 import { CHAIN_EPSILON } from '../../model/build-shape.js';
 import type { EdgeOutline, PieceMesh } from './piece-mesh.js';
-import { KIND_FILL, KIND_FRINGE, KIND_HALO, KIND_STROKE, MAIN_ATTRIBUTES, MAIN_VERTEX_FLOATS } from './shaders.js';
+import {
+    KIND_DEBUG_STROKE,
+    KIND_FILL,
+    KIND_FRINGE,
+    KIND_HALO,
+    KIND_MATELESS,
+    KIND_STROKE,
+    MAIN_ATTRIBUTES,
+    MAIN_VERTEX_FLOATS,
+} from './shaders.js';
 import type { IndexRange, StrokeMesh } from './stroke-mesh.js';
 
 const INITIAL_VERTICES = 4096;
@@ -33,6 +42,8 @@ export interface HaloQuad {
     layer: number;
 }
 
+export type StrokeCopyKind = typeof KIND_MATELESS | typeof KIND_DEBUG_STROKE;
+
 export interface EdgeCorners {
     prev: number;
     next: number;
@@ -51,6 +62,9 @@ export class GeometryStore {
     private readonly parts = new Map<number, StrokeParts>();
     private readonly corners = new Map<number, EdgeCorners>();
     private readonly stroked = new Set<number>();
+    private readonly strokeRanges = new Map<number, { base: number; count: number }>();
+    private readonly mateless = new Set<number>();
+    private readonly copies = new Map<StrokeCopyKind, Map<number, Uint32Array>>();
     private readonly haloIndexCache: Uint32Array[] = [];
 
     constructor(pieces: readonly Piece[], slotOf: (pieceId: number) => number | undefined, haloCapacity = 0) {
@@ -64,6 +78,9 @@ export class GeometryStore {
                 imageOffset: piece.imageOffset,
                 edgeIds: piece.edges.map((edge) => edge.id),
             });
+            for (const edge of piece.edges) {
+                if (edge.mateEdgeId === -1) this.mateless.add(edge.id);
+            }
         }
     }
 
@@ -143,12 +160,36 @@ export class GeometryStore {
         for (const [edgeId, stroke] of strokes) {
             const base = this.reserve(stroke.sides.length);
             for (let i = 0; i < stroke.sides.length; i++) this.writeStrokeVertex(base + i, info, stroke, i, KIND_STROKE);
+            this.strokeRanges.set(edgeId, { base, count: stroke.sides.length });
             this.parts.set(edgeId, splitCaps(stroke, offsetIndices(stroke.indices, base)));
             this.fringes.set(edgeId, this.addFringe(info, stroke));
         }
         for (const [edgeId, corners] of findCorners(mesh.edgeOutlines)) this.corners.set(edgeId, corners);
         this.stroked.add(mesh.pieceId);
         if (this.stroked.size === this.pieces.size) this.data = this.data.slice(0, this.count * MAIN_VERTEX_FLOATS);
+    }
+
+    strokeCopy(kind: StrokeCopyKind, edgeId: number): Uint32Array | undefined {
+        return this.copies.get(kind)?.get(edgeId);
+    }
+
+    /** A vertex's kind picks its look within the one draw call, so restyled strokes need their own vertices. */
+    addStrokeCopies(kind: StrokeCopyKind): boolean {
+        if (this.copies.has(kind) || this.stroked.size !== this.pieces.size) return false;
+        const edges = [...this.strokeRanges].filter(([edgeId]) => kind !== KIND_MATELESS || this.mateless.has(edgeId));
+        let base = this.reserve(edges.reduce((sum, [, range]) => sum + range.count, 0));
+        const copies = new Map<number, Uint32Array>();
+        const F = MAIN_VERTEX_FLOATS;
+        for (const [edgeId, range] of edges) {
+            this.data.copyWithin(base * F, range.base * F, (range.base + range.count) * F);
+            for (let i = 0; i < range.count; i++) this.data[(base + i) * F + A.kind.offset] = kind;
+            const { band, startCap, endCap } = this.parts.get(edgeId)!;
+            const shift = base - range.base;
+            copies.set(edgeId, Uint32Array.from([...band, ...startCap, ...endCap], (index) => index + shift));
+            base += range.count;
+        }
+        this.copies.set(kind, copies);
+        return edges.length > 0;
     }
 
     // The fringe only draws outside the edge, so triangles with no exterior

@@ -10,7 +10,7 @@ import { makeGameState, makeRectPiece } from '../../test-helpers/fixtures.js';
 import { CONTEXT_RESTORE_TIMEOUT_MS } from './context-loss.js';
 import { ShaderBuildError } from './gl-context.js';
 import { ATLAS_LAYER_SIZE, ATLAS_LEVELS, AtlasTooLargeError, ShelfPacker } from './halo-atlas-plan.js';
-import { KIND_HALO, MAIN_VERTEX_FLOATS, SILHOUETTE_FS } from './shaders.js';
+import { KIND_DEBUG_STROKE, KIND_HALO, KIND_MATELESS, MAIN_ATTRIBUTES, MAIN_VERTEX_FLOATS, SILHOUETTE_FS } from './shaders.js';
 import { WebGlRenderer, type WebGlRendererOptions } from './webgl-renderer.js';
 
 const FRAMEBUFFER = 0x8d40;
@@ -662,6 +662,127 @@ describe('WebGlRenderer', () => {
             runUntilIdle(host);
             expect(fake.calls.filter((c) => c.name === 'copyTexSubImage3D')).toHaveLength(1);
             expect(host.pendingFrames()).toBe(0);
+        });
+    });
+
+    describe('debug views', () => {
+        type Call = { name: string; frame: number; args: unknown[]; result?: unknown };
+        const DEBUG_APPEARANCE: RendererAppearance = {
+            outline: 'outline',
+            outlineColor: [0, 0, 0, 1],
+            constantWidth: false,
+            innerOutline: false,
+            selectionGlowColor: [1, 1, 1, 1],
+            backgroundColor: [0, 0, 0, 1],
+            pieceOpacity: 1,
+            debugPieces: false,
+            matelessEdges: false,
+        };
+        const runUntilIdle = (host: FakeFrameHost) => {
+            for (let i = 0; i < 50 && host.pendingFrames() > 0; i++) host.runFrame();
+        };
+        const lastUpload = <T extends Float32Array | Uint32Array>(calls: Call[], type: new () => T): T =>
+            calls.findLast((c) => c.name === 'bufferData' && c.args[1] instanceof type)!.args[1] as T;
+        const drawnKinds = (calls: Call[]): Set<number> => {
+            const vertices = lastUpload(calls, Float32Array);
+            const indices = lastUpload(calls, Uint32Array);
+            return new Set(Array.from(indices, (i) => vertices[i * MAIN_VERTEX_FLOATS + MAIN_ATTRIBUTES.kind.offset]));
+        };
+        const uploadedKinds = (calls: Call[]): Set<number> => {
+            const vertices = lastUpload(calls, Float32Array);
+            const kinds = new Set<number>();
+            for (let i = MAIN_ATTRIBUTES.kind.offset; i < vertices.length; i += MAIN_VERTEX_FLOATS) kinds.add(vertices[i]);
+            return kinds;
+        };
+        const debugUniform = (calls: Call[]): unknown => {
+            const location = calls.findLast((c) => c.name === 'getUniformLocation' && c.args[1] === 'u_debugPieces')!.result;
+            return calls.findLast((c) => c.name === 'uniform1i' && c.args[0] === location)?.args[1];
+        };
+
+        test('the mateless toggle adds and removes mateless strokes within the one draw call', () => {
+            const { host, fake, renderer } = setup();
+            renderer.setAppearance(DEBUG_APPEARANCE);
+            renderer.renderState(twoPieceGame());
+            runUntilIdle(host);
+            expect(drawnKinds(fake.calls).has(KIND_MATELESS)).toBe(false);
+
+            renderer.setAppearance({ ...DEBUG_APPEARANCE, matelessEdges: true });
+            runUntilIdle(host);
+            expect(drawnKinds(fake.calls).has(KIND_MATELESS)).toBe(true);
+            expect(drawnKinds(fake.calls).has(KIND_DEBUG_STROKE)).toBe(false);
+
+            renderer.setAppearance(DEBUG_APPEARANCE);
+            runUntilIdle(host);
+            expect(drawnKinds(fake.calls).has(KIND_MATELESS)).toBe(false);
+            const frames = fake.calls.filter((c) => c.name === 'drawElements').map((c) => c.frame);
+            expect(new Set(frames).size).toBe(frames.length);
+        });
+
+        test('debug pieces draws debug strokes and white fills, and shows the labels until switched off', () => {
+            const { host, fake, renderer, canvas } = setup();
+            renderer.setAppearance(DEBUG_APPEARANCE);
+            renderer.renderState(twoPieceGame());
+            runUntilIdle(host);
+            expect(debugUniform(fake.calls)).toBe(0);
+
+            renderer.setAppearance({ ...DEBUG_APPEARANCE, debugPieces: true });
+            runUntilIdle(host);
+            expect(drawnKinds(fake.calls).has(KIND_DEBUG_STROKE)).toBe(true);
+            expect(debugUniform(fake.calls)).toBe(1);
+            const table = canvas.parentElement!;
+            expect([...table.querySelectorAll('[data-piece-label]')].map((l) => l.textContent).sort()).toEqual(['0', '1']);
+
+            renderer.setAppearance(DEBUG_APPEARANCE);
+            runUntilIdle(host);
+            expect(drawnKinds(fake.calls).has(KIND_DEBUG_STROKE)).toBe(false);
+            expect(debugUniform(fake.calls)).toBe(0);
+            expect((table.querySelector('[data-debug-overlay]') as HTMLElement).style.display).toBe('none');
+        });
+
+        test('with both toggles off, no debug vertices, indices or overlay exist', () => {
+            const { host, fake, renderer, canvas } = setup();
+            renderer.setAppearance({ ...DEBUG_APPEARANCE, pieceOpacity: 0.5 });
+            renderer.renderState(twoPieceGame());
+            runUntilIdle(host);
+
+            const kinds = uploadedKinds(fake.calls);
+            expect(kinds.has(KIND_MATELESS) || kinds.has(KIND_DEBUG_STROKE)).toBe(false);
+            expect(canvas.parentElement!.querySelector('[data-debug-overlay]')).toBeNull();
+        });
+
+        test('debug strokes switched on before the strokes are built appear once they are', () => {
+            const idle: (() => void)[] = [];
+            const { host, fake, renderer } = setup({
+                runInIdle: (items, work) => {
+                    idle.push(() => items.forEach(work));
+                    return () => {};
+                },
+            });
+            renderer.setAppearance({ ...DEBUG_APPEARANCE, debugPieces: true, matelessEdges: true });
+            renderer.renderState(twoPieceGame());
+            runUntilIdle(host);
+            expect(drawnKinds(fake.calls).has(KIND_DEBUG_STROKE)).toBe(false);
+
+            for (const run of idle.splice(0)) run();
+            runUntilIdle(host);
+            const kinds = drawnKinds(fake.calls);
+            expect(kinds.has(KIND_DEBUG_STROKE) && kinds.has(KIND_MATELESS)).toBe(true);
+        });
+
+        test('a restored context re-uploads the debug strokes', () => {
+            const { host, fake, renderer, canvas } = setup();
+            renderer.setAppearance({ ...DEBUG_APPEARANCE, matelessEdges: true });
+            renderer.renderState(twoPieceGame());
+            runUntilIdle(host);
+
+            fake.state.lost = true;
+            canvas.dispatchEvent(new Event('webglcontextlost', { cancelable: true }));
+            fake.state.lost = false;
+            const start = fake.calls.length;
+            canvas.dispatchEvent(new Event('webglcontextrestored'));
+            runUntilIdle(host);
+
+            expect(drawnKinds(fake.calls.slice(start)).has(KIND_MATELESS)).toBe(true);
         });
     });
 });
