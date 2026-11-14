@@ -57,7 +57,7 @@ function sameValue(a: unknown, b: unknown): boolean {
 }
 
 function samePasses(a: DrawPasses, b: DrawPasses): boolean {
-    return a.strokesUnder === b.strokesUnder && a.fringe === b.fringe && a.strokesOver === b.strokesOver;
+    return (Object.keys(a) as (keyof DrawPasses)[]).every((key) => a[key] === b[key]);
 }
 
 export function appearanceDirt(prev: RendererAppearance, next: RendererAppearance): Dirt {

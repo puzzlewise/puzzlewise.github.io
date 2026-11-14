@@ -97,6 +97,13 @@ describe('appearanceDirt', () => {
         }
     });
 
+    test('the debug toggles rebuild the index buffer only', () => {
+        for (const change of [{ debugPieces: true }, { matelessEdges: true }]) {
+            expect(appearanceDirt(APPEARANCE, { ...APPEARANCE, ...change }))
+                .toEqual({ vertices: false, indices: true, transforms: false, halos: false, frame: true });
+        }
+    });
+
     test('the glow color rebuilds the halos only', () => {
         expect(appearanceDirt(APPEARANCE, { ...APPEARANCE, selectionGlowColor: [0, 1, 0, 1] }))
             .toEqual({ vertices: false, indices: false, transforms: false, halos: true, frame: true });
