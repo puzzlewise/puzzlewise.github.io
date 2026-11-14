@@ -68,6 +68,19 @@ describe('FrameScheduler', () => {
         expect(host.pendingFrames()).toBe(0);
     });
 
+    test('only a draw from an animation frame is told it is in a frame', () => {
+        const host = new FakeFrameHost();
+        const draws: boolean[] = [];
+        const scheduler = new FrameScheduler(host, { draw: (inFrame) => draws.push(inFrame), tick: () => false });
+        host.runTask(() => scheduler.drawAfterTask());
+        host.runTask(() => scheduler.drawNextFrame());
+        host.runFrame();
+        host.requestAnimationFrame(() => scheduler.drawAfterTask());
+        host.runFrame();
+
+        expect(draws).toEqual([false, true, false]);
+    });
+
     test('cancel stops a running animation', () => {
         const { host, draws, scheduler } = setup(10);
         host.runTask(() => scheduler.drawNextFrame());
