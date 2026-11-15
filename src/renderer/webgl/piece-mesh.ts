@@ -2,7 +2,13 @@ import earcut from 'earcut';
 import { CHAIN_EPSILON, edgePathD } from '../../model/build-shape.js';
 import type { Edge, Piece, PieceBounds, Point } from '../../model/types.js';
 import { flattenPath } from './path-flatten.js';
-import { buildStrokeMesh, simplifyPolyline, type StrokeMesh } from './stroke-mesh.js';
+import {
+    buildStrokeMesh,
+    type CornerDirections,
+    OUTLINE_HALF_WIDTH,
+    simplifyPolyline,
+    type StrokeMesh,
+} from './stroke-mesh.js';
 
 export interface PieceMesh {
     pieceId: number;
@@ -69,6 +75,7 @@ function distanceToLoop(loop: Point[], p: Point): number {
 const BOUNDARY_EPSILON = 1e-4;
 // Strokes only: fills keep every flattened point so mate seams stay bit-identical.
 const STROKE_SIMPLIFY_FRACTION = 0.25;
+const DIRECTION_EPSILON = 1e-9;
 
 // Sibling regions of a piece often touch along shared edges, so a vertex of
 // `inner` can lie on `outer`'s boundary; only a vertex clear of it is decisive.
@@ -189,10 +196,72 @@ export function buildPieceFill(piece: Piece, tolerance: number): PieceMesh {
 }
 
 export function buildPieceStrokes(mesh: PieceMesh): Map<number, StrokeMesh> {
+    const outlines = mesh.edgeOutlines;
+    const simplified = outlines.map(({ polyline }) => simplifyPolyline(polyline, mesh.tolerance * STROKE_SIMPLIFY_FRACTION));
+    const corners = outlines.map((_, k) => endCorner(outlines, k));
     const strokes = new Map<number, StrokeMesh>();
-    for (const { edgeId, polyline, interiorSide } of mesh.edgeOutlines) {
-        const simplified = simplifyPolyline(polyline, mesh.tolerance * STROKE_SIMPLIFY_FRACTION);
-        strokes.set(edgeId, buildStrokeMesh(simplified, false, interiorSide));
-    }
+    outlines.forEach(({ edgeId, interiorSide }, k) => {
+        const { prev, next } = loopNeighborIndices(outlines, k);
+        const start = corners[prev];
+        const end = corners[k];
+        strokes.set(edgeId, buildStrokeMesh(simplified[k], false, interiorSide, {
+            start: start?.convex ? {
+                own: start.neighbor,
+                neighbor: start.own,
+                neighborPath: [...outlines[prev].polyline].reverse(),
+                neighborInteriorSide: -outlines[prev].interiorSide as 1 | -1,
+            } : undefined,
+            end: end?.convex ? {
+                own: end.own,
+                neighbor: end.neighbor,
+                neighborPath: outlines[next].polyline,
+                neighborInteriorSide: outlines[next].interiorSide,
+            } : undefined,
+        }));
+    });
     return strokes;
+}
+
+export function loopNeighborIndices(outlines: readonly EdgeOutline[], k: number): { prev: number; next: number } {
+    const { loop } = outlines[k];
+    let first = k;
+    while (outlines[first - 1]?.loop === loop) first--;
+    let last = k;
+    while (outlines[last + 1]?.loop === loop) last++;
+    return { prev: k === first ? last : k - 1, next: k === last ? first : k + 1 };
+}
+
+export interface Corner extends CornerDirections {
+    convex: boolean;
+}
+
+/**
+ * The corner where outline `k` ends and the next outline of its loop starts; undefined
+ * when they do not meet or either side has no length. Its directions are chords a stroke
+ * width long, so a hook at an edge's end shorter than the stroke is wide does not decide it.
+ */
+export function endCorner(outlines: readonly EdgeOutline[], k: number): Corner | undefined {
+    const a = outlines[k];
+    const b = outlines[loopNeighborIndices(outlines, k).next];
+    const corner = a.polyline[a.polyline.length - 1];
+    const start = b.polyline[0];
+    if (!corner || !start || Math.abs(start.x - corner.x) >= CHAIN_EPSILON || Math.abs(start.y - corner.y) >= CHAIN_EPSILON) {
+        return undefined;
+    }
+    const own = chordDirection([...a.polyline].reverse(), corner);
+    const neighbor = chordDirection(b.polyline, corner);
+    if (!own || !neighbor) return undefined;
+    const convex = (neighbor.x * own.y - neighbor.y * own.x) * a.interiorSide > 0;
+    return { own, neighbor, convex };
+}
+
+function chordDirection(polyline: readonly Point[], from: Point): Point | undefined {
+    let to = from;
+    for (const p of polyline) {
+        to = p;
+        if (Math.hypot(p.x - from.x, p.y - from.y) >= OUTLINE_HALF_WIDTH) break;
+    }
+    const length = Math.hypot(to.x - from.x, to.y - from.y);
+    if (length <= DIRECTION_EPSILON) return undefined;
+    return { x: (to.x - from.x) / length, y: (to.y - from.y) / length };
 }

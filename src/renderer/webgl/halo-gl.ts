@@ -1,4 +1,4 @@
-import { OUTLINE_HALF_WIDTH } from './draw-list.js';
+import { OUTLINE_HALF_WIDTH } from './stroke-mesh.js';
 import { createProgram, ShaderBuildError } from './gl-context.js';
 import {
     ATLAS_GUTTER,

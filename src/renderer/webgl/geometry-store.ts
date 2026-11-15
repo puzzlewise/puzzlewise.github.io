@@ -1,6 +1,6 @@
 import type { Piece, Point } from '../../model/types.js';
 import { CHAIN_EPSILON } from '../../model/build-shape.js';
-import type { EdgeOutline, PieceMesh } from './piece-mesh.js';
+import { endCorner, loopNeighborIndices, type EdgeOutline, type PieceMesh } from './piece-mesh.js';
 import {
     KIND_DEBUG_STROKE,
     KIND_FILL,
@@ -26,6 +26,11 @@ export interface StrokeParts {
     band: Uint32Array;
     startCap: Uint32Array;
     endCap: Uint32Array;
+    /** The band without the triangles the inner tails replace. */
+    body: Uint32Array;
+    startInnerTail: Uint32Array;
+    endInnerTail: Uint32Array;
+    bothInnerTails: Uint32Array;
 }
 
 /** Corners in the reference piece's frame (world units) and their atlas UVs. */
@@ -161,7 +166,7 @@ export class GeometryStore {
             const base = this.reserve(stroke.sides.length);
             for (let i = 0; i < stroke.sides.length; i++) this.writeStrokeVertex(base + i, info, stroke, i, KIND_STROKE);
             this.strokeRanges.set(edgeId, { base, count: stroke.sides.length });
-            this.parts.set(edgeId, splitCaps(stroke, offsetIndices(stroke.indices, base)));
+            this.parts.set(edgeId, splitStroke(stroke, offsetIndices(stroke.indices, base), base));
             this.fringes.set(edgeId, this.addFringe(info, stroke));
         }
         for (const [edgeId, corners] of findCorners(mesh.edgeOutlines)) this.corners.set(edgeId, corners);
@@ -261,19 +266,21 @@ function offsetIndices(indices: ArrayLike<number>, base: number): Uint32Array {
     return out;
 }
 
-function splitCaps(stroke: StrokeMesh, indices: Uint32Array): StrokeParts {
-    const { startCap, endCap } = stroke;
+function splitStroke(stroke: StrokeMesh, indices: Uint32Array, base: number): StrokeParts {
+    const { startCap, endCap, tail } = stroke;
     const within = (i: number, range: IndexRange): boolean => i >= range.offset && i < range.offset + range.count;
     const slice = (range: IndexRange): Uint32Array => indices.slice(range.offset, range.offset + range.count);
+    const band = indices.filter((_, i) => !within(i, startCap) && !within(i, endCap));
     return {
-        band: indices.filter((_, i) => !within(i, startCap) && !within(i, endCap)),
+        band,
         startCap: slice(startCap),
         endCap: slice(endCap),
+        body: tail.length === 0 ? band : indices.filter((_, i) =>
+            !within(i, startCap) && !within(i, endCap) && !tail.some((range) => within(i, range))),
+        startInnerTail: offsetIndices(stroke.startInnerTail, base),
+        endInnerTail: offsetIndices(stroke.endInnerTail, base),
+        bothInnerTails: offsetIndices(stroke.bothInnerTails, base),
     };
-}
-
-function direction(from: Point, to: Point): Point {
-    return { x: to.x - from.x, y: to.y - from.y };
 }
 
 function samePoint(a: Point, b: Point): boolean {
@@ -291,25 +298,14 @@ function findCorners(outlines: readonly EdgeOutline[]): Map<number, EdgeCorners>
         }
         return entry;
     };
-    const link = (a: EdgeOutline, b: EdgeOutline): void => {
+    outlines.forEach((a, i) => {
+        const b = outlines[loopNeighborIndices(outlines, i).next];
         const pa = a.polyline;
         const pb = b.polyline;
         if (pa.length < 2 || pb.length < 2 || !samePoint(pa[pa.length - 1], pb[0])) return;
-        const da = direction(pa[pa.length - 2], pa[pa.length - 1]);
-        const db = direction(pb[0], pb[1]);
-        const convex = (da.x * db.y - da.y * db.x) * a.interiorSide > 0;
+        const convex = endCorner(outlines, i)?.convex ?? false;
         Object.assign(cornersOf(a.edgeId), { next: b.edgeId, endConvex: convex });
         Object.assign(cornersOf(b.edgeId), { prev: a.edgeId, startConvex: convex });
-    };
-    let loopStart = 0;
-    outlines.forEach((outline, i) => {
-        const next = outlines[i + 1];
-        if (next?.loop === outline.loop) {
-            link(outline, next);
-        } else {
-            link(outline, outlines[loopStart]);
-            loopStart = i + 1;
-        }
     });
     return corners;
 }
