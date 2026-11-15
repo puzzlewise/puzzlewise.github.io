@@ -3,7 +3,7 @@ import type { RendererAppearance } from '../appearance.js';
 import type { Renderer } from '../types.js';
 import { TransitionController, type ViewportValue } from './animation.js';
 import { createDebugOverlay, type DebugOverlay } from './debug-overlay.js';
-import { addDebugStrokes, assembleIndices, drawPasses, OUTLINE_HALF_WIDTH, silhouetteIndices } from './draw-list.js';
+import { addDebugStrokes, assembleIndices, drawPasses, silhouetteIndices } from './draw-list.js';
 import { GeometryStore } from './geometry-store.js';
 import {
     type AtlasPlan,
@@ -56,6 +56,7 @@ import {
     TRANSFORM_TEXTURE_UNIT,
     TRANSFORM_TEXTURE_WIDTH,
 } from './shaders.js';
+import { OUTLINE_HALF_WIDTH } from './stroke-mesh.js';
 
 
 /** Runs `work` on each item in idle time; the returned function cancels the rest. */

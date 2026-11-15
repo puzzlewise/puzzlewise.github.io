@@ -1,5 +1,6 @@
 import type { RendererAppearance } from '../appearance.js';
-import { drawPasses, OUTLINE_HALF_WIDTH } from './draw-list.js';
+import { drawPasses } from './draw-list.js';
+import { OUTLINE_HALF_WIDTH } from './stroke-mesh.js';
 import { HALO_STATES, haloMargin, haloSteps, haloTexelsPerUnit, type HaloStep } from './halo-recipe.js';
 
 export const ATLAS_LAYER_SIZE = 2048;

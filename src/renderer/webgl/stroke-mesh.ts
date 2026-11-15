@@ -1,4 +1,23 @@
 import type { Point } from '../../model/types.js';
+import {
+    cornerCut,
+    innerTails,
+    type JointFan,
+    NO_TAILS,
+    type Strip,
+} from './inner-tails.js';
+
+/** World units the outline stroke reaches past the piece edge. */
+export const OUTLINE_HALF_WIDTH = 1.5;
+
+export interface StrokeVertex {
+    cx: number;
+    cy: number;
+    /** Offset per unit of extent: the vertex sits at center + w * extent. */
+    wx: number;
+    wy: number;
+    side: number;
+}
 
 export interface IndexRange {
     offset: number;
@@ -14,6 +33,34 @@ export interface StrokeMesh {
     /** Ranges of `indices`; empty for a closed stroke. */
     startCap: IndexRange;
     endCap: IndexRange;
+    /** Ranges of `indices` that an inner tail replaces. */
+    tail: readonly IndexRange[];
+    /**
+     * Interior-only replacements for `tail` with the start, the end, or both ends clipped; empty
+     * unless that end pokes past an acute convex corner.
+     */
+    startInnerTail: Uint32Array;
+    endInnerTail: Uint32Array;
+    bothInnerTails: Uint32Array;
+}
+
+/** Unit directions away from a corner, along this edge and along its neighbor. */
+export interface CornerDirections {
+    own: Point;
+    neighbor: Point;
+}
+
+export interface StrokeCorner extends CornerDirections {
+    /** The neighboring edge from the corner outward. */
+    neighborPath: readonly Point[];
+    /** The piece's side of `neighborPath`'s direction of travel, as `interiorSide` is. */
+    neighborInteriorSide: 1 | -1;
+}
+
+/** Given only at convex corners. */
+export interface StrokeNeighbors {
+    start?: StrokeCorner;
+    end?: StrokeCorner;
 }
 
 const NO_CAP: IndexRange = { offset: 0, count: 0 };
@@ -23,7 +70,7 @@ const FAN_STEP = Math.PI / 12;
 const MITER_MAX_TURN = Math.PI / 12;
 const DUPLICATE_EPSILON = 1e-9;
 
-class MeshBuilder {
+export class MeshBuilder {
     private readonly centers: number[] = [];
     private readonly normals: number[] = [];
     private readonly sides: number[] = [];
@@ -45,10 +92,30 @@ class MeshBuilder {
     }
 
     hub(cx: number, cy: number): number {
+        return this.point({ cx, cy, wx: 0, wy: 0, side: 0 });
+    }
+
+    point({ cx, cy, wx, wy, side }: StrokeVertex): number {
         this.centers.push(cx, cy);
-        this.normals.push(1, 0);
-        this.sides.push(0);
+        if (side === 0) this.normals.push(1, 0);
+        else this.normals.push(wx / side, wy / side);
+        this.sides.push(side);
         return this.sides.length - 1;
+    }
+
+    at(index: number): StrokeVertex {
+        const side = this.sides[index];
+        return {
+            cx: this.centers[2 * index],
+            cy: this.centers[2 * index + 1],
+            wx: this.normals[2 * index] * side,
+            wy: this.normals[2 * index + 1] * side,
+            side,
+        };
+    }
+
+    trianglesIn({ offset, count }: IndexRange): number[] {
+        return this.indices.slice(offset, offset + count);
     }
 
     triangle(a: number, b: number, c: number): void {
@@ -59,7 +126,8 @@ class MeshBuilder {
         return this.indices.length;
     }
 
-    fan(cx: number, cy: number, start: number, sweep: number, side: -1 | 1): void {
+    fan(cx: number, cy: number, start: number, sweep: number, side: -1 | 1): IndexRange {
+        const offset = this.indices.length;
         const steps = Math.max(1, Math.ceil(Math.abs(sweep) / FAN_STEP));
         const hub = this.hub(cx, cy);
         let previous = -1;
@@ -69,9 +137,10 @@ class MeshBuilder {
             if (previous >= 0) this.triangle(hub, previous, index);
             previous = index;
         }
+        return { offset, count: this.indices.length - offset };
     }
 
-    build(startCap = NO_CAP, endCap = NO_CAP): StrokeMesh {
+    build(startCap = NO_CAP, endCap = NO_CAP, tails = NO_TAILS): StrokeMesh {
         return {
             centers: new Float32Array(this.centers),
             normals: new Float32Array(this.normals),
@@ -79,6 +148,10 @@ class MeshBuilder {
             indices: new Uint32Array(this.indices),
             startCap,
             endCap,
+            tail: tails.tail,
+            startInnerTail: new Uint32Array(tails.start),
+            endInnerTail: new Uint32Array(tails.end),
+            bothInnerTails: new Uint32Array(tails.both),
         };
     }
 }
@@ -141,6 +214,7 @@ export function buildStrokeMesh(
     polyline: Point[],
     closed: boolean,
     interiorSide: 1 | -1,
+    neighbors: StrokeNeighbors = {},
 ): StrokeMesh {
     const points = dedupe(polyline, closed);
     const builder = new MeshBuilder();
@@ -182,15 +256,21 @@ export function buildStrokeMesh(
         }
         return pair;
     };
+    const segmentPairs: Array<[number, number]> = [];
+    const segmentRanges: IndexRange[] = [];
     for (let i = 0; i < segmentCount; i++) {
         const j = (i + 1) % count;
         const [ox, oy] = exteriors[i];
         const a = isMitred(i) ? mitrePair(i) : builder.pair(points[i].x, points[i].y, ox, oy);
         const b = isMitred(j) ? mitrePair(j) : builder.pair(points[j].x, points[j].y, ox, oy);
+        const offset = builder.indexCount();
         builder.triangle(a, a + 1, b);
         builder.triangle(a + 1, b + 1, b);
+        segmentPairs.push([a, b]);
+        segmentRanges.push({ offset, count: builder.indexCount() - offset });
     }
 
+    const fans = new Map<number, JointFan>();
     for (let i = joinStart; i < joinEnd; i++) {
         if (isMitred(i)) continue;
         const turn = turns[i];
@@ -199,7 +279,7 @@ export function buildStrokeMesh(
         const turnSign = turn > 0 ? 1 : -1;
         const start = Math.atan2(-turnSign * d0x, turnSign * d0y);
         const side = (turnSign * interiorSide) as -1 | 1;
-        builder.fan(points[i].x, points[i].y, start, turn, side);
+        fans.set(i, { range: builder.fan(points[i].x, points[i].y, start, turn, side), interior: side === -1 });
     }
 
     if (closed) return builder.build();
@@ -207,7 +287,10 @@ export function buildStrokeMesh(
     const [endX, endY] = dirs[segmentCount - 1];
     const startCap = addCap(builder, points[0], -startX, -startY, -interiorSide as -1 | 1);
     const endCap = addCap(builder, points[count - 1], endX, endY, interiorSide);
-    return builder.build(startCap, endCap);
+    const strip: Strip = { builder, points, exteriors, segmentPairs, segmentRanges, fans };
+    const startCut = cornerCut(points[0], dirs[0], neighbors.start, OUTLINE_HALF_WIDTH);
+    const endCut = cornerCut(points[count - 1], [-endX, -endY], neighbors.end, OUTLINE_HALF_WIDTH);
+    return builder.build(startCap, endCap, innerTails(strip, startCut, endCut, OUTLINE_HALF_WIDTH));
 }
 
 // A cap is a half-turn fan pointing along the outward tangent (tx, ty);

@@ -207,6 +207,21 @@ describe('buildPieceFill and buildPieceStrokes', () => {
         ]);
     });
 
+    test('buildPieceStrokes clips an acute corner only against the loop neighbor that meets it', () => {
+        const triangle = [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 50, y: 60 }];
+        const closed = buildPieceStrokes(buildPieceFill(pieceFromLoops([triangle]), TOL));
+        const gap = { x: 8, y: 4 };
+        const open = buildPieceStrokes(buildPieceFill({
+            ...pieceFromLoops([triangle]),
+            edges: polygonEdges([...triangle, gap], 0).slice(0, 3),
+        }, TOL));
+
+        expect(closed.get(0)!.startInnerTail.length).toBeGreaterThan(0);
+        expect(closed.get(2)!.endInnerTail.length).toBeGreaterThan(0);
+        expect(open.get(0)!.endInnerTail.length).toBeGreaterThan(0);
+        expect(open.get(0)!.startInnerTail).toHaveLength(0);
+    });
+
     test('buildPieceStrokes gives one stroke per edge with interiorSide pointing into the piece', () => {
         const venn = sealPieceGeometry(generateComposablePuzzle(1, 1, { width: 1080, height: 720 }, 1, {
             baseCutGenerator: 'venn',

@@ -44,6 +44,10 @@ const STROKE: StrokeMesh = {
     indices: new Uint32Array([0, 1, 2, 1, 3, 2, 4, 1, 3]),
     startCap: { offset: 0, count: 0 },
     endCap: { offset: 0, count: 0 },
+    tail: [],
+    startInnerTail: new Uint32Array(),
+    endInnerTail: new Uint32Array(),
+    bothInnerTails: new Uint32Array(),
 };
 
 function twoPieces() {
@@ -193,6 +197,28 @@ describe('GeometryStore', () => {
             .map((v) => v.position);
         expect(new Set(hubAt(startCap).map(String))).toEqual(new Set(['0,0']));
         expect(new Set(hubAt(endCap).map(String))).toEqual(new Set(['100,0']));
+    });
+
+    test('a stroke\'s inner tails are offset to its vertices, and its body is its band without the tail', () => {
+        const piece = polygonPiece([{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 50, y: 30 }]);
+        const mesh = buildPieceFill(piece, 0.05);
+        const strokes = buildPieceStrokes(mesh);
+        const store = new GeometryStore([piece], (id) => id);
+        store.addFill(mesh);
+        const base = vertexCount(store);
+        store.addStrokes(mesh, strokes);
+
+        const stroke = strokes.get(0)!;
+        const parts = store.strokeParts(0)!;
+        const shifted = (indices: ArrayLike<number>) => Array.from(indices, (i) => i + base);
+        expect(stroke.bothInnerTails.length).toBeGreaterThan(0);
+        expect(Array.from(parts.startInnerTail)).toEqual(shifted(stroke.startInnerTail));
+        expect(Array.from(parts.endInnerTail)).toEqual(shifted(stroke.endInnerTail));
+        expect(Array.from(parts.bothInnerTails)).toEqual(shifted(stroke.bothInnerTails));
+        const notBody = [...stroke.tail, stroke.startCap, stroke.endCap];
+        const body = Array.from(stroke.indices).filter((_, i) => !notBody.some((r) => i >= r.offset && i < r.offset + r.count));
+        expect(stroke.tail.length).toBeGreaterThan(0);
+        expect(Array.from(parts.body)).toEqual(shifted(body));
     });
 
     test('a near-duplicate final point still yields an end cap', () => {

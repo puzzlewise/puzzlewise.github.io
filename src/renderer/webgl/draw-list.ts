@@ -16,9 +16,6 @@ export interface DrawOrder {
     isOuterEdge(edgeId: number): boolean;
 }
 
-/** World units the outline stroke reaches past the piece edge. */
-export const OUTLINE_HALF_WIDTH = 1.5;
-
 /** The fringe is the only edge antialiasing without an outline; strokes and fringe share the stroke vertices. */
 export function drawPasses(
     appearance: Pick<RendererAppearance, 'outline' | 'innerOutline'>
@@ -98,16 +95,25 @@ export function assembleIndices(
         if (parts) result.push(parts.band, parts.startCap, parts.endCap);
     };
     // Inner-outline strokes keep only their interior half, but a cap's interior
-    // half still reaches past a convex corner, outside the piece. Where the
-    // neighboring edge is outer too, its band already covers the corner.
+    // half, and at an acute corner the band's square end, still reach past a
+    // convex corner, outside the piece.
     const pushInnerStroke = (edgeId: number): void => {
         const parts = store.strokeParts(edgeId);
         if (!parts) return;
         const corners = store.cornersOf(edgeId);
         const keepCap = (convex = false, neighbor = -1): boolean => !convex || !order.isOuterEdge(neighbor);
-        result.push(parts.band);
-        if (keepCap(corners?.startConvex, corners?.prev)) result.push(parts.startCap);
-        if (keepCap(corners?.endConvex, corners?.next)) result.push(parts.endCap);
+        const keepStart = keepCap(corners?.startConvex, corners?.prev);
+        const keepEnd = keepCap(corners?.endConvex, corners?.next);
+        const clipStart = !keepStart && parts.startInnerTail.length > 0;
+        const clipEnd = !keepEnd && parts.endInnerTail.length > 0;
+        if (clipStart || clipEnd) {
+            const tail = !clipEnd ? parts.startInnerTail : !clipStart ? parts.endInnerTail : parts.bothInnerTails;
+            result.push(parts.body, tail);
+        } else {
+            result.push(parts.band);
+        }
+        if (keepStart) result.push(parts.startCap);
+        if (keepEnd) result.push(parts.endCap);
     };
     const pushCopies = (kind: StrokeCopyKind, layout: readonly { id: number }[]): void => {
         for (const { id } of layout) {

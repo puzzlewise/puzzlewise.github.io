@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'vitest';
-import { buildStrokeMesh, type IndexRange, simplifyPolyline, type StrokeMesh } from './stroke-mesh.js';
+import { buildStrokeMesh, type IndexRange, simplifyPolyline, type StrokeCorner, type StrokeMesh } from './stroke-mesh.js';
 import type { Point } from '../../model/types.js';
 
 const SIMPLIFY = 0.0125;
@@ -230,5 +230,246 @@ describe('buildStrokeMesh', () => {
                 expect(v.side).toBe(interiorIsInside === inside ? -1 : 1);
             }
         }
+    });
+});
+
+describe('buildStrokeMesh inner tails', () => {
+    const HALF_WIDTH = 1.5;
+    const EPS = 1e-6;
+    const dir = (degrees: number): Point => ({
+        x: Math.cos((degrees * Math.PI) / 180),
+        y: Math.sin((degrees * Math.PI) / 180),
+    });
+    // A straight neighbor edge leaving `at`; the piece lies between it and the stroke's own edge.
+    function corner(own: number, neighbor: number, at: Point = { x: 0, y: 0 }): StrokeCorner {
+        const o = dir(own);
+        const n = dir(neighbor);
+        return {
+            own: o,
+            neighbor: n,
+            neighborPath: [at, { x: at.x + 40 * n.x, y: at.y + 40 * n.y }],
+            neighborInteriorSide: n.x * o.y - n.y * o.x >= 0 ? 1 : -1,
+        };
+    }
+
+    // The piece boundary along a straight neighbor edge leaving p at `degrees`; positive inside.
+    interface Boundary { p: Point; hx: number; hy: number }
+
+    function boundary(p: Point, degrees: number, inside: Point): Boundary {
+        const { x, y } = dir(degrees);
+        const sign = Math.sign((inside.x - p.x) * -y + (inside.y - p.y) * x);
+        return { p, hx: -y * sign, hy: x * sign };
+    }
+
+    const signed = ({ p, hx, hy }: Boundary, x: number, y: number): number => (x - p.x) * hx + (y - p.y) * hy;
+
+    function trianglesFrom(mesh: StrokeMesh, indices: ArrayLike<number>, halfWidth: number): Triangle[] {
+        const at = (i: number): [number, number] => [
+            mesh.centers[2 * i] + mesh.normals[2 * i] * mesh.sides[i] * halfWidth,
+            mesh.centers[2 * i + 1] + mesh.normals[2 * i + 1] * mesh.sides[i] * halfWidth,
+        ];
+        const out: Triangle[] = [];
+        for (let i = 0; i < indices.length; i += 3) {
+            out.push([...at(indices[i]), ...at(indices[i + 1]), ...at(indices[i + 2])]);
+        }
+        return out;
+    }
+
+    function band(mesh: StrokeMesh): number[] {
+        const caps = [mesh.startCap, mesh.endCap];
+        return Array.from(mesh.indices).filter((_, i) => !caps.some((r) => i >= r.offset && i < r.offset + r.count));
+    }
+
+    function body(mesh: StrokeMesh): number[] {
+        const tailAndCaps = [...mesh.tail, mesh.startCap, mesh.endCap];
+        return Array.from(mesh.indices)
+            .filter((_, i) => !tailAndCaps.some((r) => i >= r.offset && i < r.offset + r.count));
+    }
+
+    const covers = (triangles: Triangle[], x: number, y: number): boolean =>
+        triangles.some((t) => insideTriangle(t, x, y));
+
+    function shrunkCorners([ax, ay, bx, by, cx, cy]: Triangle): [number, number][] {
+        const mx = (ax + bx + cx) / 3;
+        const my = (ay + by + cy) / 3;
+        return [[ax, ay], [bx, by], [cx, cy]].map(([x, y]) => [x + (mx - x) * EPS, y + (my - y) * EPS]);
+    }
+
+    // Every inner-tail triangle lies inside the piece and inside the unclipped band, and no
+    // interior vertex left in the body lies outside the piece.
+    function expectClippedWithinBand(mesh: StrokeMesh, tail: Uint32Array, boundaries: Boundary[]): void {
+        expect(tail.length).toBeGreaterThan(0);
+        const unclipped = trianglesFrom(mesh, band(mesh), HALF_WIDTH);
+        for (const triangle of trianglesFrom(mesh, tail, HALF_WIDTH)) {
+            for (const [x, y] of shrunkCorners(triangle)) {
+                for (const b of boundaries) expect(signed(b, x, y)).toBeGreaterThan(-EPS);
+                expect(covers(unclipped, x, y)).toBe(true);
+            }
+        }
+        for (const i of body(mesh)) {
+            if (mesh.sides[i] !== -1) continue;
+            const x = mesh.centers[2 * i] - mesh.normals[2 * i] * HALF_WIDTH;
+            const y = mesh.centers[2 * i + 1] - mesh.normals[2 * i + 1] * HALF_WIDTH;
+            for (const b of boundaries) expect(signed(b, x, y)).toBeGreaterThan(-EPS);
+        }
+    }
+
+    // Samples the interior half-band of every segment; every sample inside the piece must stay drawn.
+    function expectInsideHalfCovered(
+        mesh: StrokeMesh,
+        polyline: Point[],
+        interiorSide: 1 | -1,
+        tail: Uint32Array,
+        boundaries: Boundary[],
+    ): void {
+        const drawn = trianglesFrom(mesh, [...body(mesh), ...tail], HALF_WIDTH);
+        let checked = 0;
+        const expectCovered = (x: number, y: number): void => {
+            if (boundaries.some((b) => signed(b, x, y) < 0.01)) return;
+            checked++;
+            expect(covers(drawn, x, y)).toBe(true);
+        };
+        const interiorNormal = (a: Point, b: Point): Point => {
+            const length = Math.hypot(b.x - a.x, b.y - a.y);
+            return { x: (-interiorSide * (b.y - a.y)) / length, y: (interiorSide * (b.x - a.x)) / length };
+        };
+        const depths = [0.1, 0.5, 1, 1.4];
+        for (let i = 0; i + 1 < polyline.length; i++) {
+            const a = polyline[i];
+            const b = polyline[i + 1];
+            const m = interiorNormal(a, b);
+            for (let s = 1; s < 20; s++) {
+                for (const depth of depths) {
+                    expectCovered(a.x + ((b.x - a.x) * s) / 20 + m.x * depth, a.y + ((b.y - a.y) * s) / 20 + m.y * depth);
+                }
+            }
+            if (i === 0) continue;
+            const before = interiorNormal(polyline[i - 1], a);
+            for (const blend of [0.25, 0.5, 0.75]) {
+                const x = before.x + (m.x - before.x) * blend;
+                const y = before.y + (m.y - before.y) * blend;
+                const length = Math.hypot(x, y);
+                for (const depth of depths) expectCovered(a.x + (x / length) * depth, a.y + (y / length) * depth);
+            }
+        }
+        expect(checked).toBeGreaterThan(0);
+    }
+
+    test.each([26, 40, 75])('a %i° convex end clips its interior half where it leaves the piece', (angle) => {
+        const p = { x: 0, y: 0 };
+        const polyline = [{ x: 30, y: 0 }, p];
+        const mesh = buildStrokeMesh(polyline, false, -1, { end: corner(0, angle) });
+        const piece = boundary(p, angle, { x: 30, y: 0.1 });
+
+        expectClippedWithinBand(mesh, mesh.endInnerTail, [piece]);
+        expectInsideHalfCovered(mesh, polyline, -1, mesh.endInnerTail, [piece]);
+        expect(mesh.startInnerTail).toHaveLength(0);
+        expect(mesh.bothInnerTails).toHaveLength(0);
+    });
+
+    test('clip points stay on the neighbor edge at extents other than the reference one', () => {
+        const p = { x: 0, y: 0 };
+        const mesh = buildStrokeMesh([{ x: 30, y: 0 }, p], false, -1, { end: corner(0, 40) });
+        const piece = boundary(p, 40, { x: 30, y: 0.1 });
+        const position = (i: number, halfWidth: number): [number, number] => [
+            mesh.centers[2 * i] + mesh.normals[2 * i] * mesh.sides[i] * halfWidth,
+            mesh.centers[2 * i + 1] + mesh.normals[2 * i + 1] * mesh.sides[i] * halfWidth,
+        ];
+        const onEdge = [...new Set(mesh.endInnerTail)]
+            .filter((i) => Math.abs(signed(piece, ...position(i, HALF_WIDTH))) < EPS);
+        expect(onEdge.some((i) => mesh.sides[i] === -1)).toBe(true);
+
+        for (const halfWidth of [0.25, 1, 3, 6]) {
+            for (const i of onEdge) expect(Math.abs(signed(piece, ...position(i, halfWidth)))).toBeLessThan(EPS);
+        }
+    });
+
+    test.each([
+        ['mitred', 4],
+        ['mitred, bending toward the neighbor', -4],
+        ['round-joined', 20],
+        ['round-joined, bending toward the neighbor', -16],
+    ])('a tail over several short %s segments is clipped and keeps the rest of its half', (_, bend) => {
+        const p = { x: 0, y: 0 };
+        const outward = [p];
+        for (let k = 0; k < 4; k++) {
+            const last = outward[outward.length - 1];
+            const step = dir(-bend * k);
+            outward.push({ x: last.x + 0.8 * step.x, y: last.y + 0.8 * step.y });
+        }
+        const last = outward[outward.length - 1];
+        outward.push({ x: last.x + 10, y: last.y });
+        const polyline = outward.reverse();
+        const mesh = buildStrokeMesh(polyline, false, -1, { end: corner(0, 60) });
+        const piece = boundary(p, 60, { x: 30, y: 0 });
+
+        expectClippedWithinBand(mesh, mesh.endInnerTail, [piece]);
+        expectInsideHalfCovered(mesh, polyline, -1, mesh.endInnerTail, [piece]);
+    });
+
+    test('a bulge past the first segment that lies fully inside the piece is not clipped', () => {
+        const polyline = [
+            { x: 0, y: 0 }, { x: 10, y: 0 }, { x: 20, y: 0 },
+            { x: 20, y: 30 }, { x: 24, y: 30 }, { x: 24, y: 0 }, { x: 40, y: 0 },
+        ];
+        const mesh = buildStrokeMesh(polyline, false, 1, { start: corner(0, 40) });
+        const position = (i: number): number => mesh.centers[2 * i + 1] + mesh.normals[2 * i + 1] * mesh.sides[i] * HALF_WIDTH;
+
+        expect(mesh.startInnerTail.length).toBeGreaterThan(0);
+        expect(Math.max(...Array.from(mesh.startInnerTail, position))).toBeLessThan(2);
+        const inTail = (t: number) => mesh.tail.some((r) => t >= r.offset && t < r.offset + r.count);
+        for (let t = 0; t < mesh.indices.length; t += 3) {
+            const high = [0, 1, 2].some((k) => position(mesh.indices[t + k]) > 2);
+            if (high) expect(inTail(t)).toBe(false);
+        }
+    });
+
+    test('along a sliver narrower than the stroke, the cut stays within reach of the corner', () => {
+        const polyline = [{ x: 0, y: 0 }, ...Array.from({ length: 8 }, (_, k) => ({ x: 5 + 5 * k, y: -1 }))];
+        const own = Math.atan2(-1, 5) * (180 / Math.PI);
+        const mesh = buildStrokeMesh(polyline, false, 1, { start: corner(own, 0) });
+        const x = (i: number): number => mesh.centers[2 * i] + mesh.normals[2 * i] * mesh.sides[i] * HALF_WIDTH;
+
+        expect(mesh.startInnerTail.length).toBeGreaterThan(0);
+        expect(Math.max(...Array.from(mesh.startInnerTail, x))).toBeLessThan(11);
+        const inTail = (t: number) => mesh.tail.some((r) => t >= r.offset && t < r.offset + r.count);
+        for (let t = 0; t < mesh.indices.length; t += 3) {
+            const far = [0, 1, 2].every((k) => x(mesh.indices[t + k]) > 11);
+            if (far) expect(inTail(t)).toBe(false);
+        }
+    });
+
+    test.each([
+        ['a 90° corner', corner(0, 90)],
+        ['an 89.5° corner, as square ones may measure', corner(0, 89.5)],
+        ['an obtuse corner', corner(0, 120)],
+        ['a 0° corner, folded back onto the edge', corner(0, 0)],
+    ])('%s gets no tail and no extra vertices', (_, neighbors) => {
+        const polyline = [{ x: 30, y: 0 }, { x: 0, y: 0 }];
+        const plain = buildStrokeMesh(polyline, false, -1);
+        const mesh = buildStrokeMesh(polyline, false, -1, { end: neighbors });
+
+        expect(mesh.tail).toEqual([]);
+        expect(mesh.endInnerTail).toHaveLength(0);
+        expect(mesh.sides.length).toBe(plain.sides.length);
+        expect(Array.from(mesh.indices)).toEqual(Array.from(plain.indices));
+    });
+
+    test('a segment both of whose ends are acute is clipped at either end or both', () => {
+        const start = { x: 0, y: 0 };
+        const end = { x: 30, y: 0 };
+        const polyline = [start, end];
+        const mesh = buildStrokeMesh(polyline, false, 1, { start: corner(0, 40), end: corner(180, 140, end) });
+        const inside = { x: 15, y: 1 };
+        const startSide = boundary(start, 40, inside);
+        const endSide = boundary(end, 140, inside);
+
+        expectClippedWithinBand(mesh, mesh.startInnerTail, [startSide]);
+        expectClippedWithinBand(mesh, mesh.endInnerTail, [endSide]);
+        expectClippedWithinBand(mesh, mesh.bothInnerTails, [startSide, endSide]);
+        expectInsideHalfCovered(mesh, polyline, 1, mesh.startInnerTail, [startSide]);
+        expectInsideHalfCovered(mesh, polyline, 1, mesh.endInnerTail, [endSide]);
+        expectInsideHalfCovered(mesh, polyline, 1, mesh.bothInnerTails, [startSide, endSide]);
+        expect(body(mesh)).toEqual([]);
     });
 });
