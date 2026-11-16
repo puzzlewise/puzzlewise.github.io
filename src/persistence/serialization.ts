@@ -374,6 +374,12 @@ function restorePiecesAndGroups(
 ): { pieces: Piece[]; groups: PieceGroup[] } {
     const restored: RestoredPiece[] =
         version >= 12 ? restoreV12Pieces(serializedPieces, version) : restoreV11Pieces(serializedPieces);
+    restored.forEach((piece, i) => {
+        const offset = piece.imageOffset as Partial<Point> | null | undefined;
+        if (!Number.isFinite(offset?.x) || !Number.isFinite(offset?.y)) {
+            throw new Error(`Invalid state: piece ${i} has no usable image offset`);
+        }
+    });
     const groups = serializedGroups.map(deserializeGroup);
     if (version >= 14) return { pieces: sealRestored(restored), groups };
 

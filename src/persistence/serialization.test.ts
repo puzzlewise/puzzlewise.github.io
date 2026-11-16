@@ -1047,6 +1047,14 @@ describe('v12 geometry dedup', () => {
         expect(() => recombine(blob, progress)).toThrow(/bounds/);
     });
 
+    it('rejects a piece whose image offset holds a stored NaN', () => {
+        const state = makeStateWith([rebuildablePiece()]);
+        const blob = JSON.parse(JSON.stringify(serializeStatic(state)));
+        blob.pieces[0].imageOffset = { x: null, y: null };
+        const progress = JSON.parse(JSON.stringify(serializeProgress(state)));
+        expect(() => recombine(blob, progress)).toThrow(/image offset/);
+    });
+
     it('rejects a v12 piece with bounds: null', () => {
         // Distinct from "missing": `{"bounds":null}` yields a present key with
         // value null, which the `== null` check catches without dereferencing.

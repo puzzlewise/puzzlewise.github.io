@@ -28,6 +28,10 @@ export interface ComposableSliderConfig {
     smooth: boolean;
 }
 
+export const SINE_AMPLITUDE_MAX = 0.5;
+export const SINE_FREQUENCY_MAX = 10;
+export const JITTER_MAX = 0.5;
+
 export interface FractalDialogConfig {
     borderless: boolean;
 }
@@ -413,10 +417,10 @@ function buildComposableSlidersSection(args: {
     }
 
     const sliderDefs: SliderDef[] = [
-        { id: 'horizontalAmplitude', label: 'H Amplitude', min: 0, max: 0.5, step: 0.01, defaultValue: args.saved?.horizontalAmplitude ?? 0.15 },
-        { id: 'horizontalFrequency', label: 'H Frequency', min: 0, max: 10, step: 0.1, defaultValue: args.saved?.horizontalFrequency ?? 1.5 },
-        { id: 'verticalAmplitude', label: 'V Amplitude', min: 0, max: 0.5, step: 0.01, defaultValue: args.saved?.verticalAmplitude ?? 0.15 },
-        { id: 'verticalFrequency', label: 'V Frequency', min: 0, max: 10, step: 0.1, defaultValue: args.saved?.verticalFrequency ?? 1.5 },
+        { id: 'horizontalAmplitude', label: 'H Amplitude', min: 0, max: SINE_AMPLITUDE_MAX, step: 0.01, defaultValue: args.saved?.horizontalAmplitude ?? 0.15 },
+        { id: 'horizontalFrequency', label: 'H Frequency', min: 0, max: SINE_FREQUENCY_MAX, step: 0.1, defaultValue: args.saved?.horizontalFrequency ?? 1.5 },
+        { id: 'verticalAmplitude', label: 'V Amplitude', min: 0, max: SINE_AMPLITUDE_MAX, step: 0.01, defaultValue: args.saved?.verticalAmplitude ?? 0.15 },
+        { id: 'verticalFrequency', label: 'V Frequency', min: 0, max: SINE_FREQUENCY_MAX, step: 0.1, defaultValue: args.saved?.verticalFrequency ?? 1.5 },
     ];
 
     const sliderInputs = new Map<SliderDef['id'], HTMLInputElement>();
@@ -467,7 +471,7 @@ function buildComposableSlidersSection(args: {
     jitterInput.className = 'dialog-row-input';
     jitterInput.dataset.testid = 'composable-jitter-slider';
     jitterInput.min = '0';
-    jitterInput.max = '0.5';
+    jitterInput.max = String(JITTER_MAX);
     jitterInput.step = '0.01';
     jitterInput.value = String(args.saved?.jitter ?? 0.15);
     jitterValue.textContent = jitterInput.value;

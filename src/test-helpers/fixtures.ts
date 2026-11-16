@@ -114,6 +114,48 @@ export function makeRectPiece(opts: MakeRectPieceOpts = {}): Piece {
 }
 
 /**
+ * A border piece whose closed `outline` arrives split into `edgeCount`
+ * multi-segment `L` edges, as generated pieces do. Edge ids are id*100000 + k.
+ */
+export function makeOutlinePiece(id: number, outline: readonly Point[], edgeCount = 4): Piece {
+    const per = Math.ceil(outline.length / edgeCount);
+    const edges: Edge[] = [];
+    for (let k = 0; k * per < outline.length; k++) {
+        const from = k * per;
+        const to = Math.min(outline.length, from + per);
+        const run = [...outline.slice(from + 1, to), outline[to % outline.length]];
+        edges.push({
+            id: id * 100000 + k,
+            mateEdgeId: -1,
+            matePieceId: -1,
+            path: run.map((p) => `L ${p.x} ${p.y}`).join(' '),
+            start: outline[from],
+            end: outline[to % outline.length],
+        });
+    }
+    const shape = `M ${outline[0].x} ${outline[0].y} ${outline.slice(1).map((p) => `L ${p.x} ${p.y}`).join(' ')} Z`;
+    const xs = outline.map((p) => p.x);
+    const ys = outline.map((p) => p.y);
+    return {
+        id,
+        edges,
+        shape,
+        imageOffset: { x: 0, y: 0 },
+        bounds: { minX: Math.min(...xs), minY: Math.min(...ys), maxX: Math.max(...xs), maxY: Math.max(...ys) },
+    };
+}
+
+/** `teeth` teeth 1 wide and `height` tall on a 2-tall base: 4·teeth + 2 points. */
+export function combOutline(teeth: number, height = 20): Point[] {
+    const points: Point[] = [];
+    for (let i = 0; i < teeth; i++) {
+        points.push({ x: 2 * i, y: 0 }, { x: 2 * i, y: height }, { x: 2 * i + 1, y: height }, { x: 2 * i + 1, y: 0 });
+    }
+    points.push({ x: 2 * teeth, y: -2 }, { x: 0, y: -2 });
+    return points;
+}
+
+/**
  * The `piecesById` / `groupsById` / `pieceToGroup` indexes are derived from the
  * final pieces/groups (overrides included). Override them explicitly only to
  * exercise an inconsistent state.

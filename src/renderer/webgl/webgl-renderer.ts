@@ -1,4 +1,4 @@
-import type { GameState, Point, Size } from '../../model/types.js';
+import type { GameState, Piece, Point, Size } from '../../model/types.js';
 import type { RendererAppearance } from '../appearance.js';
 import type { Renderer } from '../types.js';
 import { TransitionController, type ViewportValue } from './animation.js';
@@ -29,7 +29,7 @@ import { hitTest } from './hit-test.js';
 import { PhotoLoader } from './photo-loader.js';
 import { watchDevicePixelRatio } from './pixel-ratio.js';
 import { sliceUv, textureSizeFor } from './photo-mapping.js';
-import { buildPieceFill, buildPieceStrokes } from './piece-mesh.js';
+import { buildPieceFill, buildPieceStrokes, emptyPieceMesh, FLATTEN_TOLERANCE, type PieceMesh } from './piece-mesh.js';
 import {
     appearanceDirt,
     clientToCanvas,
@@ -67,11 +67,11 @@ export interface WebGlRendererOptions {
     onContextEvent: (phase: ContextEventPhase) => void;
     /** A restored context that can't rebuild the shaders; context events stop after it. */
     onRestoreFailed: (error: ShaderBuildError) => void;
+    now?: () => number;
 }
 
-// World units: half a CSS pixel at the maximum zoom of 5.
-const FLATTEN_TOLERANCE = 0.1;
 const HALO_BUDGET_MS = 4;
+const FILL_BUDGET_MS = 2000;
 
 const DEFAULT_APPEARANCE: RendererAppearance = {
     outline: 'outline',
@@ -123,6 +123,7 @@ export class WebGlRenderer implements Renderer {
     private readonly contextLoss: ContextLossMonitor;
     private readonly runInIdle: IdleScheduler;
     private readonly onRestoreFailed: (error: ShaderBuildError) => void;
+    private readonly now: () => number;
     private table: HTMLDivElement | null = null;
     private canvas: HTMLCanvasElement | null = null;
     private gl: WebGL2RenderingContext | null = null;
@@ -158,6 +159,7 @@ export class WebGlRenderer implements Renderer {
     constructor(options: WebGlRendererOptions) {
         this.runInIdle = options.runInIdle;
         this.onRestoreFailed = options.onRestoreFailed;
+        this.now = options.now ?? (() => performance.now());
         this.contextLoss = new ContextLossMonitor(options.onContextEvent);
     }
 
@@ -314,7 +316,7 @@ export class WebGlRenderer implements Renderer {
         this.photos.load(state.imageUrl);
         if (this.res) this.dropHalos(this.res);
 
-        const meshes = state.pieces.map((piece) => buildPieceFill(piece, FLATTEN_TOLERANCE));
+        const meshes = buildFills(state.pieces, this.now);
         const scene = new Scene(meshes, state);
         // Merges keep earlier halos until theirs is built, so slots can briefly outnumber groups.
         const store = new GeometryStore(state.pieces, (id) => scene.slotOfPiece(id), 2 * state.pieces.length + 16);
@@ -776,6 +778,38 @@ export class WebGlRenderer implements Renderer {
         gl.drawElements(gl.TRIANGLES, res.indexCount, gl.UNSIGNED_INT, 0);
         gl.bindVertexArray(null);
     }
+}
+
+function buildFills(pieces: readonly Piece[], now: () => number): PieceMesh[] {
+    // Failing the install makes a share link load roll back; a piece drawn from
+    // non-finite bounds would instead break halo planning on every later frame.
+    for (const { id, bounds, imageOffset } of pieces) {
+        const values = [bounds.minX, bounds.minY, bounds.maxX, bounds.maxY, imageOffset.x, imageOffset.y];
+        if (!values.every(Number.isFinite)) throw new Error(`Piece ${id} has non-finite geometry`);
+    }
+    const start = now();
+    let filledInBudget = pieces.length;
+    const meshes = pieces.map((piece, index) => {
+        if (filledInBudget === pieces.length && now() - start >= FILL_BUDGET_MS) filledInBudget = index;
+        try {
+            return buildPieceFill(piece, FLATTEN_TOLERANCE, index < filledInBudget);
+        } catch (error) {
+            return emptyPieceMesh(piece, FLATTEN_TOLERANCE, error);
+        }
+    });
+    const unfilled = meshes.filter((mesh) => mesh.fillOmitted);
+    if (unfilled.length > 0) {
+        const failed = unfilled.find((mesh) => 'fillError' in mesh);
+        const budget = filledInBudget < pieces.length
+            ? `; the fill budget ran out after ${filledInBudget} of ${pieces.length} pieces`
+            : '';
+        // eslint-disable-next-line no-console
+        console.warn(
+            `Drawing ${unfilled.length} ${unfilled.length === 1 ? 'piece' : 'pieces'} without a fill${budget}`,
+            ...(failed ? [failed.fillError] : []),
+        );
+    }
+    return meshes;
 }
 
 function scaledPhoto(image: HTMLImageElement, maxTextureSize: number): TexImageSource {

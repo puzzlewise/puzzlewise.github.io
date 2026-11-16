@@ -8,6 +8,7 @@ import {
     OUTLINE_HALF_WIDTH,
     simplifyPolyline,
     type StrokeMesh,
+    type StrokeNeighbors,
 } from './stroke-mesh.js';
 
 export interface PieceMesh {
@@ -21,6 +22,8 @@ export interface PieceMesh {
     /** Outlines of one loop are contiguous, in boundary order. */
     edgeOutlines: EdgeOutline[];
     tolerance: number;
+    fillOmitted: boolean;
+    fillError?: unknown;
 }
 
 export interface EdgeOutline {
@@ -76,6 +79,14 @@ const BOUNDARY_EPSILON = 1e-4;
 // Strokes only: fills keep every flattened point so mate seams stay bit-identical.
 const STROKE_SIMPLIFY_FRACTION = 0.25;
 const DIRECTION_EPSILON = 1e-9;
+// World units: half a CSS pixel at the maximum zoom of 5.
+export const FLATTEN_TOLERANCE = 0.1;
+
+// earcut turns quadratic or worse on comb-shaped and dense outlines (#759).
+// Compactness is perimeter² / 4π·area.
+export const SPIKY_MIN_POINTS = 1024;
+export const MAX_COMPACTNESS = 64;
+export const MAX_FILL_POINTS = 3000;
 
 // Sibling regions of a piece often touch along shared edges, so a vertex of
 // `inner` can lie on `outer`'s boundary; only a vertex clear of it is decisive.
@@ -139,32 +150,62 @@ function boundsOf(loops: Point[][]): PieceBounds {
     return { minX, minY, maxX, maxY };
 }
 
+export function measureOutlineGroup(group: readonly Point[][]): { points: number; compactness: number } {
+    let points = 0;
+    let perimeter = 0;
+    let area = 0;
+    group.forEach((loop, k) => {
+        points += loop.length;
+        area += (k === 0 ? 1 : -1) * Math.abs(signedArea(loop));
+        for (let i = 0, j = loop.length - 1; i < loop.length; j = i++) {
+            perimeter += Math.hypot(loop[i].x - loop[j].x, loop[i].y - loop[j].y);
+        }
+    });
+    return { points, compactness: area > 0 ? (perimeter * perimeter) / (4 * Math.PI * area) : Infinity };
+}
+
+function fillable(group: Point[][]): boolean {
+    const { points, compactness } = measureOutlineGroup(group);
+    if (points > MAX_FILL_POINTS) return false;
+    return points <= SPIKY_MIN_POINTS || compactness <= MAX_COMPACTNESS;
+}
+
+const NO_FILL = { vertices: new Float32Array(0), indices: new Uint32Array(0) };
+
+function fillGroups(loops: Point[][], { depth, containers }: LoopClassification): Point[][][] {
+    return loops.flatMap((outer, i) => (depth[i] % 2 !== 0 ? [] : [[
+        outer,
+        ...loops.filter((_, j) => depth[j] === depth[i] + 1 && containers[j].includes(i)),
+    ]]));
+}
+
+export function outlineGroups(loops: Point[][]): Point[][][] {
+    return fillGroups(loops, classifyLoops(loops));
+}
+
 function triangulate(
     loops: Point[][],
-    { depth, containers }: LoopClassification,
-): { vertices: Float32Array; indices: Uint32Array } {
+    classification: LoopClassification,
+): { vertices: Float32Array; indices: Uint32Array } | null {
+    const groups = fillGroups(loops, classification);
+    if (!groups.every(fillable)) return null;
     const vertices: number[] = [];
     const indices: number[] = [];
-
-    loops.forEach((outer, i) => {
-        if (depth[i] % 2 !== 0) return;
-        const holes = loops.filter((_, j) =>
-            depth[j] === depth[i] + 1 && containers[j].includes(i));
+    for (const group of groups) {
         const flat: number[] = [];
         const holeStarts: number[] = [];
-        for (const loop of [outer, ...holes]) {
-            if (loop !== outer) holeStarts.push(flat.length / 2);
+        for (const loop of group) {
+            if (loop !== group[0]) holeStarts.push(flat.length / 2);
             for (const p of loop) flat.push(p.x, p.y);
         }
         const base = vertices.length / 2;
-        vertices.push(...flat);
+        for (const v of flat) vertices.push(v);
         for (const index of earcut(flat, holeStarts)) indices.push(base + index);
-    });
-
+    }
     return { vertices: new Float32Array(vertices), indices: new Uint32Array(indices) };
 }
 
-export function buildPieceFill(piece: Piece, tolerance: number): PieceMesh {
+export function buildPieceFill(piece: Piece, tolerance: number, triangulateFill = true): PieceMesh {
     const edgeLoops = chainLoops(piece, tolerance);
     const loops = edgeLoops.map(loop => loop.points);
     const areas = loops.map(signedArea);
@@ -183,7 +224,14 @@ export function buildPieceFill(piece: Piece, tolerance: number): PieceMesh {
         });
     });
 
-    const { vertices, indices } = triangulate(loops, classification);
+    let fill: { vertices: Float32Array; indices: Uint32Array } | null = null;
+    let fillError: unknown;
+    try {
+        if (triangulateFill) fill = triangulate(loops, classification);
+    } catch (error) {
+        fillError = error;
+    }
+    const { vertices, indices } = fill ?? NO_FILL;
     return {
         pieceId: piece.id,
         fillVertices: vertices,
@@ -192,43 +240,76 @@ export function buildPieceFill(piece: Piece, tolerance: number): PieceMesh {
         bounds: boundsOf(loops),
         edgeOutlines,
         tolerance,
+        fillOmitted: fill === null,
+        ...(fillError === undefined ? {} : { fillError }),
+    };
+}
+
+export function emptyPieceMesh(piece: Piece, tolerance: number, fillError: unknown): PieceMesh {
+    return {
+        pieceId: piece.id,
+        fillVertices: new Float32Array(0),
+        fillIndices: new Uint32Array(0),
+        loops: [],
+        bounds: piece.bounds,
+        edgeOutlines: [],
+        tolerance,
+        fillOmitted: true,
+        fillError,
     };
 }
 
 export function buildPieceStrokes(mesh: PieceMesh): Map<number, StrokeMesh> {
     const outlines = mesh.edgeOutlines;
-    const simplified = outlines.map(({ polyline }) => simplifyPolyline(polyline, mesh.tolerance * STROKE_SIMPLIFY_FRACTION));
-    const corners = outlines.map((_, k) => endCorner(outlines, k));
+    const neighbors = loopNeighbors(outlines);
+    const corners = mesh.fillOmitted ? undefined : outlines.map((_, k) => endCorner(outlines, k, neighbors.next[k]));
     const strokes = new Map<number, StrokeMesh>();
-    outlines.forEach(({ edgeId, interiorSide }, k) => {
-        const { prev, next } = loopNeighborIndices(outlines, k);
-        const start = corners[prev];
-        const end = corners[k];
-        strokes.set(edgeId, buildStrokeMesh(simplified[k], false, interiorSide, {
-            start: start?.convex ? {
-                own: start.neighbor,
-                neighbor: start.own,
-                neighborPath: [...outlines[prev].polyline].reverse(),
-                neighborInteriorSide: -outlines[prev].interiorSide as 1 | -1,
-            } : undefined,
-            end: end?.convex ? {
-                own: end.own,
-                neighbor: end.neighbor,
-                neighborPath: outlines[next].polyline,
-                neighborInteriorSide: outlines[next].interiorSide,
-            } : undefined,
-        }));
+    outlines.forEach(({ edgeId, polyline, interiorSide }, k) => {
+        const simplified = simplifyPolyline(polyline, mesh.tolerance * STROKE_SIMPLIFY_FRACTION);
+        const cut = corners ? cornerNeighbors(outlines, corners, neighbors.prev[k], k, neighbors.next[k]) : {};
+        strokes.set(edgeId, buildStrokeMesh(simplified, false, interiorSide, cut));
     });
     return strokes;
 }
 
-export function loopNeighborIndices(outlines: readonly EdgeOutline[], k: number): { prev: number; next: number } {
-    const { loop } = outlines[k];
-    let first = k;
-    while (outlines[first - 1]?.loop === loop) first--;
-    let last = k;
-    while (outlines[last + 1]?.loop === loop) last++;
-    return { prev: k === first ? last : k - 1, next: k === last ? first : k + 1 };
+function cornerNeighbors(
+    outlines: readonly EdgeOutline[],
+    corners: readonly (Corner | undefined)[],
+    prev: number,
+    k: number,
+    next: number,
+): StrokeNeighbors {
+    const start = corners[prev];
+    const end = corners[k];
+    return {
+        start: start?.convex ? {
+            own: start.neighbor,
+            neighbor: start.own,
+            neighborPath: [...outlines[prev].polyline].reverse(),
+            neighborInteriorSide: -outlines[prev].interiorSide as 1 | -1,
+        } : undefined,
+        end: end?.convex ? {
+            own: end.own,
+            neighbor: end.neighbor,
+            neighborPath: outlines[next].polyline,
+            neighborInteriorSide: outlines[next].interiorSide,
+        } : undefined,
+    };
+}
+
+export function loopNeighbors(outlines: readonly EdgeOutline[]): { prev: number[]; next: number[] } {
+    const prev: number[] = [];
+    const next: number[] = [];
+    for (let first = 0; first < outlines.length;) {
+        let last = first;
+        while (outlines[last + 1]?.loop === outlines[first].loop) last++;
+        for (let k = first; k <= last; k++) {
+            prev[k] = k === first ? last : k - 1;
+            next[k] = k === last ? first : k + 1;
+        }
+        first = last + 1;
+    }
+    return { prev, next };
 }
 
 export interface Corner extends CornerDirections {
@@ -240,9 +321,9 @@ export interface Corner extends CornerDirections {
  * when they do not meet or either side has no length. Its directions are chords a stroke
  * width long, so a hook at an edge's end shorter than the stroke is wide does not decide it.
  */
-export function endCorner(outlines: readonly EdgeOutline[], k: number): Corner | undefined {
+export function endCorner(outlines: readonly EdgeOutline[], k: number, next: number): Corner | undefined {
     const a = outlines[k];
-    const b = outlines[loopNeighborIndices(outlines, k).next];
+    const b = outlines[next];
     const corner = a.polyline[a.polyline.length - 1];
     const start = b.polyline[0];
     if (!corner || !start || Math.abs(start.x - corner.x) >= CHAIN_EPSILON || Math.abs(start.y - corner.y) >= CHAIN_EPSILON) {
