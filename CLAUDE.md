@@ -270,6 +270,29 @@ what, and decide whether to take or pin the change — do **not** re-record.
 Those digests are external snapshots, so `vitest -u` rewrites them all
 without a word and takes the alarm with them.
 
+## Hostile or corrupt input only has to fail safely
+
+A maliciously crafted share link, a corrupt or hand-edited save, or any other
+input that no build of the app could have written has one requirement: the app
+must not freeze, crash, or end in a state the player cannot get out of.
+
+It does not have to produce a working puzzle. Refusing the input with a
+message ("couldn't load shared puzzle", the corrupt-save dialog) and starting
+a new puzzle is a complete answer.
+
+So when such an input comes up, in a review finding or while writing code:
+
+- Ask only whether it can freeze the tab, throw past the load path, or leave
+  the app unusable or unrecoverable. If it can, add the simplest guard or
+  refusal that prevents that.
+- If it cannot, there is nothing to fix. Do not make the degraded result look
+  or play better, do not preserve as much of the input as possible, and do not
+  propose doing so in a review.
+
+This applies to input beyond what the app writes or the UI allows. A save or
+link that a released build did produce is real player data, and must keep
+working.
+
 ## Keep `main.ts` an entry point
 
 `src/main.ts` is loaded by `index.html` as a side-effecting module, so
