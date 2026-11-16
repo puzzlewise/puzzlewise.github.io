@@ -2,8 +2,7 @@
  * Rounds every generated coordinate — edge endpoints, curve samples, image
  * offset — to {@link GEOMETRY_PRECISION_DECIMALS} decimals, so a generated
  * puzzle's geometry is identical in memory, in `localStorage`, and regenerated
- * from a share link. Only generated geometry: pre-existing saves are not
- * re-rounded on load.
+ * from a share link.
  *
  * Runs before sealing (`model/seal-geometry.ts`), so the `bounds` sealing
  * derives from curve samples inherit this precision; the other order would put

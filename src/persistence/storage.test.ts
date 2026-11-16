@@ -40,7 +40,7 @@ import {
     makeRectPiece,
     makeGameState as makeBaseGameState,
 } from '../test-helpers/fixtures.js';
-import { v13Progress, v13StaticBlob } from '../test-helpers/v13-save.js';
+import { v13GridBlob, v13GridProgress, v13Progress, v13StaticBlob } from '../test-helpers/v13-save.js';
 
 // The app installs these from bootstrap.ts; this stands in. Installed once, as
 // production does — jsdom shares `window` across tests and the installer is
@@ -1352,5 +1352,26 @@ describe('v13 saves', () => {
         expect(writtenKeys).toContain(GEOMETRY_SEED_KEY);
         expect(writtenKeys).not.toContain(STORAGE_KEY);
         expect(localStorage.getItem(STORAGE_KEY)).toBe(geometry);
+    });
+
+    it('corrects drifted group offsets in memory without writing either key', () => {
+        const geometry = JSON.stringify({ ...v13GridBlob(), seed: 13 });
+        const progress = v13GridProgress();
+        progress.groups[0].pieces[1][1] = { x: 10.01, y: -0.01 };
+        const progressJson = JSON.stringify({ ...progress, seed: 13 });
+        localStorage.setItem(STORAGE_KEY, geometry);
+        localStorage.setItem(PROGRESS_KEY, progressJson);
+        const setItem = vi.spyOn(Storage.prototype, 'setItem');
+
+        const loaded = loadSavedGame();
+
+        const writtenKeys = setItem.mock.calls.map(([key]) => key);
+        setItem.mockRestore();
+        expect(loaded.status).toBe('ok');
+        if (loaded.status !== 'ok') return;
+        expect(loaded.state.groups[0].pieces.get(1)).toEqual({ x: 10, y: 0 });
+        expect(writtenKeys).not.toContain(STORAGE_KEY);
+        expect(writtenKeys).not.toContain(PROGRESS_KEY);
+        expect(localStorage.getItem(PROGRESS_KEY)).toBe(progressJson);
     });
 });

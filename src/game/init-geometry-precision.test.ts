@@ -1,9 +1,8 @@
 /**
  * Geometry-precision invariants for generated puzzles (#487). `createNewGame`
  * quantizes geometry to `GEOMETRY_PRECISION_DECIMALS`, so a puzzle reads the
- * same in memory, in `localStorage`, or regenerated from a share link. (Saves
- * predating the pass aren't re-rounded on load.) The blob-size guard co-lives
- * here to reuse the same expensive traced generation.
+ * same in memory, in `localStorage`, or regenerated from a share link. The
+ * blob-size guard co-lives here to reuse the same expensive traced generation.
  */
 
 import { describe, it, expect, beforeAll } from 'vitest';
