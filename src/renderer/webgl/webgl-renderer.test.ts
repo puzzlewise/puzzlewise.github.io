@@ -3,15 +3,23 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import earcut from 'earcut';
 import type { GameState, PieceGroup } from '../../model/types.js';
 import type { RendererAppearance } from '../appearance.js';
 import { FakeFrameHost } from '../../test-helpers/fake-frame-host.js';
-import { makeGameState, makeRectPiece } from '../../test-helpers/fixtures.js';
+import { combOutline, makeGameState, makeOutlinePiece, makeRectPiece } from '../../test-helpers/fixtures.js';
 import { CONTEXT_RESTORE_TIMEOUT_MS } from './context-loss.js';
 import { ShaderBuildError } from './gl-context.js';
 import { ATLAS_LAYER_SIZE, ATLAS_LEVELS, AtlasTooLargeError, ShelfPacker } from './halo-atlas-plan.js';
 import { KIND_DEBUG_STROKE, KIND_HALO, KIND_MATELESS, MAIN_ATTRIBUTES, MAIN_VERTEX_FLOATS, SILHOUETTE_FS } from './shaders.js';
 import { WebGlRenderer, type WebGlRendererOptions } from './webgl-renderer.js';
+import { insideEvenOdd, outlineGroups, type PieceMesh } from './piece-mesh.js';
+import { runGeneration } from '../../game/generation-core.js';
+
+vi.mock('earcut', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('earcut')>();
+    return { default: vi.fn(actual.default) };
+});
 
 const FRAMEBUFFER = 0x8d40;
 const SCISSOR_TEST = 0x0c11;
@@ -800,6 +808,184 @@ describe('WebGlRenderer', () => {
             runUntilIdle(host);
 
             expect(drawnKinds(fake.calls.slice(start)).has(KIND_MATELESS)).toBe(true);
+        });
+    });
+
+    describe('pieces without a fill', () => {
+        const runUntilIdle = (host: FakeFrameHost) => {
+            for (let i = 0; i < 50 && host.pendingFrames() > 0; i++) host.runFrame();
+        };
+        const APPEARANCE: RendererAppearance = {
+            outline: 'outline',
+            outlineColor: [0, 0, 0, 1],
+            constantWidth: false,
+            innerOutline: true,
+            selectionGlowColor: [1, 1, 1, 1],
+            backgroundColor: [0, 0, 0, 1],
+            pieceOpacity: 1,
+            debugPieces: false,
+            matelessEdges: false,
+        };
+        const unfillableGame = (): GameState => {
+            const broken = makeRectPiece({ id: 2 });
+            broken.edges[0] = { ...broken.edges[0], path: 'X 1 2' };
+            const pieces = [makeRectPiece({ id: 0 }), makeOutlinePiece(1, combOutline(300)), broken];
+            return makeGameState({ pieces, groups: [group(0, 0), group(1, 200), group(2, 900)], imageUrl: null });
+        };
+        const watchWarnings = () => vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+        test('a comb-shaped piece and one whose fill build throws install and draw, with one warning per game', () => {
+            const { host, renderer, drawFrames } = setup();
+            const warn = watchWarnings();
+            renderer.setAppearance(APPEARANCE);
+            const game = unfillableGame();
+            renderer.renderState(game);
+            runUntilIdle(host);
+            renderer.renderState({ ...game, groups: [group(0, 10), group(1, 200), group(2, 900)] });
+            runUntilIdle(host);
+
+            expect(drawFrames().length).toBeGreaterThan(0);
+            const store = renderer['game']!.store;
+            expect(store.fillIndices(0)!.length).toBeGreaterThan(0);
+            expect(store.fillIndices(1)).toHaveLength(0);
+            expect(store.fillIndices(2)).toHaveLength(0);
+            expect(warn).toHaveBeenCalledTimes(1);
+            expect(String(warn.mock.calls[0][0])).toMatch(/\b2 pieces\b/);
+            expect(warn.mock.calls[0][1]).toBeInstanceOf(Error);
+        });
+
+        test('pieces without a fill get their halos under the Shadow preset and show in the debug views', () => {
+            const { host, fake, renderer, drawFrames } = setup();
+            watchWarnings();
+            renderer.setAppearance({ ...APPEARANCE, outline: 'shadow' });
+            renderer.renderState(unfillableGame());
+            renderer.setGroupSelected(1, true);
+            renderer.setGroupSelected(2, true);
+            runUntilIdle(host);
+            renderer.setAppearance({ ...APPEARANCE, outline: 'shadow', debugPieces: true, matelessEdges: true });
+            runUntilIdle(host);
+
+            expect(renderer['game']!.halosUnavailable).toBe(false);
+            expect(fake.calls.filter((c) => c.name === 'copyTexSubImage3D').length).toBeGreaterThanOrEqual(3);
+            expect(drawFrames().length).toBeGreaterThan(1);
+        });
+
+        test('an error thrown while triangulating is logged with the one warning', () => {
+            const { host, renderer } = setup();
+            const warn = watchWarnings();
+            const error = new RangeError('Maximum call stack size exceeded');
+            vi.mocked(earcut).mockImplementationOnce(() => {
+                throw error;
+            });
+            renderer.renderState(twoPieceGame());
+            runUntilIdle(host);
+
+            expect(warn).toHaveBeenCalledTimes(1);
+            expect(warn.mock.calls[0]).toEqual([expect.stringMatching(/\b1 piece\b/), error]);
+        });
+
+        test('a normal game logs no warning, even with a degenerate sliver earcut leaves without triangles', () => {
+            const { host, renderer, drawFrames } = setup();
+            const warn = watchWarnings();
+            const sliver = makeOutlinePiece(1, [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 20, y: 0 }], 3);
+            renderer.renderState(makeGameState({ pieces: [makeRectPiece({ id: 0 }), sliver], groups: [group(0, 0), group(1, 200)], imageUrl: null }));
+            runUntilIdle(host);
+
+            expect(renderer['game']!.store.fillIndices(1)).toHaveLength(0);
+            expect(drawFrames().length).toBeGreaterThan(0);
+            expect(warn).not.toHaveBeenCalled();
+        });
+
+        test('a game whose pieces have non-finite geometry fails to install', () => {
+            const { renderer } = setup();
+            const { pieces } = runGeneration({
+                cutStyle: 'composable',
+                gridSize: { cols: 2, rows: 2 },
+                imageSize: { width: 400, height: 300 },
+                seed: 3,
+                composableConfig: {
+                    baseCutGenerator: 'venn',
+                    baseCutConfig: { leftCenter: { x: 150, y: 150 }, rightCenter: { x: 250, y: 150 }, rightRadius: 80 },
+                    tabGenerator: 'none',
+                    tabConfig: {},
+                },
+                tabDebug: false,
+            });
+            expect(pieces.some((p) => !Number.isFinite(p.bounds.minX))).toBe(true);
+            const game = makeGameState({ pieces, groups: pieces.map((p, i) => group(p.id, 1000 * i)), imageUrl: null });
+
+            expect(() => renderer.renderState(game)).toThrow(/non-finite geometry/);
+        });
+
+        const denseLinkGame = (): GameState => {
+            const { pieces } = runGeneration({
+                cutStyle: 'composable',
+                gridSize: { cols: 55, rows: 4 },
+                imageSize: { width: 204, height: 71 },
+                seed: 97109,
+                composableConfig: {
+                    baseCutGenerator: 'sine',
+                    baseCutConfig: { ha: 0.029, hf: 78, va: 0.5, vf: 20 },
+                    tabGenerator: 'none',
+                    tabConfig: {},
+                },
+                tabDebug: false,
+            });
+            return makeGameState({ pieces, groups: pieces.map((p, i) => group(p.id, 1000 * i)), imageUrl: null });
+        };
+        const pointInside = (mesh: PieceMesh, x: number): { x: number; y: number } => {
+            const { minX, minY, maxX, maxY } = mesh.bounds;
+            for (let i = 1; i < 40; i++) {
+                for (let j = 1; j < 40; j++) {
+                    const px = minX + ((maxX - minX) * i) / 40;
+                    const py = minY + ((maxY - minY) * j) / 40;
+                    if (insideEvenOdd(mesh.loops, px, py)) return { x: x + px, y: py };
+                }
+            }
+            throw new Error('no interior point found');
+        };
+
+        test('once the fill build has used its budget, the remaining pieces get no fill and are never triangulated', () => {
+            let clock = 0;
+            const { host, renderer } = setup({ now: () => (clock += 600) });
+            const game = denseLinkGame();
+            const warn = watchWarnings();
+            vi.mocked(earcut).mockClear();
+            renderer.renderState(game);
+            runUntilIdle(host);
+
+            const scene = renderer['game']!.scene;
+            const meshes = game.pieces.map((p) => scene.meshFor(p.id)!);
+            const filled = meshes.filter((m) => !m.fillOmitted);
+            expect(filled.map((m) => m.pieceId)).toEqual(game.pieces.slice(0, 3).map((p) => p.id));
+            expect(meshes.slice(3).every((m) => m.fillOmitted && m.loops.length > 0)).toBe(true);
+            const groups = filled.reduce((n, m) => n + outlineGroups(m.loops).length, 0);
+            expect(vi.mocked(earcut)).toHaveBeenCalledTimes(groups);
+            expect(renderer.pieceIdAtPoint(pointInside(meshes[10], 10_000))).toBe(meshes[10].pieceId);
+            expect(warn).toHaveBeenCalledTimes(1);
+            expect(String(warn.mock.calls[0][0])).toContain(`${game.pieces.length - 3} pieces`);
+            expect(String(warn.mock.calls[0][0])).toContain(`fill budget ran out after 3 of ${game.pieces.length} pieces`);
+        });
+
+        test('a normal game whose clock stays within the budget fills every piece', () => {
+            const { host, renderer } = setup({ now: () => 0 });
+            const warn = watchWarnings();
+            const game = twoPieceGame();
+            renderer.renderState(game);
+            runUntilIdle(host);
+
+            expect(game.pieces.every((p) => !renderer['game']!.scene.meshFor(p.id)!.fillOmitted)).toBe(true);
+            expect(warn).not.toHaveBeenCalled();
+        });
+
+        test('hit-testing finds a comb-shaped piece by its outline', () => {
+            const { host, renderer } = setup();
+            watchWarnings();
+            renderer.renderState(unfillableGame());
+            runUntilIdle(host);
+
+            expect(renderer.pieceIdAtPoint({ x: 200.5, y: 10 })).toBe(1);
+            expect(renderer.pieceIdAtPoint({ x: 201.5, y: 10 })).toBeNull();
         });
     });
 });

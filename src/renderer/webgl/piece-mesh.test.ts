@@ -1,5 +1,6 @@
-import { describe, test, expect } from 'vitest';
-import { buildPieceFill, buildPieceStrokes } from './piece-mesh.js';
+import { describe, test, expect, vi, beforeEach } from 'vitest';
+import earcut from 'earcut';
+import { buildPieceFill, buildPieceStrokes, measureOutlineGroup } from './piece-mesh.js';
 import { sealPieceGeometry } from '../../model/seal-geometry.js';
 import { buildShape } from '../../model/build-shape.js';
 import { generateComposablePuzzle } from '../../puzzle/composable-generator.js';
@@ -7,6 +8,12 @@ import { generateFractalPuzzle } from '../../puzzle/fractal/index.js';
 import { generateProceduralPuzzle } from '../../puzzle/procedural-generator.js';
 import { finalizePieceGeometry } from '../../model/finalize-geometry.js';
 import type { Edge, Piece, Point } from '../../model/types.js';
+import { combOutline, makeOutlinePiece } from '../../test-helpers/fixtures.js';
+
+vi.mock('earcut', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('earcut')>();
+    return { default: vi.fn(actual.default) };
+});
 
 const TOL = 0.05;
 
@@ -94,6 +101,7 @@ describe('buildPieceFill and buildPieceStrokes', () => {
         for (const seed of [1, 2, 3]) {
             for (const piece of finalizePieceGeometry(generateProceduralPuzzle(4, 3, { width: 400, height: 300 }, seed))) {
                 const mesh = buildPieceFill(piece, TOL);
+                expect(mesh.fillOmitted).toBe(false);
                 const { minX, minY, maxX, maxY } = mesh.bounds;
                 for (const p of mesh.loops.flat()) {
                     expect(p.x >= minX && p.x <= maxX && p.y >= minY && p.y <= maxY).toBe(true);
@@ -280,5 +288,163 @@ describe('buildPieceFill and buildPieceStrokes', () => {
             }
         }
         expect(checked).toBeGreaterThan(20);
+    });
+});
+
+function circle(points: number, radius: number): Point[] {
+    return Array.from({ length: points }, (_, i) => ({
+        x: radius * Math.cos((2 * Math.PI * i) / points),
+        y: radius * Math.sin((2 * Math.PI * i) / points),
+    }));
+}
+
+function sampledRect(w: number, h: number, points: number): Point[] {
+    const corners = [{ x: 0, y: 0 }, { x: w, y: 0 }, { x: w, y: h }, { x: 0, y: h }];
+    const perimeter = 2 * (w + h);
+    const out: Point[] = [];
+    for (let i = 0; i < points; i++) {
+        let d = (perimeter * i) / points;
+        for (let c = 0; c < 4; c++) {
+            const a = corners[c];
+            const b = corners[(c + 1) % 4];
+            const len = Math.hypot(b.x - a.x, b.y - a.y);
+            if (d <= len) {
+                out.push({ x: a.x + ((b.x - a.x) * d) / len, y: a.y + ((b.y - a.y) * d) / len });
+                break;
+            }
+            d -= len;
+        }
+    }
+    return out;
+}
+
+function compactness(loop: Point[]): number {
+    return measureOutlineGroup([loop]).compactness;
+}
+
+describe('pathological outlines', () => {
+    beforeEach(() => {
+        vi.mocked(earcut).mockClear();
+    });
+
+    test('a comb-shaped outline over 1,024 points gets no fill and is never triangulated, but keeps its outline', () => {
+        const outline = combOutline(300);
+        const mesh = buildPieceFill(makeOutlinePiece(3, outline), TOL);
+        expect(earcut).not.toHaveBeenCalled();
+        expect(mesh.fillOmitted).toBe(true);
+        expect(mesh.fillIndices).toHaveLength(0);
+        expect(mesh.fillVertices).toHaveLength(0);
+        expect(mesh.loops).toEqual([outline]);
+        expect(mesh.edgeOutlines).toHaveLength(4);
+        expect(mesh.bounds).toEqual({ minX: 0, minY: -2, maxX: 600, maxY: 20 });
+    });
+
+    test('a piece without a fill strokes every edge but clips no inner tail against its neighbors', () => {
+        const mesh = buildPieceFill(makeOutlinePiece(3, combOutline(300)), TOL);
+        const strokes = buildPieceStrokes(mesh);
+        expect(strokes.size).toBe(4);
+        for (const stroke of strokes.values()) {
+            expect(stroke.indices.length).toBeGreaterThan(0);
+            expect(stroke.startInnerTail.length + stroke.endInnerTail.length + stroke.bothInnerTails.length).toBe(0);
+        }
+    });
+
+    test('a degenerate sliver earcut leaves without triangles is not an omitted fill', () => {
+        const mesh = buildPieceFill(makeOutlinePiece(3, [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 20, y: 0 }], 3), TOL);
+        expect(mesh.fillIndices).toHaveLength(0);
+        expect(mesh.fillOmitted).toBe(false);
+    });
+
+    test('a dense outline from a hand-made sine link is skipped, so earcut never sees more than 3,000 points', () => {
+        const pieces = sealPieceGeometry(generateComposablePuzzle(2, 4, { width: 50, height: 50 }, 234, {
+            baseCutGenerator: 'sine',
+            baseCutConfig: { ha: 0.1, hf: 60, va: 0.03, vf: 30 },
+            tabGenerator: 'classic',
+            tabConfig: {},
+        }).pieces);
+        const meshes = pieces.map(p => buildPieceFill(p, TOL));
+        const dense = meshes.filter(m => m.loops.flat().length > 3000);
+        expect(dense.length).toBeGreaterThan(0);
+        expect(dense.every(m => m.fillOmitted)).toBe(true);
+        const triangulated = vi.mocked(earcut).mock.calls.map(([flat]) => flat.length / 2);
+        expect(Math.max(...triangulated)).toBeLessThanOrEqual(3000);
+    });
+
+    test('a piece built without triangulating keeps its outline, has no fill and never reaches earcut', () => {
+        const mesh = buildPieceFill(pieceFromLoops([square(0, 0, 100)]), TOL, false);
+        expect(earcut).not.toHaveBeenCalled();
+        expect(mesh.fillOmitted).toBe(true);
+        expect(mesh.fillError).toBeUndefined();
+        expect(mesh.fillIndices).toHaveLength(0);
+        expect(mesh.loops).toHaveLength(1);
+        expect(mesh.edgeOutlines).toHaveLength(4);
+    });
+
+    test('a comb of at most 1,024 points is still filled', () => {
+        const outline = combOutline(255);
+        expect(outline.length).toBeLessThanOrEqual(1024);
+        const mesh = buildPieceFill(makeOutlinePiece(3, outline), TOL);
+        expect(mesh.fillOmitted).toBe(false);
+        expect(triangleArea(mesh.fillVertices, mesh.fillIndices)).toBeCloseTo(polygonArea(outline), 3);
+    });
+
+    test('an outline over 1,024 points is filled just under the spikiness limit and not just over it', () => {
+        const under = sampledRect(180, 1, 1100);
+        const over = sampledRect(220, 1, 1100);
+        expect(compactness(under)).toBeLessThan(64);
+        expect(compactness(over)).toBeGreaterThan(64);
+        const filled = buildPieceFill(makeOutlinePiece(3, under), TOL);
+        expect(triangleArea(filled.fillVertices, filled.fillIndices)).toBeCloseTo(polygonArea(under), 1);
+        expect(filled.fillOmitted).toBe(false);
+        const omitted = buildPieceFill(makeOutlinePiece(4, over), TOL);
+        expect(omitted.fillOmitted).toBe(true);
+        expect(omitted.fillIndices).toHaveLength(0);
+    });
+
+    test('a holed group counts its hole\'s perimeter and subtracts its area; with no net area over 1,024 points it is always skipped', () => {
+        const outer = sampledRect(100, 100, 600);
+        const hole = (side: number): Point[] => sampledRect(side, side, 500)
+            .map(p => ({ x: p.x + (100 - side) / 2, y: p.y + (100 - side) / 2 }))
+            .reverse();
+        const groupCompactness = (side: number): number =>
+            ((400 + 4 * side) ** 2) / (4 * Math.PI * (10000 - side * side));
+        expect(groupCompactness(95)).toBeLessThan(64);
+        expect(groupCompactness(97)).toBeGreaterThan(64);
+        expect(compactness(outer)).toBeLessThan(64);
+
+        const under = buildPieceFill(pieceFromLoops([outer, hole(95)]), TOL);
+        expect(under.fillOmitted).toBe(false);
+        expect(triangleArea(under.fillVertices, under.fillIndices)).toBeCloseTo(polygonArea(outer) - polygonArea(hole(95)), 0);
+        expect(buildPieceFill(pieceFromLoops([outer, hole(97)]), TOL).fillOmitted).toBe(true);
+
+        const flat = Array.from({ length: 1100 }, (_, i) => ({ x: i < 550 ? i : 1099 - i, y: 0 }));
+        expect(buildPieceFill(makeOutlinePiece(3, flat), TOL).fillOmitted).toBe(true);
+    });
+
+    test('a long compact outline of 3,000 points is filled, one point more is not', () => {
+        const long = circle(3000, 500);
+        const filled = buildPieceFill(makeOutlinePiece(3, long), TOL);
+        expect(triangleArea(filled.fillVertices, filled.fillIndices)).toBeCloseTo(polygonArea(long), 0);
+
+        vi.mocked(earcut).mockClear();
+        const tooLong = buildPieceFill(makeOutlinePiece(4, circle(3001, 500)), TOL);
+        expect(earcut).not.toHaveBeenCalled();
+        expect(tooLong.fillOmitted).toBe(true);
+        expect(tooLong.fillIndices).toHaveLength(0);
+        expect(tooLong.loops[0]).toHaveLength(3001);
+    });
+
+    test('a throw while triangulating leaves the piece without a fill but with its outline, and keeps the error', () => {
+        const error = new RangeError('Maximum call stack size exceeded');
+        vi.mocked(earcut).mockImplementationOnce(() => {
+            throw error;
+        });
+        const mesh = buildPieceFill(pieceFromLoops([square(0, 0, 100)]), TOL);
+        expect(mesh.fillError).toBe(error);
+        expect(mesh.fillOmitted).toBe(true);
+        expect(mesh.fillIndices).toHaveLength(0);
+        expect(mesh.fillVertices).toHaveLength(0);
+        expect(mesh.loops).toHaveLength(1);
+        expect(buildPieceStrokes(mesh).size).toBe(4);
     });
 });

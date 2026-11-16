@@ -1,6 +1,6 @@
 import type { Piece, Point } from '../../model/types.js';
 import { CHAIN_EPSILON } from '../../model/build-shape.js';
-import { endCorner, loopNeighborIndices, type EdgeOutline, type PieceMesh } from './piece-mesh.js';
+import { endCorner, loopNeighbors, type EdgeOutline, type PieceMesh } from './piece-mesh.js';
 import {
     KIND_DEBUG_STROKE,
     KIND_FILL,
@@ -298,12 +298,13 @@ function findCorners(outlines: readonly EdgeOutline[]): Map<number, EdgeCorners>
         }
         return entry;
     };
+    const { next } = loopNeighbors(outlines);
     outlines.forEach((a, i) => {
-        const b = outlines[loopNeighborIndices(outlines, i).next];
+        const b = outlines[next[i]];
         const pa = a.polyline;
         const pb = b.polyline;
         if (pa.length < 2 || pb.length < 2 || !samePoint(pa[pa.length - 1], pb[0])) return;
-        const convex = endCorner(outlines, i)?.convex ?? false;
+        const convex = endCorner(outlines, i, next[i])?.convex ?? false;
         Object.assign(cornersOf(a.edgeId), { next: b.edgeId, endConvex: convex });
         Object.assign(cornersOf(b.edgeId), { prev: a.edgeId, startConvex: convex });
     });

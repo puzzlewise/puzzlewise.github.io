@@ -46,7 +46,7 @@ export interface CandidateFetchResult {
 export const CANDIDATE_COUNT = 4;
 
 /** Width the Unsplash "regular" URL scales images to. */
-const DISPLAY_WIDTH = 1080;
+export const DISPLAY_WIDTH = 1080;
 
 export function toDisplayImage(result: UnsplashImageResult): DisplayImage {
     const aspectRatio = result.height / result.width;
