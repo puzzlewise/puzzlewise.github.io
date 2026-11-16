@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import type { GameState, Piece, PieceGroup } from '../model/types.js';
 import { buildShape } from '../model/build-shape.js';
-import { formatEdgePath, parseEdgePath } from '../model/edge-path.js';
+import { deriveMatePath, formatEdgePath, parseEdgePath } from '../model/edge-path.js';
 import { buildPiecesById } from '../model/helpers.js';
 import { createNewGame } from '../game/init.js';
 import { registerTabGenerator } from '../puzzle/topology/generator-registry.js';
@@ -13,7 +13,7 @@ import {
     viewport,
     type StyleCase,
 } from '../test-helpers/generation-style-cases.js';
-import { v13Progress, v13StaticBlob } from '../test-helpers/v13-save.js';
+import { v13GridBlob, v13GridProgress, v13Progress, v13StaticBlob } from '../test-helpers/v13-save.js';
 import {
     serializeState,
     deserializeState,
@@ -1543,13 +1543,64 @@ describe('v14 mate path dedup', () => {
         }
     });
 
-    it('loads a v13 blob unchanged', () => {
+    it('aligns a v13 blob\'s mates in memory and leaves the blob as stored', () => {
         const blob = v13StaticBlob();
-        const progress = v13Progress();
+        const stored = JSON.stringify(blob);
 
-        const restored = recombine(JSON.parse(JSON.stringify(blob)), progress);
+        const restored = recombine(blob, v13Progress());
 
-        expect(restored.pieces.map((p) => p.edges.map((e) => e.path)))
-            .toEqual(blob.pieces.map((p) => p.edges.map((e) => e.path)));
+        expect(JSON.stringify(blob)).toBe(stored);
+        const [canon, mate] = [restored.pieces[0].edges[1], restored.pieces[1].edges[3]];
+        expect(mate.path).toBe(deriveMatePath(canon.path, canon.start, restored.pieces[0].imageOffset, restored.pieces[1].imageOffset));
+        expect(mate.path).not.toBe(blob.pieces[1].edges[3].path);
+    });
+
+    it('keeps a v13 grid\'s ids, image offsets and bounds', () => {
+        const blob = v13GridBlob();
+
+        const restored = recombine(JSON.parse(JSON.stringify(blob)), v13GridProgress());
+
+        const ids = (ps: { id: number; edges: { id: number; mateEdgeId: number; matePieceId: number }[] }[]) =>
+            ps.map((p) => [p.id, p.edges.map((e) => [e.id, e.mateEdgeId, e.matePieceId])]);
+        expect(ids(restored.pieces)).toEqual(ids(blob.pieces));
+        expect(restored.pieces.map((p) => p.imageOffset)).toEqual(blob.pieces.map((p) => p.imageOffset));
+        expect(restored.pieces.map((p) => p.bounds)).toEqual(blob.pieces.map((p) => p.bounds));
+        expect(restored.groups[0].pieces).toEqual(new Map(v13GridProgress().groups[0].pieces));
+    });
+
+    it('keeps a v11 shape that its edges do not rebuild', () => {
+        const blob = v13GridBlob();
+        const shapes = blob.pieces.map((p) => `M0,0 L10,0 L10,10 L0,10 Z ${p.id}`);
+        const v11 = {
+            ...blob,
+            version: 11,
+            pieces: blob.pieces.map(({ bounds: _bounds, ...p }, i) => ({ ...p, shape: shapes[i] })),
+        };
+
+        const restored = recombine(v11, v13GridProgress());
+
+        expect(restored.pieces.map((p) => p.shape)).toEqual(shapes);
+        const [canon, mate] = [restored.pieces[0].edges[1], restored.pieces[1].edges[3]];
+        expect(mate.path).toBe(deriveMatePath(canon.path, canon.start, restored.pieces[0].imageOffset, restored.pieces[1].imageOffset));
+    });
+
+    for (const end of [null, { x: null, y: null }]) {
+        it(`loads a v13 blob whose canonical end is ${JSON.stringify(end)}, keeping that pair as stored`, () => {
+            const blob = v13GridBlob();
+            (blob.pieces[0].edges[1] as { end: unknown }).end = end;
+
+            const restored = recombine(JSON.parse(JSON.stringify(blob)), v13GridProgress());
+
+            expect(restored.pieces[0].edges[1].path).toBe('L 11 5 L 9.5 10');
+            expect(restored.pieces[1].edges[3].path).toBe('L 1.01 5 L 0 0');
+        });
+    }
+
+    it('leaves a v14 blob\'s stored mate paths as stored', () => {
+        const blob = { ...v13GridBlob(), version: 14 };
+
+        const restored = recombine(JSON.parse(JSON.stringify(blob)), v13GridProgress());
+
+        expect(restored.pieces.map((p) => p.edges)).toEqual(blob.pieces.map((p) => p.edges));
     });
 });

@@ -13,6 +13,7 @@ import type {
 } from '../model/types.js';
 import { buildGroupIndexes, buildPiecesById } from '../model/helpers.js';
 import { getImageDimensions } from '../model/derive.js';
+import { alignLegacyGroupOffsets, alignLegacyMates } from '../model/align-mates.js';
 import { buildShape } from '../model/build-shape.js';
 import { deriveMatePath } from '../model/edge-path.js';
 import { sealPieceGeometry } from '../model/seal-geometry.js';
@@ -348,41 +349,65 @@ function isUsableBounds(bounds: PieceBounds | undefined): bounds is PieceBounds 
     return maxX >= minX && maxY >= minY;
 }
 
+type RestoredPiece = Omit<SerializedPiece, 'edges'> & { edges: Edge[] };
+
 /**
  * - v12+: `bounds` must be present and usable (throw otherwise); a missing
  *   `shape` is rebuilt from the edge paths.
  * - v≤11: `shape` always present; `bounds` computed from stored endpoints +
  *   curve samples (the walk the app ran before v12), and the samples dropped.
+ * - v≤13: mates are aligned in memory (`alignLegacyMates`), and so are the
+ *   piece offsets of each group merged on that geometry
+ *   (`alignLegacyGroupOffsets`). A stored `shape` is kept as stored. The
+ *   geometry blob is never rewritten; the next ordinary progress save carries
+ *   the corrected offsets.
  *
  * Both branches finish through `sealPieceGeometry`, so the "bounds present, no
  * curve samples" invariant is enforced in one place. Only v12+ runs
  * `isUsableBounds` — a v12 box is untrusted disk data, while the v≤11 box is
  * computed here and rejecting it would make saves every build loads unreadable.
  */
-function restorePieces(pieces: SerializedPiece[], version: number): Piece[] {
-    if (version >= 12) {
-        const owners = version >= 14 ? edgeOwners(pieces) : null;
-        return sealPieceGeometry(pieces.map((piece, i) => {
-            const { bounds } = piece;
-            if (!isUsableBounds(bounds)) {
-                throw new Error(`Invalid state: piece ${i} has no usable bounds`);
-            }
-            if (!Array.isArray(piece.edges)) {
-                throw new Error(`Invalid state: piece ${i} has no edges`);
-            }
-            if (piece.shape !== undefined && typeof piece.shape !== 'string') {
-                throw new Error(`Invalid state: piece ${i} has a non-string shape`);
-            }
-            const edges = owners ? restoreEdgePaths(piece, i, owners) : piece.edges as Edge[];
-            return {
-                ...piece,
-                edges,
-                bounds,
-                shape: piece.shape ?? buildShape(edges),
-            };
-        }));
-    }
-    return sealPieceGeometry(pieces.map((piece, i) => {
+function restorePiecesAndGroups(
+    serializedPieces: SerializedPiece[],
+    serializedGroups: SerializedPieceGroup[],
+    version: number,
+): { pieces: Piece[]; groups: PieceGroup[] } {
+    const restored: RestoredPiece[] =
+        version >= 12 ? restoreV12Pieces(serializedPieces, version) : restoreV11Pieces(serializedPieces);
+    const groups = serializedGroups.map(deserializeGroup);
+    if (version >= 14) return { pieces: sealRestored(restored), groups };
+
+    const pieces = sealRestored(alignLegacyMates(restored));
+    return { pieces, groups: alignLegacyGroupOffsets(groups, buildPiecesById(pieces)) };
+}
+
+function sealRestored(pieces: RestoredPiece[]): Piece[] {
+    return sealPieceGeometry(pieces.map((piece) => ({
+        ...piece,
+        shape: piece.shape ?? buildShape(piece.edges),
+    })));
+}
+
+function restoreV12Pieces(pieces: SerializedPiece[], version: number) {
+    const owners = version >= 14 ? edgeOwners(pieces) : null;
+    return pieces.map((piece, i) => {
+        const { bounds } = piece;
+        if (!isUsableBounds(bounds)) {
+            throw new Error(`Invalid state: piece ${i} has no usable bounds`);
+        }
+        if (!Array.isArray(piece.edges)) {
+            throw new Error(`Invalid state: piece ${i} has no edges`);
+        }
+        if (piece.shape !== undefined && typeof piece.shape !== 'string') {
+            throw new Error(`Invalid state: piece ${i} has a non-string shape`);
+        }
+        const edges = owners ? restoreEdgePaths(piece, i, owners) : piece.edges as Edge[];
+        return { ...piece, edges, bounds };
+    });
+}
+
+function restoreV11Pieces(pieces: SerializedPiece[]) {
+    return pieces.map((piece, i) => {
         if (typeof piece.shape !== 'string') {
             throw new Error(`Invalid state: piece ${i} has no shape`);
         }
@@ -393,7 +418,7 @@ function restorePieces(pieces: SerializedPiece[], version: number): Piece[] {
         // untrustworthy — these saves' bounds come from their curve samples.
         const { bounds: _ignored, ...rest } = piece;
         return { ...rest, edges: piece.edges as Edge[], shape: piece.shape };
-    }));
+    });
 }
 
 /** Throws if the data is invalid or the version is unsupported. */
@@ -406,9 +431,7 @@ export function deserializeState(data: SerializedGameState): GameState {
 
     validateSerializedState(data);
 
-    const pieces = restorePieces(data.pieces, data.version);
-
-    const groups = data.groups.map(deserializeGroup);
+    const { pieces, groups } = restorePiecesAndGroups(data.pieces, data.groups, data.version);
 
     // v≤8 stored rotation as quarter-turns; v9+ as degrees. Migrate by ×90.
     if (data.version <= 8) {
@@ -502,10 +525,8 @@ export function recombine(
         throw new Error('Invalid state: pieces must be a non-empty array');
     }
     validateImageUrl(staticData.imageUrl, staticData.version);
-    const pieces = restorePieces(staticData.pieces, staticData.version);
     validateGroups(progress.groups);
-
-    const groups = progress.groups.map(deserializeGroup);
+    const { pieces, groups } = restorePiecesAndGroups(staticData.pieces, progress.groups, staticData.version);
     const { groupsById, pieceToGroup } = buildGroupIndexes(groups);
     const imageSize = staticData.imageSize ?? deriveImageSize(pieces);
     const gridSize = staticData.gridSize ?? { cols: DEFAULT_COLS, rows: DEFAULT_ROWS };
@@ -647,7 +668,7 @@ function resolveRotationMode(
 
 /**
  * Other fields are inert padding — `getImageDimensions` only reads `pieces`.
- * Takes restored `Piece[]` (run blob pieces through `restorePieces` first):
+ * Takes restored `Piece[]` (run blob pieces through `restorePiecesAndGroups` first):
  * `getImageDimensions` reads `piece.bounds`, present only on restored pieces.
  */
 function deriveImageSize(pieces: Piece[]): Size {
