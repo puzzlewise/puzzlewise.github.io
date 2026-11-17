@@ -22,7 +22,7 @@ import {
 } from './halo-gl.js';
 import { HALO_STATES, haloSteps } from './halo-recipe.js';
 import type { HaloSlots, HaloSource } from './halo-slots.js';
-import { ContextLossMonitor, type ContextEventPhase } from './context-loss.js';
+import { ContextLossMonitor, type ContextEvent } from './context-loss.js';
 import { FrameScheduler } from './frame-scheduler.js';
 import { createGl, createProgram, onContextLoss, ShaderBuildError } from './gl-context.js';
 import { hitTest } from './hit-test.js';
@@ -62,11 +62,26 @@ import { OUTLINE_HALF_WIDTH } from './stroke-mesh.js';
 /** Runs `work` on each item in idle time; the returned function cancels the rest. */
 export type IdleScheduler = <T>(items: readonly T[], work: (item: T) => void) => () => void;
 
+export type HalosUnavailableKind = 'halo-shader' | 'halo-atlas';
+
+export interface FillsOmitted {
+    /** Pieces left unfilled by the shape guard or the fill budget, without a throw. */
+    skipped: number;
+    errored: number;
+    /** The first error thrown, when `errored` > 0. */
+    error?: unknown;
+    budgetExhaustedAfter?: number;
+}
+
 export interface WebGlRendererOptions {
     runInIdle: IdleScheduler;
-    onContextEvent: (phase: ContextEventPhase) => void;
+    onContextEvent: (event: ContextEvent) => void;
     /** A restored context that can't rebuild the shaders; context events stop after it. */
     onRestoreFailed: (error: ShaderBuildError) => void;
+    /** `halo-shader` at most once per renderer, `halo-atlas` at most once per game. */
+    onHalosUnavailable: (kind: HalosUnavailableKind) => void;
+    /** Once per installed game that draws pieces without a fill. */
+    onFillsOmitted: (omitted: FillsOmitted) => void;
     now?: () => number;
 }
 
@@ -123,6 +138,8 @@ export class WebGlRenderer implements Renderer {
     private readonly contextLoss: ContextLossMonitor;
     private readonly runInIdle: IdleScheduler;
     private readonly onRestoreFailed: (error: ShaderBuildError) => void;
+    private readonly onHalosUnavailable: (kind: HalosUnavailableKind) => void;
+    private readonly onFillsOmitted: (omitted: FillsOmitted) => void;
     private readonly now: () => number;
     private table: HTMLDivElement | null = null;
     private canvas: HTMLCanvasElement | null = null;
@@ -159,8 +176,10 @@ export class WebGlRenderer implements Renderer {
     constructor(options: WebGlRendererOptions) {
         this.runInIdle = options.runInIdle;
         this.onRestoreFailed = options.onRestoreFailed;
+        this.onHalosUnavailable = options.onHalosUnavailable;
+        this.onFillsOmitted = options.onFillsOmitted;
         this.now = options.now ?? (() => performance.now());
-        this.contextLoss = new ContextLossMonitor(options.onContextEvent);
+        this.contextLoss = new ContextLossMonitor(options.onContextEvent, this.now);
     }
 
     init(container: HTMLElement): void {
@@ -254,12 +273,6 @@ export class WebGlRenderer implements Renderer {
         this.setGroupFlag(groupId, (scene) => scene.setSelected(groupId, selected));
     }
 
-    setRingsEnabled(_enabled: boolean): void {}
-
-    setInnerOutlineEnabled(_enabled: boolean): void {}
-
-    setViewportMoving(_moving: boolean): void {}
-
     setAppearance(appearance: RendererAppearance): void {
         const dirt = appearanceDirt(this.appearance, appearance);
         this.appearance = appearance;
@@ -316,7 +329,7 @@ export class WebGlRenderer implements Renderer {
         this.photos.load(state.imageUrl);
         if (this.res) this.dropHalos(this.res);
 
-        const meshes = buildFills(state.pieces, this.now);
+        const meshes = buildFills(state.pieces, this.now, this.onFillsOmitted);
         const scene = new Scene(meshes, state);
         // Merges keep earlier halos until theirs is built, so slots can briefly outnumber groups.
         const store = new GeometryStore(state.pieces, (id) => scene.slotOfPiece(id), 2 * state.pieces.length + 16);
@@ -494,6 +507,7 @@ export class WebGlRenderer implements Renderer {
             this.halosUnavailable = true;
             // eslint-disable-next-line no-console
             console.error('Halo shaders failed to build; drawing without shadows and glow', error, error.log);
+            this.onHalosUnavailable('halo-shader');
             return;
         }
         if (res.haloPrograms) this.markDirty({ halos: true, frame: true });
@@ -526,7 +540,11 @@ export class WebGlRenderer implements Renderer {
     }
 
     private handleContextRestored(): void {
-        if (!this.contextLoss.canRestore) return;
+        if (!this.contextLoss.canRestore) {
+            this.contextLoss.restoredLate();
+            return;
+        }
+        const restoredAt = this.now();
         let created: boolean;
         try {
             created = this.createResources();
@@ -538,7 +556,7 @@ export class WebGlRenderer implements Renderer {
         }
         // A null program means the context was lost again mid-rebuild; its own events follow.
         if (!created) return;
-        this.contextLoss.restored(() => this.drawIfDirty(false));
+        this.contextLoss.restored(() => this.drawIfDirty(false), restoredAt);
     }
 
     private upload(gl: WebGL2RenderingContext, res: GlResources, inFrame: boolean): void {
@@ -623,6 +641,7 @@ export class WebGlRenderer implements Renderer {
             game.halosUnavailable = true;
             // eslint-disable-next-line no-console
             console.warn('Halo atlas does not fit; drawing without shadows and glow', error);
+            this.onHalosUnavailable('halo-atlas');
             return null;
         }
         game.haloLayers = plan.layers;
@@ -780,7 +799,11 @@ export class WebGlRenderer implements Renderer {
     }
 }
 
-function buildFills(pieces: readonly Piece[], now: () => number): PieceMesh[] {
+function buildFills(
+    pieces: readonly Piece[],
+    now: () => number,
+    onFillsOmitted: (omitted: FillsOmitted) => void,
+): PieceMesh[] {
     // Failing the install makes a share link load roll back; a piece drawn from
     // non-finite bounds would instead break halo planning on every later frame.
     for (const { id, bounds, imageOffset } of pieces) {
@@ -799,15 +822,22 @@ function buildFills(pieces: readonly Piece[], now: () => number): PieceMesh[] {
     });
     const unfilled = meshes.filter((mesh) => mesh.fillOmitted);
     if (unfilled.length > 0) {
-        const failed = unfilled.find((mesh) => 'fillError' in mesh);
-        const budget = filledInBudget < pieces.length
+        const failed = unfilled.filter((mesh) => 'fillError' in mesh);
+        const budgetExhausted = filledInBudget < pieces.length;
+        const budget = budgetExhausted
             ? `; the fill budget ran out after ${filledInBudget} of ${pieces.length} pieces`
             : '';
         // eslint-disable-next-line no-console
         console.warn(
             `Drawing ${unfilled.length} ${unfilled.length === 1 ? 'piece' : 'pieces'} without a fill${budget}`,
-            ...(failed ? [failed.fillError] : []),
+            ...(failed.length > 0 ? [failed[0].fillError] : []),
         );
+        onFillsOmitted({
+            skipped: unfilled.length - failed.length,
+            errored: failed.length,
+            ...(failed.length > 0 ? { error: failed[0].fillError } : {}),
+            ...(budgetExhausted ? { budgetExhaustedAfter: filledInBudget } : {}),
+        });
     }
     return meshes;
 }

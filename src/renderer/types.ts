@@ -42,18 +42,7 @@ export interface Renderer {
 
     setGroupSelected(groupId: number, selected: boolean): void;
 
-    setRingsEnabled(enabled: boolean): void;
-
-    /** Takes effect on the next `renderState`. */
-    setInnerOutlineEnabled(enabled: boolean): void;
-
     setAppearance(appearance: RendererAppearance): void;
-
-    /**
-     * True while a gesture moves the viewport. Groups aren't composited at
-     * rest, so without this every frame of a pan redraws them (#735).
-     */
-    setViewportMoving(moving: boolean): void;
 
     /**
      * `point` is screen-space. Keeps hit-testing behind the renderer

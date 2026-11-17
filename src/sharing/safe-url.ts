@@ -20,7 +20,7 @@ const IMAGE_MIME_PREFIX = 'image/';
 
 /**
  * URL-scheme guard for a share link's image URL (`SharePayload.i`), which
- * reaches `state.imageUrl` and the SVG `<image>` href. Wider than
+ * reaches `state.imageUrl`. Wider than
  * {@link isSafeHttpUrl} (which requires absolute http(s) for anchor hrefs):
  * accepts the `'blank'` sentinel, `data:image/*` (legacy blank-puzzle PNGs;
  * `image/` subtypes only), and same-origin relative URLs (the bundled image).

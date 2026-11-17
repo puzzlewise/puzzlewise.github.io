@@ -72,8 +72,7 @@ export interface Piece {
     /**
      * Flat list of edges forming one or more loops chained end-to-start; a loop
      * boundary is where the chain breaks (an edge's `start` no longer matches
-     * the previous `end`). Holes add loops after the outer boundary. Render via
-     * `shape`, which already encodes the loops as multi-`M..Z` subpaths.
+     * the previous `end`). Holes add loops after the outer boundary.
      */
     edges: Edge[];
     /** Full SVG clip-path `d` attribute built from all edges. */

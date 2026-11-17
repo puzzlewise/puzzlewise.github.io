@@ -1,15 +1,6 @@
-/**
- * The glow is CSS-only: it reads `--selection-glow`, defined light on `:root`
- * and flipped dark in `[data-ui-scheme="light"]` so a same-hue light background
- * doesn't wash it out. No JS to unit-test, so these assertions guard the CSS
- * wiring against a revert to the fixed `--ui-accent`.
- */
-
 import { describe, it, expect } from 'vitest';
 import styleCss from './style.css?raw';
 import { DEFAULT_COLOR_ID } from './ui/background-color.js';
-import { RING_NAMES } from './renderer/svg-dom-renderer.js';
-import { PIECE_OUTLINE_PRESETS } from './ui/piece-outline.js';
 
 function matchingBrace(css: string, open: number): number {
     let depth = 0;
@@ -129,135 +120,11 @@ describe('selection glow CSS', () => {
         );
     });
 
-    it('drives the selection glow off --selection-glow, not --ui-accent', () => {
-        for (const selector of [
-            '[data-group-id].selected',
-            '[data-group-id].selected.dragging',
-        ]) {
-            const body = declarationsFor(styleCss, selector);
-            // Three glow layers, each mixing --selection-glow with transparent.
-            const glowLayers = body.match(/var\(--selection-glow\)/g) ?? [];
-            expect(glowLayers.length, `${selector} glow layers`).toBe(3);
-            // The fixed chrome accent must not sneak back into the glow.
-            expect(body, `${selector} must not reference --ui-accent`).not.toMatch(
-                /--ui-accent/,
-            );
+    it('the color variables the WebGL appearance resolver reads are still defined', () => {
+        const root = declarationsFor(styleCss, ':root');
+        for (const name of ['--selection-glow', '--puzzle-bg-color']) {
+            expect(root, name).toMatch(new RegExp(`${name}:`));
         }
-    });
-});
-
-describe('group layer promotion CSS', () => {
-    it('composites groups only while dragged, and the table only while the viewport moves (#735)', () => {
-        expect(declarationsFor(styleCss, '[data-group-id]')).not.toMatch(/will-change/);
-        expect(declarationsFor(styleCss, '[data-group-id].dragging')).toMatch(/will-change:\s*transform/);
-        expect(declarationsFor(styleCss, '[data-puzzle-table][data-viewport-moving]')).toMatch(
-            /will-change:\s*transform/,
-        );
-    });
-
-    it('filters idle groups through the idle edge filter (#687)', () => {
-        expect(declarationsFor(styleCss, '[data-group-id]')).toMatch(
-            /filter:\s*var\(--piece-edge-idle-filter,/,
-        );
-    });
-
-    it('composes state variants onto --piece-edge-filter, never the idle filter', () => {
-        for (const selector of [
-            '[data-group-id].selected',
-            '[data-group-id].selected.dragging',
-            '[data-group-id].dragging',
-        ]) {
-            const body = declarationsFor(styleCss, selector);
-            expect(body, selector).toMatch(/filter:\s*var\(--piece-edge-filter,/);
-            expect(body, selector).not.toMatch(/--piece-edge-idle-filter/);
-        }
-    });
-
-    it('strokes the outline from its wrapper so ring references can take their own stroke', () => {
-        const wrapper = declarationsFor(styleCss, '[data-edge-outline]');
-        expect(wrapper).toMatch(/stroke:\s*var\(--piece-outline-color, #080808\)/);
-        expect(wrapper).toMatch(/stroke-width:\s*calc\(3px \* var\(--outline-stroke-scale, 1\)\)/);
-        expect(declarationsFor(styleCss, '[data-outline-underlay] path')).not.toMatch(/stroke:|stroke-width:/);
-    });
-
-    it('hides rings and the outline wrapper unless something shows them', () => {
-        const ring = declarationsFor(styleCss, '[data-ring]');
-        expect(ring).toMatch(/display:\s*none/);
-        expect(ring).toMatch(/fill:\s*none/);
-        expect(declarationsFor(styleCss, '[data-edge-outline]')).toMatch(/display:\s*none/);
-        expect(declarationsFor(styleCss, '[data-piece-outline="outline"] [data-edge-outline]')).toMatch(
-            /display:\s*inline/,
-        );
-    });
-
-    it('drops the group layers while the table is relayering (#680)', () => {
-        expect(declarationsFor(styleCss, '[data-puzzle-table].relayer [data-group-id]')).toMatch(
-            /will-change:\s*auto/,
-        );
-    });
-
-    it('falls back to no idle filter before the edge setting is applied', () => {
-        expect(declarationsFor(styleCss, '[data-group-id]')).toMatch(
-            /filter:\s*var\(--piece-edge-idle-filter,\s*none\)/,
-        );
-    });
-});
-
-describe('outline underlay CSS', () => {
-    it('hides the underlay unless the Outline preset is active', () => {
-        expect(declarationsFor(styleCss, '[data-outline-underlay]')).toMatch(/display:\s*none/);
-        expect(
-            declarationsFor(styleCss, '[data-piece-outline="outline"] [data-outline-underlay]'),
-        ).toMatch(/display:\s*block/);
-    });
-
-    it('lets the underlay overflow its box and ignore pointers', () => {
-        const body = declarationsFor(styleCss, '[data-outline-underlay]');
-        expect(body).toMatch(/overflow:\s*visible/);
-        expect(body).toMatch(/pointer-events:\s*none/);
-    });
-
-    it('leaves the edge paths unfilled', () => {
-        expect(declarationsFor(styleCss, '[data-outline-underlay] path')).toMatch(/fill:\s*none/);
-    });
-
-    it('declares the stroke width in one place', () => {
-        expect(styleCss.match(/stroke-width:[^;]*3px/g)).toHaveLength(1);
-    });
-
-    it('strokes the inner outline like the underlay, unfilled and ignoring pointers', () => {
-        expect(declarationsFor(styleCss, '[data-inner-outline] use')).toMatch(
-            /stroke-width:\s*calc\(3px \* var\(--outline-stroke-scale, 1\)\)/,
-        );
-        expect(declarationsFor(styleCss, '[data-inner-outline] use')).toMatch(
-            /stroke:\s*var\(--piece-outline-color, #080808\)/,
-        );
-        expect(declarationsFor(styleCss, '[data-inner-outline] use')).toMatch(/fill:\s*none/);
-        const body = declarationsFor(styleCss, '[data-inner-outline]');
-        expect(body).toMatch(/overflow:\s*visible/);
-        expect(body).toMatch(/pointer-events:\s*none/);
-        expect(body).toMatch(/position:\s*absolute/);
-    });
-
-    it('hides the underlay stroke while the outline is drawn inside', () => {
-        expect(
-            declarationsFor(styleCss, '[data-puzzle-table][data-outline-inside] [data-edge-outline]'),
-        ).toMatch(/display:\s*none/);
-    });
-
-    it('scales the inner outline by the zoom compensation in constant-width mode', () => {
-        expect(
-            declarationsFor(styleCss, '[data-outline-constant-width] [data-inner-outline]'),
-        ).toMatch(/--outline-stroke-scale:\s*var\(--outline-zoom-comp, 1\)/);
-    });
-
-    it('scales the stroke by the zoom compensation only in constant-width mode', () => {
-        expect(declarationsFor(styleCss, '[data-outline-underlay]')).not.toMatch(
-            /--outline-zoom-comp/,
-        );
-        expect(
-            declarationsFor(styleCss, '[data-outline-constant-width] [data-outline-underlay]'),
-        ).toMatch(/--outline-stroke-scale:\s*var\(--outline-zoom-comp, 1\)/);
     });
 });
 
@@ -266,57 +133,6 @@ describe('first-paint background', () => {
         expect(declarationsFor(styleCss, ':root')).toContain(
             `--puzzle-bg-color: var(--color-${DEFAULT_COLOR_ID});`,
         );
-    });
-});
-
-describe('blank-piece CSS', () => {
-    it('paints blank pieces from the --piece-blank-fill variable', () => {
-        expect(declarationsFor(styleCss, '[data-piece-blank]')).toMatch(
-            /fill:\s*var\(--piece-blank-fill\)/,
-        );
-    });
-
-    it('defines --piece-blank-fill as white, in exactly one place', () => {
-        // Nothing in TS names this color, so this stops a blank puzzle
-        // rendering SVG-default black if the declaration is dropped. The count
-        // pins "one definition" — a prefers-color-scheme override (which must
-        // never exist) would land as a second occurrence.
-        expect(declarationsFor(styleCss, ':root')).toMatch(
-            /--piece-blank-fill:\s*#ffffff/,
-        );
-        expect(styleCss.match(/--piece-blank-fill:/g)).toHaveLength(1);
-    });
-
-    it('applies the debug opacity slider to blank pieces too', () => {
-        expect(declarationsFor(styleCss, '[data-piece-blank]')).toMatch(
-            /opacity:\s*var\(--piece-opacity\)/,
-        );
-    });
-
-    it('hides blank pieces when the debug piece view is on', () => {
-        expect(declarationsFor(styleCss, '.show-debug-pieces [data-piece-blank]')).toMatch(
-            /display:\s*none/,
-        );
-    });
-});
-
-describe('seam fill CSS', () => {
-    it('lets the seam fill overflow its box and ignore pointers', () => {
-        const body = declarationsFor(styleCss, '[data-seam-fill]');
-        expect(body).toMatch(/overflow:\s*visible/);
-        expect(body).toMatch(/pointer-events:\s*none/);
-    });
-
-    it('paints a blank seam fill like a blank piece', () => {
-        expect(declarationsFor(styleCss, '[data-seam-fill] rect')).toMatch(
-            /fill:\s*var\(--piece-blank-fill\)/,
-        );
-    });
-
-    it('hides the seam fill in the debug piece view and while pieces are translucent', () => {
-        expect(declarationsFor(styleCss, '.show-debug-pieces [data-seam-fill]')).toMatch(/display:\s*none/);
-        expect(declarationsFor(styleCss, '.pieces-translucent [data-seam-fill]')).toMatch(/display:\s*none/);
-        expect(declarationsFor(styleCss, '[data-seam-fill]')).not.toMatch(/opacity/);
     });
 });
 
@@ -388,61 +204,5 @@ describe('right-hand toolbar', () => {
             expect(body).not.toMatch(/position:\s*absolute/);
             expect(body).not.toMatch(/(^|[\s;])top:/);
         }
-    });
-});
-
-describe('simple effects', () => {
-    it('shows the underlay under Simple', () => {
-        expect(declarationsFor(styleCss, '[data-effects="simple"] [data-outline-underlay]')).toMatch(
-            /display:\s*block/,
-        );
-    });
-
-    it('neutralizes the edge filter variables on groups under Simple', () => {
-        const body = declarationsFor(styleCss, '[data-effects="simple"] [data-group-id]');
-        expect(body).toMatch(/--piece-edge-filter:\s*opacity\(1\)/);
-        expect(body).toMatch(/--piece-edge-idle-filter:\s*none/);
-    });
-
-    it.each([
-        '[data-effects="simple"] [data-group-id].selected',
-        '[data-effects="simple"] [data-group-id].dragging',
-    ])('drops the state filter for %s', (selector) => {
-        expect(declarationsFor(styleCss, selector)).toMatch(/filter:\s*none/);
-    });
-
-    it.each([
-        '[data-effects="simple"][data-piece-outline="shadow"] [data-ring^="edge-"]',
-        '[data-effects="simple"] [data-group-id].dragging [data-ring^="lift-"]',
-        '[data-effects="simple"] [data-group-id].selected [data-ring^="glow-"]',
-    ])('shows rings for %s', (selector) => {
-        expect(declarationsFor(styleCss, selector)).toMatch(/display:\s*inline/);
-    });
-
-    it.each(RING_NAMES)('gives ring %s its own stroke width', (name) => {
-        expect(declarationsFor(styleCss, `[data-ring="${name}"]`)).toMatch(/stroke-width:/);
-    });
-
-    it.each(
-        PIECE_OUTLINE_PRESETS
-            .filter((p) => [p.filter, p.idleFilter].some((f) => f?.includes('drop-shadow')))
-            .map((p) => p.id),
-    )('draws Simple edge rings for the %s preset, whose Full edge is a drop-shadow', (id) => {
-        expect(
-            declarationsFor(styleCss, `[data-effects="simple"][data-piece-outline="${id}"] [data-ring^="edge-"]`),
-        ).toMatch(/display:\s*inline/);
-    });
-
-    it('colors the selection rings with --selection-glow', () => {
-        expect(declarationsFor(styleCss, '[data-ring^="glow-"]')).toMatch(/stroke:\s*var\(--selection-glow\)/);
-    });
-
-    it('declares no drop-shadow in any Simple rule', () => {
-        const css = styleCss.replace(/\/\*[\s\S]*?\*\//g, '');
-        const simpleBodies = [...css.matchAll(/([^{}]*)\{([^{}]*)\}/g)]
-            .filter(([, prelude]) => prelude.includes('[data-effects="simple"]'))
-            .map(([, , body]) => body);
-        expect(simpleBodies.length).toBeGreaterThan(0);
-        for (const body of simpleBodies) expect(body).not.toMatch(/drop-shadow/);
     });
 });

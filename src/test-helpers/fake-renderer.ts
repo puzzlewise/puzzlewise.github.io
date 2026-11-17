@@ -24,10 +24,7 @@ export interface FakeRenderer extends Renderer {
     animateGroupRotation: Mock<Renderer['animateGroupRotation']>;
     setGroupDragging: Mock<Renderer['setGroupDragging']>;
     setGroupSelected: Mock<Renderer['setGroupSelected']>;
-    setRingsEnabled: Mock<Renderer['setRingsEnabled']>;
     setAppearance: Mock<Renderer['setAppearance']>;
-    setInnerOutlineEnabled: Mock<Renderer['setInnerOutlineEnabled']>;
-    setViewportMoving: Mock<Renderer['setViewportMoving']>;
     pieceIdAtPoint: Mock<Renderer['pieceIdAtPoint']>;
     photoSettled: Mock<Renderer['photoSettled']>;
     prefetchPhoto: Mock<Renderer['prefetchPhoto']>;
@@ -44,10 +41,7 @@ export function createFakeRenderer(): FakeRenderer {
         animateGroupRotation: vi.fn(() => Promise.resolve()),
         setGroupDragging: vi.fn(),
         setGroupSelected: vi.fn(),
-        setRingsEnabled: vi.fn(),
         setAppearance: vi.fn(),
-        setInnerOutlineEnabled: vi.fn(),
-        setViewportMoving: vi.fn(),
         pieceIdAtPoint: vi.fn<Renderer['pieceIdAtPoint']>(() => null),
         photoSettled: vi.fn(() => new Promise<'loaded' | 'failed'>(() => {})),
         prefetchPhoto: vi.fn(),

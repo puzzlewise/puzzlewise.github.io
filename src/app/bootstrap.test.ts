@@ -127,26 +127,49 @@ const webgl = vi.hoisted(() => ({
     options: undefined as WebGlRendererOptions | undefined,
 }));
 
-// An SVG renderer under the WebGL name: jsdom has no WebGL, and the wiring
-// under test only needs `init` to fail or succeed and the options it was given.
+// jsdom has no WebGL: every constant reads 0 and every call succeeds.
+vi.mock('../renderer/webgl/gl-context.js', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('../renderer/webgl/gl-context.js')>();
+    const answers: Record<string, unknown> = {
+        isContextLost: false,
+        getExtension: null,
+        getShaderParameter: true,
+        getProgramParameter: true,
+    };
+    const gl = new Proxy({}, {
+        get: (_target, name) => (typeof name === 'string' && /^[A-Z0-9_]+$/.test(name)
+            ? 0
+            : () => (name in answers ? answers[name as string] : {})),
+    });
+    return {
+        ...actual,
+        createGl: () => {
+            if (webgl.initError) throw webgl.initError;
+            return gl as WebGL2RenderingContext;
+        },
+    };
+});
+
 vi.mock('../renderer/index.js', async (importOriginal) => {
     const actual = await importOriginal<typeof import('../renderer/index.js')>();
-    class FakeWebGlRenderer extends actual.SvgDomRenderer {
+    class RecordingWebGlRenderer extends actual.WebGlRenderer {
         constructor(options: WebGlRendererOptions) {
-            super();
+            super(options);
             webgl.options = options;
         }
 
         override init(container: HTMLElement): void {
-            if (webgl.initError) throw webgl.initError;
             super.init(container);
             webgl.onInit?.(webgl.options!);
         }
     }
-    return { ...actual, WebGlRenderer: FakeWebGlRenderer };
+    return { ...actual, WebGlRenderer: RecordingWebGlRenderer };
 });
 
 vi.mock('./idle-chunks.js', () => ({ runInIdleChunks: vi.fn(() => vi.fn()) }));
+
+vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
+vi.stubGlobal('matchMedia', () => ({ matches: false, addEventListener() {}, removeEventListener() {} }));
 
 vi.mock('../move/move-receiver.js', async (importOriginal) => {
     const actual = await importOriginal<typeof import('../move/move-receiver.js')>();
@@ -179,7 +202,7 @@ import { loadGameContext, loadGameStartedAt, saveGameContext } from '../analytic
 import type { LoadSharedPuzzleDeps } from './load-shared-puzzle.js';
 import { bootstrap } from './bootstrap.js';
 import {
-    SvgDomRenderer, ShaderBuildError, WebGLUnsupportedError, type WebGlRendererOptions,
+    WebGlRenderer, ShaderBuildError, WebGLUnsupportedError, type ContextEvent, type WebGlRendererOptions,
 } from '../renderer/index.js';
 import { initPwaUpdates } from '../pwa/register.js';
 import { savePieceOutlinePreference } from '../ui/piece-outline.js';
@@ -454,6 +477,8 @@ describe('bootstrap', () => {
     });
 
     it("reports the installed puzzle's photo load for a fresh, a shared and a resumed puzzle", async () => {
+        const photoSettled = vi.spyOn(WebGlRenderer.prototype, 'photoSettled').mockResolvedValue('loaded');
+        onTestFinished(() => photoSettled.mockRestore());
         bootstrap(root);
         const { start } = vi.mocked(installDevHooks).mock.calls[0][0];
         void start({ cols: 2, rows: 2 }, {});
@@ -464,7 +489,6 @@ describe('bootstrap', () => {
         vi.mocked(track).mockClear();
 
         startNewGameDeps.onGameAnalytics({ source: 'fresh', imagePhotoId: 'abc123' } as NewGameData, state);
-        root.querySelector('image')!.dispatchEvent(new Event('load'));
         await Promise.resolve();
         startNewGameDeps.onGameAnalytics({ source: 'shared' } as NewGameData, state);
         await Promise.resolve();
@@ -500,6 +524,7 @@ describe('bootstrap', () => {
 
     it("warms each installed puzzle's edge-bounds cache, cancelling the previous warm-up", () => {
         bootstrap(root);
+        vi.mocked(runInIdleChunks).mockClear();
         const { onInstalled } = vi.mocked(createGameSession).mock.calls[0][0];
         onInstalled(makeGameState());
         const cancelFirst = vi.mocked(runInIdleChunks).mock.results[0].value as Mock;
@@ -534,16 +559,6 @@ describe('bootstrap', () => {
         expect(document.documentElement.dataset.effects).toBe('simple');
     });
 
-    it('enables the renderer rings at boot when the effects level is Simple', () => {
-        localStorage.setItem('puzzle-effects', 'simple');
-        const setRingsEnabled = vi.spyOn(SvgDomRenderer.prototype, 'setRingsEnabled');
-        onTestFinished(() => setRingsEnabled.mockRestore());
-
-        bootstrap(root);
-
-        expect(setRingsEnabled).toHaveBeenLastCalledWith(true);
-    });
-
     it('reports the resolved effects level once at boot', () => {
         localStorage.setItem('puzzle-effects', 'simple');
 
@@ -554,31 +569,13 @@ describe('bootstrap', () => {
         expect(calls).toEqual([['effects-resolved', { preference: 'simple', detected: 'full', applied: 'simple' }]]);
     });
 
-    it('routes an Effects change from the settings modal to the renderer', () => {
-        const setRingsEnabled = vi.spyOn(SvgDomRenderer.prototype, 'setRingsEnabled');
-        onTestFinished(() => setRingsEnabled.mockRestore());
+    it('applies an Effects change from the settings modal to the root element', () => {
         bootstrap(root);
-        expect(setRingsEnabled).toHaveBeenLastCalledWith(false);
 
         root.querySelector<HTMLButtonElement>('.settings-button')!.click();
         root.querySelector<HTMLButtonElement>('[data-testid="effects-simple"]')!.click();
 
-        expect(setRingsEnabled).toHaveBeenLastCalledWith(true);
         expect(document.documentElement.dataset.effects).toBe('simple');
-    });
-
-    it.each([
-        ['outline', true],
-        ['shadow', false],
-    ])('with %s drawn inside, sets the renderer inner outline to %s at boot', (style, expected) => {
-        localStorage.setItem('puzzle-piece-outline', style);
-        localStorage.setItem('puzzle-outline-inside', 'true');
-        const setInnerOutlineEnabled = vi.spyOn(SvgDomRenderer.prototype, 'setInnerOutlineEnabled');
-        onTestFinished(() => setInnerOutlineEnabled.mockRestore());
-
-        bootstrap(root);
-
-        expect(setInnerOutlineEnabled).toHaveBeenLastCalledWith(expected);
     });
 
     it.each([
@@ -587,7 +584,7 @@ describe('bootstrap', () => {
     ] as const)('pushes the saved %s preset, with draw-inside on, as the first appearance at boot', (style, innerOutline) => {
         savePieceOutlinePreference(style);
         saveOutlineInsidePreference(true);
-        const setAppearance = vi.spyOn(SvgDomRenderer.prototype, 'setAppearance');
+        const setAppearance = vi.spyOn(WebGlRenderer.prototype, 'setAppearance');
         onTestFinished(() => setAppearance.mockRestore());
 
         bootstrap(root);
@@ -599,33 +596,9 @@ describe('bootstrap', () => {
             .toBeLessThan(vi.mocked(runBootSequence).mock.invocationCallOrder[0]);
     });
 
-    it('applies a draw-inside change from the settings modal to the current game', () => {
-        localStorage.setItem('puzzle-piece-outline', 'outline');
-        const setInnerOutlineEnabled = vi.spyOn(SvgDomRenderer.prototype, 'setInnerOutlineEnabled');
-        const renderState = vi.spyOn(SvgDomRenderer.prototype, 'renderState');
-        onTestFinished(() => {
-            setInnerOutlineEnabled.mockRestore();
-            renderState.mockRestore();
-        });
-        bootstrap(root);
-        const state = makeGameState();
-        createdSession().install(state);
-        renderState.mockClear();
-
-        root.querySelector<HTMLButtonElement>('.settings-button')!.click();
-        const toggle = root.querySelector<HTMLInputElement>('[data-testid="outline-inside-toggle"]')!;
-        toggle.checked = true;
-        toggle.dispatchEvent(new Event('change'));
-
-        expect(setInnerOutlineEnabled).toHaveBeenLastCalledWith(true);
-        expect(renderState).toHaveBeenLastCalledWith(state);
-        expect(setInnerOutlineEnabled.mock.invocationCallOrder.at(-1)!)
-            .toBeLessThan(renderState.mock.invocationCallOrder.at(-1)!);
-    });
-
     it('delivers a draw-inside change from the settings modal to the renderer appearance', async () => {
         savePieceOutlinePreference('outline');
-        const setAppearance = vi.spyOn(SvgDomRenderer.prototype, 'setAppearance');
+        const setAppearance = vi.spyOn(WebGlRenderer.prototype, 'setAppearance');
         onTestFinished(() => setAppearance.mockRestore());
         bootstrap(root);
         expect(setAppearance).toHaveBeenLastCalledWith(expect.objectContaining({ innerOutline: false }));
@@ -1181,35 +1154,27 @@ describe('bootstrap', () => {
         });
     });
 
-    it('builds the SVG renderer without ?renderer=webgl', () => {
-        bootstrap(root);
-
-        expect(webgl.options).toBeUndefined();
-    });
-
-    describe('with ?renderer=webgl', () => {
+    describe('WebGL renderer', () => {
         const UNSUPPORTED = "Puzzlewise needs WebGL 2, which this browser doesn't support.";
         let consoleError: MockInstance<typeof console.error>;
 
         beforeEach(() => {
-            history.replaceState(null, '', '/?renderer=webgl');
             consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
         });
 
         afterEach(() => {
-            history.replaceState(null, '', '/');
             consoleError.mockRestore();
             webgl.initError = null;
             webgl.onInit = null;
             webgl.options = undefined;
         });
 
-        function contextEvent(phase: 'lost' | 'restored' | 'gave-up'): void {
+        function contextEvent(event: ContextEvent | 'lost' | 'gave-up'): void {
             expect(webgl.options?.onContextEvent, 'the WebGL renderer got no onContextEvent').toBeTypeOf('function');
-            webgl.options!.onContextEvent!(phase);
+            webgl.options!.onContextEvent(typeof event === 'string' ? { phase: event } : event);
         }
 
-        it('builds the WebGL renderer, not the SVG one', () => {
+        it('builds the WebGL renderer with the idle-chunk scheduler', () => {
             bootstrap(root);
 
             expect(webgl.options?.runInIdle).toBe(runInIdleChunks);
@@ -1308,7 +1273,7 @@ describe('bootstrap', () => {
 
         it('reports a context lost during init with no puzzle installed', () => {
             // `session` doesn't exist yet when `init` reports a loss.
-            webgl.onInit = (options) => options.onContextEvent?.('lost');
+            webgl.onInit = (options) => options.onContextEvent({ phase: 'lost' });
 
             expect(() => bootstrap(root)).not.toThrow();
 
@@ -1347,14 +1312,75 @@ describe('bootstrap', () => {
             expect(consoleError).toHaveBeenCalledWith(expect.any(String), error, log);
         });
 
-        it('onContextEvent restored shows nothing and tracks nothing', () => {
+        it('onContextEvent restored shows nothing and tracks renderer-context-restored with the rounded latency', () => {
             bootstrap(root);
             vi.mocked(track).mockClear();
 
-            contextEvent('restored');
+            contextEvent({ phase: 'restored', latencyMs: 729.6 });
 
             expect(root.querySelector('.renderer-failure-overlay')).toBeNull();
-            expect(track).not.toHaveBeenCalled();
+            expect(vi.mocked(track).mock.calls).toEqual([['renderer-context-restored', { latencyMs: 730 }]]);
+        });
+
+        it('onContextEvent restored-late tracks renderer-context-restored flagged late', () => {
+            bootstrap(root);
+            contextEvent('gave-up');
+            vi.mocked(track).mockClear();
+
+            contextEvent({ phase: 'restored-late', latencyMs: 9000.2 });
+
+            expect(vi.mocked(track).mock.calls).toEqual([['renderer-context-restored', { latencyMs: 9000, late: true }]]);
+            expect(root.querySelector('.renderer-failure-body')?.textContent).toBe('Graphics stopped working.');
+        });
+
+        it.each(['halo-shader', 'halo-atlas'] as const)(
+            'onHalosUnavailable tracks renderer-degraded with kind %s, once per page load',
+            (kind) => {
+                bootstrap(root);
+                vi.mocked(track).mockClear();
+
+                webgl.options!.onHalosUnavailable(kind);
+                webgl.options!.onHalosUnavailable('halo-atlas');
+
+                expect(vi.mocked(track).mock.calls).toEqual([['renderer-degraded', { kind }]]);
+            },
+        );
+
+        it('onFillsOmitted tracks renderer-degraded with the counts and the sanitized reason, once per page load', () => {
+            bootstrap(root);
+            vi.mocked(track).mockClear();
+
+            webgl.options!.onFillsOmitted({ skipped: 2, errored: 1, error: new Error('bad path at https://example.com/p') });
+            webgl.options!.onFillsOmitted({ skipped: 7, errored: 0, budgetExhaustedAfter: 3 });
+
+            const calls = vi.mocked(track).mock.calls as unknown as Array<[string, object]>;
+            expect(calls).toEqual([
+                ['renderer-degraded', { kind: 'fills', skipped: 2, errored: 1, reason: 'bad path at <url>' }],
+            ]);
+            expect(calls[0][1]).not.toHaveProperty('budgetExhaustedAfter');
+        });
+
+        it('onFillsOmitted with an exhausted budget and nothing thrown sends budgetExhaustedAfter and no reason', () => {
+            bootstrap(root);
+            vi.mocked(track).mockClear();
+
+            webgl.options!.onFillsOmitted({ skipped: 7, errored: 0, budgetExhaustedAfter: 3 });
+
+            const calls = vi.mocked(track).mock.calls as unknown as Array<[string, object]>;
+            expect(calls).toEqual([
+                ['renderer-degraded', { kind: 'fills', skipped: 7, errored: 0, budgetExhaustedAfter: 3 }],
+            ]);
+            expect(calls[0][1]).not.toHaveProperty('reason');
+        });
+
+        it('reports missing halos and omitted fills independently', () => {
+            bootstrap(root);
+            vi.mocked(track).mockClear();
+
+            webgl.options!.onHalosUnavailable('halo-atlas');
+            webgl.options!.onFillsOmitted({ skipped: 1, errored: 0 });
+
+            expect(track).toHaveBeenCalledTimes(2);
         });
     });
 

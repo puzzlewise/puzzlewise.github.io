@@ -118,7 +118,7 @@ async function openStashCache(
 /**
  * The localStorage metadata and the Cache API blobs can diverge: a browser can
  * evict the cache (or a user clears "cached images") while the metadata record
- * survives. Serving such an entry would render an SVG `<image>` at a URL the
+ * survives. Serving such an entry would load the photo from a URL the
  * cache-first route can no longer satisfy — a broken puzzle offline, worse than
  * the bundled fallback the empty-stash path already gives. So confirm each
  * entry's blob is actually present before offering it, which also keeps the

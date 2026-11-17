@@ -48,7 +48,6 @@ import type { SettingChangedData } from '../analytics/index.js';
 export interface SettingsModalOptions {
     container: HTMLElement;
     onEffectsChanged?: (preference: string) => void;
-    onOutlineChanged?: () => void;
     onSolve?: () => void;
     /** Used by the Debug panel's repro block; when absent the block is omitted. */
     getState?: () => GameState | null | undefined;
@@ -60,15 +59,12 @@ function trackSettingChange(data: SettingChangedData): void {
     }
 }
 
-function buildSettingsSection(
-    onEffectsChanged?: (preference: string) => void,
-    onOutlineChanged?: () => void,
-): HTMLElement {
+function buildSettingsSection(onEffectsChanged?: (preference: string) => void): HTMLElement {
     const section = document.createElement('section');
     section.className = 'info-section';
 
     section.appendChild(buildToleranceSetting());
-    section.appendChild(buildPieceOutlineSetting(onOutlineChanged));
+    section.appendChild(buildPieceOutlineSetting());
     section.appendChild(buildEffectsSetting(onEffectsChanged));
     section.appendChild(buildOffsetDragSetting());
     section.appendChild(buildMarqueeContainSetting());
@@ -158,7 +154,7 @@ function buildToleranceSetting(): HTMLElement {
     });
 }
 
-function buildPieceOutlineSetting(onOutlineChanged?: () => void): HTMLElement {
+function buildPieceOutlineSetting(): HTMLElement {
     const setting = buildPresetSetting({
         label: 'Piece outline',
         description:
@@ -172,7 +168,6 @@ function buildPieceOutlineSetting(onOutlineChanged?: () => void): HTMLElement {
             savePieceOutlinePreference(id);
             applyPieceOutline(id);
             updateOutlineOnlyRows(id);
-            onOutlineChanged?.();
         },
     });
 
@@ -200,7 +195,7 @@ function buildPieceOutlineSetting(onOutlineChanged?: () => void): HTMLElement {
     });
 
     const widthRow = buildOutlineConstantWidthToggle();
-    const insideRow = buildOutlineInsideToggle(onOutlineChanged);
+    const insideRow = buildOutlineInsideToggle();
 
     function updateOutlineOnlyRows(styleId: string): void {
         for (const row of [colorRow, widthRow, insideRow]) row.hidden = styleId !== 'outline';
@@ -251,7 +246,7 @@ function buildOutlineConstantWidthToggle(): HTMLElement {
     return row;
 }
 
-function buildOutlineInsideToggle(onOutlineChanged?: () => void): HTMLElement {
+function buildOutlineInsideToggle(): HTMLElement {
     const row = buildCheckboxSetting({
         testid: 'outline-inside-toggle',
         label: 'Draw inside the edge',
@@ -263,7 +258,6 @@ function buildOutlineInsideToggle(onOutlineChanged?: () => void): HTMLElement {
         save: (on) => {
             saveOutlineInsidePreference(on);
             applyOutlineInside(on);
-            onOutlineChanged?.();
         },
     });
     row.className = 'outline-option-row';
@@ -336,7 +330,7 @@ function buildCheckboxSetting(opts: {
 }
 
 export function createSettingsModal(options: SettingsModalOptions): void {
-    const { container, onEffectsChanged, onOutlineChanged, getState, onSolve } = options;
+    const { container, onEffectsChanged, getState, onSolve } = options;
     let debugOpened = false;
 
     createModalShell<'solve'>({
@@ -355,7 +349,7 @@ export function createSettingsModal(options: SettingsModalOptions): void {
                     debugOpened = true;
                 }
             });
-            return [buildSettingsSection(onEffectsChanged, onOutlineChanged), debugSection];
+            return [buildSettingsSection(onEffectsChanged), debugSection];
         },
         onClosed: (closedBy, stats) => track('settings-modal-closed', { closedBy, ...stats, debugOpened }),
     });

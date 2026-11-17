@@ -460,6 +460,32 @@ describe('track', () => {
         });
     });
 
+    it('forwards renderer-context-restored with the typed payload', () => {
+        const umamiTrack = vi.fn();
+        (window as unknown as { umami: { track: typeof umamiTrack } }).umami = { track: umamiTrack };
+
+        track('renderer-context-restored', { latencyMs: 730 });
+        track('renderer-context-restored', { latencyMs: 9000, late: true });
+
+        expect(umamiTrack.mock.calls).toEqual([
+            ['renderer-context-restored', { latencyMs: 730 }],
+            ['renderer-context-restored', { latencyMs: 9000, late: true }],
+        ]);
+    });
+
+    it('forwards renderer-degraded with the typed payload', () => {
+        const umamiTrack = vi.fn();
+        (window as unknown as { umami: { track: typeof umamiTrack } }).umami = { track: umamiTrack };
+
+        track('renderer-degraded', { kind: 'halo-atlas' });
+        track('renderer-degraded', { kind: 'fills', skipped: 4, errored: 1, reason: 'boom', budgetExhaustedAfter: 20 });
+
+        expect(umamiTrack.mock.calls).toEqual([
+            ['renderer-degraded', { kind: 'halo-atlas' }],
+            ['renderer-degraded', { kind: 'fills', skipped: 4, errored: 1, reason: 'boom', budgetExhaustedAfter: 20 }],
+        ]);
+    });
+
     it('forwards share-failed with source and reason', () => {
         const umamiTrack = vi.fn();
         (window as unknown as { umami: { track: typeof umamiTrack } }).umami = { track: umamiTrack };

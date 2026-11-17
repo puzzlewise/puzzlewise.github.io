@@ -63,23 +63,13 @@ export function setupInteraction(options: InteractionSetupOptions): () => void {
 
     const viewportController = new ViewportController(viewportTransform, onViewportChanged);
 
-    const viewportMotion = new Set<'pan' | 'pinch' | 'auto-pan'>();
-    const setViewportMotion = (reason: 'pan' | 'pinch' | 'auto-pan', active: boolean): void => {
-        if (active) viewportMotion.add(reason);
-        else viewportMotion.delete(reason);
-        renderer.setViewportMoving(viewportMotion.size > 0);
-    };
-
     const snapRotation = getSnapTolerances
         ? new SnapProximityRotationController({ getState, getTolerances: getSnapTolerances })
         : null;
 
     const autoPan = panViewport
         ? new AutoPanController({
-            panViewport(screenDelta) {
-                setViewportMotion('auto-pan', true);
-                panViewport(screenDelta);
-            },
+            panViewport,
             moveGroup(groupId, worldDelta) {
                 for (const id of expandToSelection(groupId)) {
                     const group = tryGetGroup(getState(), id);
@@ -147,11 +137,6 @@ export function setupInteraction(options: InteractionSetupOptions): () => void {
     // Decided once at drag start and held until the gesture resolves.
     let backgroundMode: 'pan' | 'marquee' = 'pan';
 
-    function endPan(): void {
-        viewportController.handlePanEnd();
-        setViewportMotion('pan', false);
-    }
-
     function applyOffsetDragIfSingleGroup(groupId: number): void {
         const group = tryGetGroup(getState(), groupId);
         if (!group) return;
@@ -211,7 +196,6 @@ export function setupInteraction(options: InteractionSetupOptions): () => void {
                 const groupId = drag.groupId;
                 dragController.handlePointerUp(evt);
                 autoPan?.stop();
-                setViewportMotion('auto-pan', false);
                 dragRender.flush();
                 for (const id of expandToSelection(groupId)) renderer.setGroupDragging(id, false);
                 snapRotation?.stop();
@@ -224,7 +208,6 @@ export function setupInteraction(options: InteractionSetupOptions): () => void {
                 snapRotation?.stop();
                 dragController.cancel();
                 autoPan?.stop();
-                setViewportMotion('auto-pan', false);
                 dragRender.flush();
                 for (const id of expandToSelection(groupId)) renderer.setGroupDragging(id, false);
             },
@@ -251,7 +234,6 @@ export function setupInteraction(options: InteractionSetupOptions): () => void {
                     marquee.start(evt);
                 } else {
                     backgroundMode = 'pan';
-                    setViewportMotion('pan', true);
                     viewportController.handlePanStart(evt);
                 }
             },
@@ -261,25 +243,21 @@ export function setupInteraction(options: InteractionSetupOptions): () => void {
             },
             end: (evt) => {
                 if (backgroundMode === 'marquee') marquee?.end(evt);
-                else endPan();
+                else viewportController.handlePanEnd();
             },
             cancel: () => {
                 if (backgroundMode === 'marquee') marquee?.cancel();
-                else endPan();
+                else viewportController.handlePanEnd();
             },
         },
 
         onPinch: {
             start: (a, b) => {
                 rotationFocus?.clearFocus();
-                setViewportMotion('pinch', true);
                 viewportController.handlePinchStart(a, b);
             },
             move: (a, b) => viewportController.handlePinchMove(a, b),
-            end: () => {
-                viewportController.handlePinchEnd();
-                setViewportMotion('pinch', false);
-            },
+            end: () => viewportController.handlePinchEnd(),
         },
 
         onWheelZoom: (evt) => {
@@ -295,8 +273,6 @@ export function setupInteraction(options: InteractionSetupOptions): () => void {
     return () => {
         autoPan?.stop();
         dragRender.cancel();
-        viewportMotion.clear();
-        renderer.setViewportMoving(false);
         router.destroy();
     };
 }

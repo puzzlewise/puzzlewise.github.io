@@ -10,8 +10,6 @@ export const DEBUG_PIECES_CLASS = 'show-debug-pieces';
 export const PIECE_OPACITY_PROPERTY = '--piece-opacity';
 export const MATELESS_EDGES_CLASS = 'show-mateless-edges';
 
-const TRANSLUCENT_PIECES_CLASS = 'pieces-translucent';
-
 export function buildDebugSection(args: {
     state: GameState | null | undefined;
     onSolve?: () => void;
@@ -234,7 +232,6 @@ function buildOpacitySetting(): HTMLElement {
     slider.addEventListener('input', () => {
         value.textContent = slider.value;
         document.documentElement.style.setProperty(PIECE_OPACITY_PROPERTY, slider.value);
-        document.documentElement.classList.toggle(TRANSLUCENT_PIECES_CLASS, Number(slider.value) < 1);
     });
 
     row.appendChild(slider);

@@ -23,10 +23,7 @@ import {
     removeAttribution,
     applyEffects,
     loadEffectsPreference,
-    usesRings,
     reportEffectsResolved,
-    loadPieceOutlinePreference,
-    loadOutlineInsidePreference,
 } from '../ui/index.js';
 import { SelectionManager } from '../interaction/selection-manager.js';
 import type { NewGameData, ReplacedGameData } from '../analytics/index.js';
@@ -57,7 +54,7 @@ import { installToolbar } from './install-toolbar.js';
 import { installDevHooks, solvePuzzle } from './dev-hooks.js';
 import { warmEdgePathBounds } from '../game/index.js';
 import { runInIdleChunks } from './idle-chunks.js';
-import { chooseRenderer, startRenderer } from './start-renderer.js';
+import { startRenderer } from './start-renderer.js';
 import { installGeometryTokenInvalidation } from '../persistence/index.js';
 import { initPwaUpdates } from '../pwa/register.js';
 import { isReceiveMode, runMoveReceiver } from '../move/move-receiver.js';
@@ -96,25 +93,16 @@ export function bootstrap(
 
     // Not `session.current()`: `init` can report a context loss before `session` exists.
     let installedPieceCount = 0;
-    const startedRenderer = startRenderer(root, chooseRenderer(location.search), () => installedPieceCount);
+    const startedRenderer = startRenderer(root, () => installedPieceCount);
     if (!startedRenderer) {
         // A later build may fix what failed, and only a registered worker can deliver it.
         initPwaUpdates(() => {});
         return;
     }
     const renderer = startedRenderer;
-    const setEffects = (preference: string): void => {
-        renderer.setRingsEnabled(usesRings(applyEffects(preference)));
-    };
     const effectsPreference = loadEffectsPreference();
-    setEffects(effectsPreference);
+    applyEffects(effectsPreference);
     reportEffectsResolved(effectsPreference);
-    const syncInnerOutline = (): void => {
-        renderer.setInnerOutlineEnabled(
-            loadPieceOutlinePreference() === 'outline' && loadOutlineInsidePreference(),
-        );
-    };
-    syncInnerOutline();
 
     const selectionManager = new SelectionManager();
 
@@ -398,11 +386,7 @@ export function bootstrap(
         }),
         installBackgroundColorControl: (toolbar) => installBackgroundColor({ container: toolbar }),
         solve,
-        onEffectsChanged: setEffects,
-        onOutlineChanged: () => {
-            syncInnerOutline();
-            viewportFitDeps.renderCurrent();
-        },
+        onEffectsChanged: applyEffects,
     });
 
     const resolveRootColor = createProbeResolver(document.documentElement);

@@ -83,7 +83,7 @@ describe('PhotoLoader', () => {
         expect(await isPending(first)).toBe(true);
     });
 
-    test('a blank puzzle clears the photo and never settles, like the SVG renderer', async () => {
+    test('a blank puzzle clears the photo and never settles', async () => {
         const { images, onPhoto, loader } = setup();
         loader.load('a.jpg');
         images[0].dispatchEvent(new Event('load'));

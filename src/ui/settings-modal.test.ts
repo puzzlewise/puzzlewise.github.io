@@ -177,22 +177,6 @@ describe('createSettingsModal', () => {
         ).toBe(false);
     });
 
-    it('marks <html> while the piece opacity slider is below 1', () => {
-        createSettingsModal({ container });
-        const slider = container.querySelector<HTMLInputElement>('[data-testid="piece-opacity-slider"]')!;
-        const set = (value: string) => {
-            slider.value = value;
-            slider.dispatchEvent(new Event('input'));
-        };
-
-        set('0.5');
-        expect(document.documentElement.classList.contains('pieces-translucent')).toBe(true);
-
-        set('1');
-        expect(document.documentElement.classList.contains('pieces-translucent')).toBe(false);
-        document.documentElement.style.removeProperty('--piece-opacity');
-    });
-
     it('gives every toggle checkbox the shared form-checkbox accent class', () => {
         createSettingsModal({ container });
 
@@ -322,7 +306,6 @@ describe('createSettingsModal — Piece outline setting', () => {
         container = document.createElement('div');
         document.body.appendChild(container);
         localStorage.clear();
-        document.documentElement.style.removeProperty('--piece-edge-filter');
         document.documentElement.style.removeProperty('--piece-outline-color');
         delete document.documentElement.dataset.pieceOutline;
         document.documentElement.removeAttribute('data-outline-constant-width');
@@ -354,7 +337,7 @@ describe('createSettingsModal — Piece outline setting', () => {
         expect(outlineBtn?.classList.contains('selected')).toBe(true);
     });
 
-    it('clicking Shadow persists the choice and updates the CSS variable', () => {
+    it('clicking Shadow persists the choice and applies it to the root element', () => {
         createSettingsModal({ container });
 
         const shadowBtn = document.querySelector(
@@ -363,9 +346,6 @@ describe('createSettingsModal — Piece outline setting', () => {
         shadowBtn.click();
 
         expect(localStorage.getItem('puzzle-piece-outline')).toBe('shadow');
-        expect(
-            document.documentElement.style.getPropertyValue('--piece-edge-filter'),
-        ).toMatch(/^drop-shadow\(/);
         expect(document.documentElement.dataset.pieceOutline).toBe('shadow');
         expect(shadowBtn.classList.contains('selected')).toBe(true);
     });
@@ -482,9 +462,8 @@ describe('createSettingsModal — Piece outline setting', () => {
         expect(row.hidden).toBe(true);
     });
 
-    it('checking the draw-inside toggle persists it and reports the change', () => {
-        const onOutlineChanged = vi.fn();
-        createSettingsModal({ container, onOutlineChanged });
+    it('checking the draw-inside toggle persists it', () => {
+        createSettingsModal({ container });
         const toggle = container.querySelector<HTMLInputElement>(
             '[data-testid="outline-inside-toggle"]',
         )!;
@@ -494,16 +473,6 @@ describe('createSettingsModal — Piece outline setting', () => {
 
         expect(localStorage.getItem('puzzle-outline-inside')).toBe('true');
         expect(document.documentElement.hasAttribute('data-outline-inside-pref')).toBe(true);
-        expect(onOutlineChanged).toHaveBeenCalledOnce();
-    });
-
-    it('reports a Piece outline style change through onOutlineChanged, after saving it', () => {
-        const onOutlineChanged = vi.fn(() => localStorage.getItem('puzzle-piece-outline'));
-        createSettingsModal({ container, onOutlineChanged });
-
-        container.querySelector<HTMLButtonElement>('[data-testid="piece-outline-shadow"]')!.click();
-
-        expect(onOutlineChanged.mock.results.map((r) => r.value as unknown)).toEqual(['shadow']);
     });
 
     it('selecting a swatch persists the colour and sets the CSS variable', () => {
