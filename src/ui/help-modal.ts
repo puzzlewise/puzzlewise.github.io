@@ -85,7 +85,7 @@ function buildHowToPlaySection(): HTMLElement {
         ' — Organize all pieces in a compact grid. With pieces selected, the selection and the rest are gathered into two separate piles.',
     ]);
     appendInlineLi(buttons, ['🎨 ', ['strong', 'Background'], ' — Change table colour']);
-    appendInlineLi(buttons, ['⚙️ ', ['strong', 'Settings'], ' — Snap distance, piece outlines, effects and more']);
+    appendInlineLi(buttons, ['⚙️ ', ['strong', 'Settings'], ' — Snap distance, piece outlines and more']);
     appendInlineLi(buttons, [
         inlineToolIcon(createSelectToolIcon()),
         ' ',

@@ -13,7 +13,6 @@
 import type { Orientation } from '../model/types.js';
 import type { OfflineDownloadReason } from '../images/offline-stash.js';
 import type { MoveFailureReason } from '../move/move-protocol.js';
-import type { EffectsLevel } from '../ui/effects.js';
 import { resolveDistinctId } from './distinct-id.js';
 
 declare global {
@@ -463,32 +462,13 @@ export interface SettingsModalClosedData {
     debugOpened: boolean;
 }
 
-/**
- * `detected` (effects only) is the level Auto resolves to on this device,
- * sent whatever `from` and `to` are, so `from: 'auto'` with `to` other than
- * `detected` counts players overriding the detection.
- */
 export type SettingChangedData =
     | { setting: 'snap-distance' | 'piece-outline' | 'outline-color'; from: string; to: string }
-    | { setting: 'effects'; from: string; to: string; detected: EffectsLevel }
     | {
         setting: 'offset-drag' | 'enclose-to-select' | 'outline-constant-width' | 'outline-inside';
         from: boolean;
         to: boolean;
     };
-
-/**
- * Data attached to `effects-resolved`, sent once per page load once the
- * analytics script has loaded (not at all if it is blocked or fails).
- * `preference` is the saved Effects setting (`'auto'`, `'full'` or
- * `'simple'`), `detected` what Auto resolves to on this device, and `applied`
- * the level in effect: `detected` when `preference` is `'auto'`.
- */
-export interface EffectsResolvedData {
-    preference: string;
-    detected: EffectsLevel;
-    applied: EffectsLevel;
-}
 
 /**
  * Data attached to `traced-chunk-preload-started`.
@@ -1968,7 +1948,6 @@ export function track(name: 'help-modal-closed', data: HelpModalClosedData): voi
 export function track(name: 'settings-modal-opened', data: SettingsModalOpenedData): void;
 export function track(name: 'settings-modal-closed', data: SettingsModalClosedData): void;
 export function track(name: 'setting-changed', data: SettingChangedData): void;
-export function track(name: 'effects-resolved', data: EffectsResolvedData): void;
 export function track(name: 'traced-chunk-preload-started', data: TracedChunkPreloadStartedData): void;
 export function track(name: 'traced-chunk-loaded', data: TracedChunkLoadedData): void;
 export function track(name: 'traced-chunk-load-failed', data: TracedChunkLoadFailedData): void;

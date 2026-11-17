@@ -21,9 +21,6 @@ import { ViewportTransform, RotationFocus } from '../interaction/index.js';
 import {
     createAttributionElement,
     removeAttribution,
-    applyEffects,
-    loadEffectsPreference,
-    reportEffectsResolved,
 } from '../ui/index.js';
 import { SelectionManager } from '../interaction/selection-manager.js';
 import type { NewGameData, ReplacedGameData } from '../analytics/index.js';
@@ -100,9 +97,6 @@ export function bootstrap(
         return;
     }
     const renderer = startedRenderer;
-    const effectsPreference = loadEffectsPreference();
-    applyEffects(effectsPreference);
-    reportEffectsResolved(effectsPreference);
 
     const selectionManager = new SelectionManager();
 
@@ -386,7 +380,6 @@ export function bootstrap(
         }),
         installBackgroundColorControl: (toolbar) => installBackgroundColor({ container: toolbar }),
         solve,
-        onEffectsChanged: applyEffects,
     });
 
     const resolveRootColor = createProbeResolver(document.documentElement);

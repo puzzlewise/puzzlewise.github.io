@@ -125,6 +125,13 @@ describe('createHelpModal — How to Play section', () => {
         expect(text).toContain('Settings');
     });
 
+    it('settings button copy omits effects', () => {
+        createHelpModal({ container });
+        const text = howToPlaySection().textContent ?? '';
+        expect(text).toContain('Snap distance, piece outlines and more');
+        expect(text.toLowerCase()).not.toContain('effects');
+    });
+
     it('does not mention "composable"', () => {
         createHelpModal({ container });
         expect(howToPlaySection().textContent?.toLowerCase()).not.toContain('composable');

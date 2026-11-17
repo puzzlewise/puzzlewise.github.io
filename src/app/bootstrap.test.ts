@@ -550,34 +550,6 @@ describe('bootstrap', () => {
             .toEqual([expect.objectContaining({ outcome: 'abandoned', trigger: 'resume' })]);
     });
 
-    it('applies the saved effects level to the root element at boot', () => {
-        localStorage.setItem('puzzle-effects', 'simple');
-        delete document.documentElement.dataset.effects;
-
-        bootstrap(root);
-
-        expect(document.documentElement.dataset.effects).toBe('simple');
-    });
-
-    it('reports the resolved effects level once at boot', () => {
-        localStorage.setItem('puzzle-effects', 'simple');
-
-        bootstrap(root);
-
-        const calls = (vi.mocked(track).mock.calls as unknown as Array<[string, unknown]>)
-            .filter(([name]) => name === 'effects-resolved');
-        expect(calls).toEqual([['effects-resolved', { preference: 'simple', detected: 'full', applied: 'simple' }]]);
-    });
-
-    it('applies an Effects change from the settings modal to the root element', () => {
-        bootstrap(root);
-
-        root.querySelector<HTMLButtonElement>('.settings-button')!.click();
-        root.querySelector<HTMLButtonElement>('[data-testid="effects-simple"]')!.click();
-
-        expect(document.documentElement.dataset.effects).toBe('simple');
-    });
-
     it.each([
         ['outline', true],
         ['shadow', false],
