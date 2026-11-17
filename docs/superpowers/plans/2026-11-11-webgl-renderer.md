@@ -920,6 +920,18 @@ Open the Milestone 5 PR.
     driver rejects a halo shader, or a puzzle too big for the atlas, would
     otherwise silently lose selection glow and drag shadows, with nothing in
     analytics: the failure is caught and only logged to the console.
+  - Same files again: an `onFillsOmitted({ skipped, errored, error, budgetExhaustedAfter })`
+    option that `buildFills` calls when a game installs with pieces drawn
+    without a fill, and one
+    `renderer-degraded { kind: 'fills', skipped, errored, reason, budgetExhaustedAfter }`
+    event per page load, with `reason` from `sanitizeErrorReason` and absent
+    when nothing threw, and `budgetExhaustedAfter` (the number of pieces filled
+    before the 2 s fill budget ran out) absent when it did not. That field is
+    the only data on whether real players on slow devices lose pictures to the
+    budget, as opposed to hand-made links hitting the shape guard. A throw in a piece's fill build used to surface as
+    `shared-load-failed` or `unhandled-error`; since the fill guard it is
+    caught per piece and only logged to the console, so a real fill-building
+    bug after the switch would otherwise never reach analytics.
 
 - [ ] **Step 1:** Make the edits.
 - [ ] **Step 2:** `fnm exec npm test && fnm exec npm run lint && fnm exec npm run build`.
