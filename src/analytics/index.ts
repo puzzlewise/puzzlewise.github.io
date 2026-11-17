@@ -14,7 +14,6 @@ export type {
     SettingsModalOpenedData,
     SettingsModalClosedData,
     SettingChangedData,
-    EffectsResolvedData,
     TracedChunkPreloadStartedData,
     TracedChunkLoadedData,
     TracedChunkLoadFailedData,

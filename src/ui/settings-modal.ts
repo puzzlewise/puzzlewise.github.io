@@ -26,12 +26,6 @@ import {
 } from './piece-outline-color.js';
 import { createPieceOutlineColorPicker } from './piece-outline-color-picker.js';
 import {
-    EFFECTS_PRESETS,
-    getDetectedEffectsLevel,
-    loadEffectsPreference,
-    saveEffectsPreference,
-} from './effects.js';
-import {
     loadOutlineConstantWidthPreference,
     saveOutlineConstantWidthPreference,
     applyOutlineConstantWidth,
@@ -47,7 +41,6 @@ import type { SettingChangedData } from '../analytics/index.js';
 
 export interface SettingsModalOptions {
     container: HTMLElement;
-    onEffectsChanged?: (preference: string) => void;
     onSolve?: () => void;
     /** Used by the Debug panel's repro block; when absent the block is omitted. */
     getState?: () => GameState | null | undefined;
@@ -59,13 +52,12 @@ function trackSettingChange(data: SettingChangedData): void {
     }
 }
 
-function buildSettingsSection(onEffectsChanged?: (preference: string) => void): HTMLElement {
+function buildSettingsSection(): HTMLElement {
     const section = document.createElement('section');
     section.className = 'info-section';
 
     section.appendChild(buildToleranceSetting());
     section.appendChild(buildPieceOutlineSetting());
-    section.appendChild(buildEffectsSetting(onEffectsChanged));
     section.appendChild(buildOffsetDragSetting());
     section.appendChild(buildMarqueeContainSetting());
 
@@ -75,7 +67,7 @@ function buildSettingsSection(onEffectsChanged?: (preference: string) => void): 
 interface SettingPreset {
     id: string;
     label: string;
-    description: string | (() => string);
+    description: string;
 }
 
 function buildPresetSetting(opts: {
@@ -120,9 +112,7 @@ function buildPresetSetting(opts: {
 
         const descSpan = document.createElement('span');
         descSpan.className = 'preset-option-desc';
-        descSpan.textContent = typeof preset.description === 'function'
-            ? preset.description()
-            : preset.description;
+        descSpan.textContent = preset.description;
         button.appendChild(descSpan);
 
         button.addEventListener('click', () => {
@@ -204,28 +194,6 @@ function buildPieceOutlineSetting(): HTMLElement {
 
     setting.append(colorRow, widthRow, insideRow);
     return setting;
-}
-
-function buildEffectsSetting(onEffectsChanged?: (preference: string) => void): HTMLElement {
-    return buildPresetSetting({
-        label: 'Effects',
-        description:
-            'Simple draws shadows and the selection glow as plain rings, ' +
-            'which is much lighter work for older devices.',
-        testidPrefix: 'effects',
-        presets: EFFECTS_PRESETS,
-        load: loadEffectsPreference,
-        onSelect: (id) => {
-            trackSettingChange({
-                setting: 'effects',
-                from: loadEffectsPreference(),
-                to: id,
-                detected: getDetectedEffectsLevel(),
-            });
-            saveEffectsPreference(id);
-            onEffectsChanged?.(id);
-        },
-    });
 }
 
 function buildOutlineConstantWidthToggle(): HTMLElement {
@@ -330,7 +298,7 @@ function buildCheckboxSetting(opts: {
 }
 
 export function createSettingsModal(options: SettingsModalOptions): void {
-    const { container, onEffectsChanged, getState, onSolve } = options;
+    const { container, getState, onSolve } = options;
     let debugOpened = false;
 
     createModalShell<'solve'>({
@@ -349,7 +317,7 @@ export function createSettingsModal(options: SettingsModalOptions): void {
                     debugOpened = true;
                 }
             });
-            return [buildSettingsSection(onEffectsChanged), debugSection];
+            return [buildSettingsSection(), debugSection];
         },
         onClosed: (closedBy, stats) => track('settings-modal-closed', { closedBy, ...stats, debugOpened }),
     });

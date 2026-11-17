@@ -3,9 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <!-- Origin policy for images. A crafted `#p=` share link can put an
-         arbitrary URL in the payload's image field, which reaches the SVG
-         `<image>` href — not XSS (an `<image>` executes nothing), but enough
-         to make anyone who opens the link fetch an attacker-controlled host,
+         arbitrary URL in the payload's image field, which the renderer loads
+         through an `Image` element — not XSS (an image executes nothing), but
+         enough to make anyone who opens the link fetch an attacker-controlled host,
          leaking their IP and User-Agent. The share codec's `isSafeImageUrl`
          guards the *scheme*; it cannot guard the host, because legitimate
          links carry arbitrary Unsplash URLs and no scheme check separates
