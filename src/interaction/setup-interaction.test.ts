@@ -7,7 +7,7 @@
  * this file only verifies that the wiring between collaborators is correct.
  */
 
-import { describe, it, expect, vi, beforeEach, onTestFinished } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { setupInteraction } from './setup-interaction.js';
 import { ViewportTransform } from './viewport-transform.js';
 import { SelectionManager } from './selection-manager.js';
@@ -70,10 +70,7 @@ function createFakeRenderer(pieceAt: (point: { x: number; y: number }) => number
         animateGroupRotation: vi.fn(() => Promise.resolve()),
         setGroupDragging: vi.fn(),
         setGroupSelected: vi.fn(),
-        setRingsEnabled: vi.fn(),
         setAppearance: vi.fn(),
-        setInnerOutlineEnabled: vi.fn(),
-        setViewportMoving: vi.fn(),
         pieceIdAtPoint: vi.fn(pieceAt),
         photoSettled: vi.fn(() => new Promise<'loaded' | 'failed'>(() => {})),
         prefetchPhoto: vi.fn(),
@@ -974,129 +971,5 @@ describe('setupInteraction — drag render batching', () => {
         runFrame();
 
         expect(onStateChanged).toHaveBeenCalledOnce();
-    });
-});
-
-describe('setupInteraction — viewport layer while the viewport moves', () => {
-    const pressAt300 = (p: { x: number; y: number }) => (p.x === 300 && p.y === 300 ? 3 : null);
-
-    let frames: Map<number, FrameRequestCallback>;
-    let frameTime: number;
-
-    function runFrame(): void {
-        frameTime += 16;
-        for (const [id, cb] of Array.from(frames)) {
-            if (!frames.delete(id)) continue;
-            cb(frameTime);
-        }
-    }
-
-    beforeEach(() => {
-        frames = new Map();
-        frameTime = 0;
-        let nextId = 1;
-        globalThis.requestAnimationFrame = vi.fn((cb: FrameRequestCallback) => {
-            frames.set(nextId, cb);
-            return nextId++;
-        });
-        globalThis.cancelAnimationFrame = vi.fn((id: number) => { frames.delete(id); });
-    });
-
-    function setup(opts: { selectionManager?: SelectionManager } = {}) {
-        const container = createFakeContainer();
-        const renderer = createFakeRenderer(pressAt300);
-        const state = makeState([makeGroup(7, [3])]);
-        const cleanup = setupInteraction({
-            container: container as unknown as HTMLElement,
-            renderer,
-            viewportTransform: new ViewportTransform(),
-            getState: () => state,
-            onStateChanged: vi.fn(),
-            onDrop: vi.fn(),
-            onViewportChanged: vi.fn(),
-            panViewport: vi.fn(),
-            selectionManager: opts.selectionManager,
-        });
-        const moving = () => vi.mocked(renderer.setViewportMoving).mock.lastCall?.[0] ?? false;
-        return { container, renderer, cleanup, moving };
-    }
-
-    const tableTarget = (container: FakeContainer) => container as unknown as EventTarget;
-
-    it('composites the viewport for the length of a background pan', () => {
-        const { container, moving } = setup();
-
-        container.fire('pointerdown', fakePointerEvent({ target: tableTarget(container), pointerId: 1, clientX: 100, clientY: 100 }));
-        container.fire('pointermove', fakePointerEvent({ target: tableTarget(container), pointerId: 1, clientX: 130, clientY: 100 }));
-        expect(moving()).toBe(true);
-
-        container.fire('pointerup', fakePointerEvent({ target: tableTarget(container), pointerId: 1, clientX: 130, clientY: 100 }));
-        expect(moving()).toBe(false);
-    });
-
-    it('leaves the viewport alone while drawing a marquee', () => {
-        const selectionManager = new SelectionManager();
-        selectionManager.toggleMarquee();
-        const { container, renderer } = setup({ selectionManager });
-
-        container.fire('pointerdown', fakePointerEvent({ target: tableTarget(container), pointerId: 1, clientX: 0, clientY: 0 }));
-        container.fire('pointermove', fakePointerEvent({ target: tableTarget(container), pointerId: 1, clientX: 40, clientY: 40 }));
-        container.fire('pointerup', fakePointerEvent({ target: tableTarget(container), pointerId: 1, clientX: 40, clientY: 40 }));
-
-        expect(renderer.setViewportMoving).not.toHaveBeenCalledWith(true);
-    });
-
-    it('composites the viewport for the length of a pinch', () => {
-        const { container, moving } = setup();
-
-        container.fire('pointerdown', fakePointerEvent({ target: tableTarget(container), pointerId: 1, pointerType: 'touch', clientX: 0, clientY: 0 }));
-        container.fire('pointerdown', fakePointerEvent({ target: tableTarget(container), pointerId: 2, pointerType: 'touch', clientX: 100, clientY: 0 }));
-        expect(moving()).toBe(true);
-
-        container.fire('pointerup', fakePointerEvent({ target: tableTarget(container), pointerId: 2, pointerType: 'touch', clientX: 100, clientY: 0 }));
-        expect(moving()).toBe(false);
-    });
-
-    it('composites the viewport once auto-pan moves it, until the drop', () => {
-        const { container, moving, renderer } = setup();
-        container.fire('pointerdown', fakePointerEvent({ target: tableTarget(container), pointerId: 1, clientX: 300, clientY: 300 }));
-        container.fire('pointermove', fakePointerEvent({ pointerId: 1, clientX: 320, clientY: 300 }));
-        expect(renderer.setViewportMoving).not.toHaveBeenCalledWith(true);
-
-        container.fire('pointermove', fakePointerEvent({ pointerId: 1, clientX: 5, clientY: 300 }));
-        runFrame();
-        runFrame();
-        expect(moving()).toBe(true);
-
-        container.fire('pointerup', fakePointerEvent({ pointerId: 1, clientX: 5, clientY: 300 }));
-        expect(moving()).toBe(false);
-    });
-
-    it('keeps the viewport composited when a pinch ends during an auto-panning drag', () => {
-        let now = 0;
-        vi.spyOn(performance, 'now').mockImplementation(() => now);
-        onTestFinished(() => { vi.restoreAllMocks(); });
-        const { container, moving } = setup();
-        container.fire('pointerdown', fakePointerEvent({ target: tableTarget(container), pointerId: 1, pointerType: 'touch', clientX: 300, clientY: 300 }));
-        container.fire('pointermove', fakePointerEvent({ pointerId: 1, pointerType: 'touch', clientX: 320, clientY: 300 }));
-        container.fire('pointermove', fakePointerEvent({ pointerId: 1, pointerType: 'touch', clientX: 5, clientY: 300 }));
-        runFrame();
-        runFrame();
-        now = 1000;
-        container.fire('pointerdown', fakePointerEvent({ target: tableTarget(container), pointerId: 2, pointerType: 'touch', clientX: 200, clientY: 300 }));
-
-        container.fire('pointerup', fakePointerEvent({ target: tableTarget(container), pointerId: 2, pointerType: 'touch', clientX: 200, clientY: 300 }));
-
-        expect(moving()).toBe(true);
-    });
-
-    it('releases the viewport layer on teardown', () => {
-        const { container, cleanup, moving } = setup();
-        container.fire('pointerdown', fakePointerEvent({ target: tableTarget(container), pointerId: 1, clientX: 100, clientY: 100 }));
-        container.fire('pointermove', fakePointerEvent({ target: tableTarget(container), pointerId: 1, clientX: 130, clientY: 100 }));
-
-        cleanup();
-
-        expect(moving()).toBe(false);
     });
 });

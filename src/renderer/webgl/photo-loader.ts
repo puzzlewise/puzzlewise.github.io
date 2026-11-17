@@ -33,7 +33,7 @@ export class PhotoLoader {
         this.createImage = createImage;
     }
 
-    /** Call once per new game; a blank puzzle (`null`) never settles, as with the SVG renderer. */
+    /** Call once per new game; a blank puzzle (`null`) never settles. */
     load(url: string | null): void {
         this.settle = createSettle();
         if (url !== null && url === this.url && this.outcome === 'loaded') {

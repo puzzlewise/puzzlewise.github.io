@@ -1595,11 +1595,12 @@ export interface RendererFailedData {
 
 /**
  * Data attached to `renderer-context-lost` — the browser took the WebGL
- * context away, one event per loss. A loss not restored is followed by
- * `renderer-failed { kind: 'lost' }`, so the share of losses that never
- * recover is that count over this one. That share misses the rare restore
- * whose shaders fail to rebuild: it sends `kind: 'shader'`, which does not
- * tell it apart from a shader failure at startup.
+ * context away, one event per loss. A loss not restored within 5 s is followed
+ * by `renderer-failed { kind: 'lost' }`, one restored in time by
+ * `renderer-context-restored`; a loss followed by neither is a tab closed or
+ * frozen inside those 5 s. A restore whose shaders fail to rebuild sends
+ * `renderer-failed { kind: 'shader' }` instead, which does not tell it apart
+ * from a shader failure at startup.
  *
  * `pieceCount` is the installed puzzle's, 0 when none was installed yet.
  * `visibilityState` is the document's at the moment of loss.
@@ -1608,6 +1609,47 @@ export interface RendererContextLostData {
     pieceCount: number;
     visibilityState: DocumentVisibilityState;
 }
+
+/**
+ * Data attached to `renderer-context-restored` — the browser returned a lost
+ * WebGL context. `latencyMs` is the time from the loss to the restore, in
+ * whole milliseconds.
+ *
+ * `late: true` marks a restore that arrived after the 5 s cut-off: the player
+ * had already been shown the failure message and
+ * `renderer-failed { kind: 'lost' }` was sent, and the game did not resume.
+ * At most one late event per page load. The property is absent on an in-time
+ * restore, after which play continued. The `late` latencies show how much a
+ * longer cut-off would have recovered.
+ */
+export interface RendererContextRestoredData {
+    latencyMs: number;
+    late?: true;
+}
+
+/**
+ * Data attached to `renderer-degraded` — the WebGL renderer keeps running but
+ * draws less than it should. None of these reaches `renderer-failed` or
+ * `unhandled-error`.
+ *
+ * `kind: 'halo-shader'` (a halo shader failed to compile or link) and
+ * `kind: 'halo-atlas'` (the puzzle's halos do not fit the halo texture): drag
+ * shadows, the selection glow and the Shadow outline are not drawn. At most
+ * one event of these two kinds per page load. No free-text reason, as with
+ * {@link RendererFailedData}.
+ *
+ * `kind: 'fills'`: a puzzle was installed with pieces drawn as an outline
+ * without their picture. Sent for the first such puzzle of a page load only.
+ * `skipped` counts pieces whose fill was left out without an error (a shape
+ * too costly to triangulate, or the fill budget below), `errored` those whose
+ * fill build threw. `reason` is the first thrown error's sanitized message
+ * (see {@link import('./sanitize-error-reason.js').sanitizeErrorReason}),
+ * absent when `errored` is 0. `budgetExhaustedAfter` is the number of pieces
+ * attempted before the 2 s fill budget ran out, absent when it did not.
+ */
+export type RendererDegradedData =
+    | { kind: 'halo-shader' | 'halo-atlas' }
+    | { kind: 'fills'; skipped: number; errored: number; reason?: string; budgetExhaustedAfter?: number };
 
 /**
  * Data attached to `pwa-update-detected` — a freshly-built service worker is
@@ -1945,6 +1987,8 @@ export function track(name: 'save-recovery', data: SaveRecoveryData): void;
 export function track(name: 'progress-save-skipped', data: ProgressSaveSkippedData): void;
 export function track(name: 'renderer-failed', data: RendererFailedData): void;
 export function track(name: 'renderer-context-lost', data: RendererContextLostData): void;
+export function track(name: 'renderer-context-restored', data: RendererContextRestoredData): void;
+export function track(name: 'renderer-degraded', data: RendererDegradedData): void;
 export function track(name: 'pwa-update-detected', data: PwaUpdateDetectedData): void;
 export function track(name: 'pwa-update-check-failed', data: PwaUpdateCheckFailedData): void;
 export function track(name: 'pwa-update-applied', data: PwaUpdateAppliedData): void;

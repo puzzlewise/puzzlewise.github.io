@@ -7,8 +7,7 @@ import type { SceneChanges } from './scene.js';
 
 /**
  * Piece ids restart at 0 each game, so ids can't tell games apart. The count
- * and first shape also catch a piece array replaced in place, as the SVG
- * renderer's fingerprint does.
+ * and first shape also catch a piece array replaced in place.
  */
 export interface GameIdentity {
     pieces: GameState['pieces'];

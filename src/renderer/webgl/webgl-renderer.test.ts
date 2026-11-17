@@ -86,6 +86,8 @@ function setup(options: Partial<WebGlRendererOptions> = {}, fails?: (source: str
         },
         onRestoreFailed: vi.fn(),
         onContextEvent: vi.fn(),
+        onHalosUnavailable: vi.fn(),
+        onFillsOmitted: vi.fn(),
         ...options,
     });
     const container = document.createElement('div');
@@ -147,7 +149,48 @@ describe('WebGlRenderer', () => {
         expect(onRestoreFailed).toHaveBeenCalledTimes(1);
         expect(onRestoreFailed.mock.calls[0][0]).toBeInstanceOf(ShaderBuildError);
         expect(onRestoreFailed.mock.calls[0][0].log).toBe('compile log');
-        expect(onContextEvent.mock.calls).toEqual([['lost']]);
+        expect(onContextEvent.mock.calls).toEqual([[{ phase: 'lost' }]]);
+    });
+
+    test('a restore within the timeout reports how long the context was gone, without the rebuild', () => {
+        let clock = 1000;
+        const onContextEvent = vi.fn();
+        const { canvas } = setup({ onContextEvent, now: () => clock }, () => {
+            clock += 40;
+            return false;
+        });
+
+        canvas.dispatchEvent(new Event('webglcontextlost', { cancelable: true }));
+        clock += 730;
+        canvas.dispatchEvent(new Event('webglcontextrestored'));
+
+        expect(onContextEvent.mock.calls).toEqual([[{ phase: 'lost' }], [{ phase: 'restored', latencyMs: 730 }]]);
+    });
+
+    test('a restore after the give-up is reported once as late, and draws nothing', () => {
+        let clock = 0;
+        const onContextEvent = vi.fn();
+        const { host, fake, renderer, canvas, drawFrames } = setup({ onContextEvent, now: () => clock });
+        renderer.renderState(twoPieceGame());
+        host.runFrame();
+        const drawn = drawFrames().length;
+        const programs = fake.calls.filter((c) => c.name === 'createProgram').length;
+
+        canvas.dispatchEvent(new Event('webglcontextlost', { cancelable: true }));
+        vi.advanceTimersByTime(CONTEXT_RESTORE_TIMEOUT_MS);
+        clock = 9000;
+        canvas.dispatchEvent(new Event('webglcontextrestored'));
+        canvas.dispatchEvent(new Event('webglcontextrestored'));
+        renderer.renderState({ ...twoPieceGame(), groups: [group(0, 40), group(1, 200)] });
+        host.runFrame();
+
+        expect(onContextEvent.mock.calls).toEqual([
+            [{ phase: 'lost' }],
+            [{ phase: 'gave-up' }],
+            [{ phase: 'restored-late', latencyMs: 9000 }],
+        ]);
+        expect(drawFrames()).toHaveLength(drawn);
+        expect(fake.calls.filter((c) => c.name === 'createProgram')).toHaveLength(programs);
     });
 
     describe('halos', () => {
@@ -474,7 +517,8 @@ describe('WebGlRenderer', () => {
 
         test('a halo shader that fails to build leaves the table drawing without halos', () => {
             const error = vi.spyOn(console, 'error').mockImplementation(() => {});
-            const { host, fake, renderer } = setup({}, (source) => source === SILHOUETTE_FS);
+            const onHalosUnavailable = vi.fn();
+            const { host, fake, renderer } = setup({ onHalosUnavailable }, (source) => source === SILHOUETTE_FS);
             renderer.renderState(twoPieceGame());
             renderer.setGroupSelected(1, true);
             runUntilIdle(host);
@@ -485,6 +529,7 @@ describe('WebGlRenderer', () => {
             expect(error.mock.calls[0][1]).toBeInstanceOf(ShaderBuildError);
             expect((error.mock.calls[0][1] as ShaderBuildError).message).toBe('Halo silhouette program: Fragment shader failed to compile');
             expect(error.mock.calls[0][2]).toBe('compile log');
+            expect(onHalosUnavailable.mock.calls).toEqual([['halo-shader']]);
             expect(fake.calls.some((c) => c.name === 'copyTexSubImage3D')).toBe(false);
             expect(withMainVao(fake.calls, 'drawElements').length).toBeGreaterThan(0);
             expect(host.pendingFrames()).toBe(0);
@@ -492,7 +537,8 @@ describe('WebGlRenderer', () => {
 
         test('a puzzle too large for the halo atlas plays on without halos', () => {
             const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-            const { host, fake, renderer } = setup();
+            const onHalosUnavailable = vi.fn();
+            const { host, fake, renderer } = setup({ onHalosUnavailable });
             const pieces = [makeRectPiece({ id: 0, width: 9000, height: 9000 })];
             renderer.renderState(makeGameState({ pieces, groups: [group(0, 0)], imageUrl: null }));
             renderer.setGroupSelected(0, true);
@@ -502,6 +548,7 @@ describe('WebGlRenderer', () => {
             const error = warn.mock.calls[0][1] as AtlasTooLargeError;
             expect(error).toBeInstanceOf(AtlasTooLargeError);
             expect(error.largest.w).toBeGreaterThan(ATLAS_LAYER_SIZE);
+            expect(onHalosUnavailable.mock.calls).toEqual([['halo-atlas']]);
             expect(fake.calls.some((c) => c.name === 'copyTexSubImage3D')).toBe(false);
             expect(withMainVao(fake.calls, 'drawElements').length).toBeGreaterThan(0);
             expect(host.pendingFrames()).toBe(0);
@@ -835,7 +882,8 @@ describe('WebGlRenderer', () => {
         const watchWarnings = () => vi.spyOn(console, 'warn').mockImplementation(() => {});
 
         test('a comb-shaped piece and one whose fill build throws install and draw, with one warning per game', () => {
-            const { host, renderer, drawFrames } = setup();
+            const onFillsOmitted = vi.fn();
+            const { host, renderer, drawFrames } = setup({ onFillsOmitted });
             const warn = watchWarnings();
             renderer.setAppearance(APPEARANCE);
             const game = unfillableGame();
@@ -852,6 +900,7 @@ describe('WebGlRenderer', () => {
             expect(warn).toHaveBeenCalledTimes(1);
             expect(String(warn.mock.calls[0][0])).toMatch(/\b2 pieces\b/);
             expect(warn.mock.calls[0][1]).toBeInstanceOf(Error);
+            expect(onFillsOmitted.mock.calls).toEqual([[{ skipped: 1, errored: 1, error: warn.mock.calls[0][1] }]]);
         });
 
         test('pieces without a fill get their halos under the Shadow preset and show in the debug views', () => {
@@ -871,7 +920,8 @@ describe('WebGlRenderer', () => {
         });
 
         test('an error thrown while triangulating is logged with the one warning', () => {
-            const { host, renderer } = setup();
+            const onFillsOmitted = vi.fn();
+            const { host, renderer } = setup({ onFillsOmitted });
             const warn = watchWarnings();
             const error = new RangeError('Maximum call stack size exceeded');
             vi.mocked(earcut).mockImplementationOnce(() => {
@@ -882,6 +932,7 @@ describe('WebGlRenderer', () => {
 
             expect(warn).toHaveBeenCalledTimes(1);
             expect(warn.mock.calls[0]).toEqual([expect.stringMatching(/\b1 piece\b/), error]);
+            expect(onFillsOmitted.mock.calls).toEqual([[{ skipped: 0, errored: 1, error }]]);
         });
 
         test('a normal game logs no warning, even with a degenerate sliver earcut leaves without triangles', () => {
@@ -947,7 +998,8 @@ describe('WebGlRenderer', () => {
 
         test('once the fill build has used its budget, the remaining pieces get no fill and are never triangulated', () => {
             let clock = 0;
-            const { host, renderer } = setup({ now: () => (clock += 600) });
+            const onFillsOmitted = vi.fn();
+            const { host, renderer } = setup({ now: () => (clock += 600), onFillsOmitted });
             const game = denseLinkGame();
             const warn = watchWarnings();
             vi.mocked(earcut).mockClear();
@@ -965,10 +1017,15 @@ describe('WebGlRenderer', () => {
             expect(warn).toHaveBeenCalledTimes(1);
             expect(String(warn.mock.calls[0][0])).toContain(`${game.pieces.length - 3} pieces`);
             expect(String(warn.mock.calls[0][0])).toContain(`fill budget ran out after 3 of ${game.pieces.length} pieces`);
+            expect(onFillsOmitted.mock.calls).toEqual([
+                [{ skipped: game.pieces.length - 3, errored: 0, budgetExhaustedAfter: 3 }],
+            ]);
+            expect(onFillsOmitted.mock.calls[0][0]).not.toHaveProperty('error');
         });
 
         test('a normal game whose clock stays within the budget fills every piece', () => {
-            const { host, renderer } = setup({ now: () => 0 });
+            const onFillsOmitted = vi.fn();
+            const { host, renderer } = setup({ now: () => 0, onFillsOmitted });
             const warn = watchWarnings();
             const game = twoPieceGame();
             renderer.renderState(game);
@@ -976,6 +1033,7 @@ describe('WebGlRenderer', () => {
 
             expect(game.pieces.every((p) => !renderer['game']!.scene.meshFor(p.id)!.fillOmitted)).toBe(true);
             expect(warn).not.toHaveBeenCalled();
+            expect(onFillsOmitted).not.toHaveBeenCalled();
         });
 
         test('hit-testing finds a comb-shaped piece by its outline', () => {

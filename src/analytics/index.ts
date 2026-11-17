@@ -28,6 +28,8 @@ export type {
     ShareFailedData,
     RendererFailedData,
     RendererContextLostData,
+    RendererContextRestoredData,
+    RendererDegradedData,
     PwaUpdateDetectedData,
     PwaUpdateCheckFailedData,
     PwaUpdateAppliedData,

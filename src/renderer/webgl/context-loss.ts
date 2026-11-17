@@ -1,19 +1,27 @@
-export type ContextEventPhase = 'lost' | 'restored' | 'gave-up';
+/** `latencyMs` runs from the loss to the browser's restore event. */
+export type ContextEvent =
+    | { phase: 'lost' }
+    | { phase: 'gave-up' }
+    | { phase: 'restored'; latencyMs: number }
+    | { phase: 'restored-late'; latencyMs: number };
 
 export const CONTEXT_RESTORE_TIMEOUT_MS = 5000;
 
 /**
  * One report per phase, so the caller's message and analytics can't disagree.
  * After 'gave-up' the caller shows a failure message, so a late restore is
- * ignored rather than resuming behind it.
+ * reported but never resumes drawing behind it.
  */
 export class ContextLossMonitor {
-    private readonly report: (phase: ContextEventPhase) => void;
-    private state: 'ok' | 'lost' | 'stopped' = 'ok';
+    private readonly report: (event: ContextEvent) => void;
+    private readonly now: () => number;
+    private state: 'ok' | 'lost' | 'gave-up' | 'stopped' = 'ok';
+    private lostAt = 0;
     private timer: ReturnType<typeof setTimeout> | null = null;
 
-    constructor(report: (phase: ContextEventPhase) => void) {
+    constructor(report: (event: ContextEvent) => void, now: () => number) {
         this.report = report;
+        this.now = now;
     }
 
     get isLost(): boolean {
@@ -27,20 +35,27 @@ export class ContextLossMonitor {
     lost(): void {
         if (this.state !== 'ok') return;
         this.state = 'lost';
-        this.report('lost');
+        this.lostAt = this.now();
+        this.report({ phase: 'lost' });
         this.timer = setTimeout(() => {
             this.timer = null;
-            this.state = 'stopped';
-            this.report('gave-up');
+            this.state = 'gave-up';
+            this.report({ phase: 'gave-up' });
         }, CONTEXT_RESTORE_TIMEOUT_MS);
     }
 
-    restored(redraw: () => void): void {
+    restored(redraw: () => void, restoredAt: number): void {
         if (this.state !== 'lost') return;
         this.clearTimer();
         this.state = 'ok';
         redraw();
-        this.report('restored');
+        this.report({ phase: 'restored', latencyMs: restoredAt - this.lostAt });
+    }
+
+    restoredLate(): void {
+        if (this.state !== 'gave-up') return;
+        this.state = 'stopped';
+        this.report({ phase: 'restored-late', latencyMs: this.now() - this.lostAt });
     }
 
     stop(): void {
