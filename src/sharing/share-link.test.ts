@@ -7,6 +7,7 @@ import {
     gameStateToPayload,
     hasShareableProgress,
     shareCfToComposableConfig,
+    applyStyleConfigs,
     type SharePayload,
 } from './share-link.js';
 import type { GameState } from '../model/types.js';
@@ -18,6 +19,9 @@ import { generateTopologyPuzzle } from '../puzzle/topology/generator.js';
 import { classicTabTemplate } from '../puzzle/composable/tab-shapes.js';
 import type { PieceDefinition } from '../puzzle/composable/types.js';
 import { generateComposablePuzzle } from '../puzzle/composable-generator.js';
+import { CASES } from '../test-helpers/generated-fill-cases.js';
+import { SINE_AMPLITUDE_MAX, SINE_FREQUENCY_MAX } from '../ui/new-game-dialog.js';
+import { PUZZLE_SIZE_OPTIONS } from '../game/puzzle-sizes.js';
 
 describe('share-link codec — minimal round-trip', () => {
     it('round-trips a minimal starting payload (no attribution, no progress)', () => {
@@ -220,15 +224,15 @@ describe('share-link codec — grid-size clamp (crafted-link DoS guard)', () => 
             v: 1, i: 'blank', is: [1080, 720], g: [100000, 50000],
             c: 'classic', s: 1, r: 'none',
         };
-        expect(decodePayload(encodePayload(payload))?.g).toEqual([64, 64]);
+        expect(decodePayload(encodePayload(payload))?.g).toEqual([16, 16]);
     });
 
     it('floors fractional dims and raises non-positive dims to >= 1', () => {
         const payload: SharePayload = {
-            v: 1, i: 'blank', is: [10, 10], g: [16.9, 0],
+            v: 1, i: 'blank', is: [10, 10], g: [15.9, 0],
             c: 'classic', s: 1, r: 'none',
         };
-        expect(decodePayload(encodePayload(payload))?.g).toEqual([16, 1]);
+        expect(decodePayload(encodePayload(payload))?.g).toEqual([15, 1]);
     });
 
     it('leaves a within-bounds grid untouched', () => {
@@ -299,8 +303,8 @@ describe('share-link codec — sine-frequency/amplitude clamp (crafted-link DoS 
             },
         };
         const decoded = decodePayload(encodePayload(payload));
-        expect(decoded?.cf?.bgc.hf).toBe(100);
-        expect(decoded?.cf?.bgc.vf).toBe(100);
+        expect(decoded?.cf?.bgc.hf).toBe(10);
+        expect(decoded?.cf?.bgc.vf).toBe(10);
         // In-range amplitudes pass through untouched.
         expect(decoded?.cf?.bgc.ha).toBe(0.2);
         expect(decoded?.cf?.bgc.va).toBe(0.2);
@@ -371,8 +375,8 @@ describe('share-link codec — sine-frequency/amplitude clamp (crafted-link DoS 
             cf: { ha: 0.2, hf: 1e9, va: 0.2, vf: 1e9, dt: false },
         }));
         expect(decoded?.cf?.bg).toBe('sine');
-        expect(decoded?.cf?.bgc.hf).toBe(100);
-        expect(decoded?.cf?.bgc.vf).toBe(100);
+        expect(decoded?.cf?.bgc.hf).toBe(10);
+        expect(decoded?.cf?.bgc.vf).toBe(10);
     });
 
     it('leaves a non-sine base-cut generator config untouched', () => {
@@ -383,18 +387,32 @@ describe('share-link codec — sine-frequency/amplitude clamp (crafted-link DoS 
             c: 'composable', s: 1, r: 'none',
             cf: {
                 bg: 'venn',
-                bgc: { sets: 2, separation: 1e9 },
+                bgc: { ...VENN_CONFIG, hf: 500 },
                 tg: 'none',
                 tgc: {},
             },
         };
         const decoded = decodePayload(encodePayload(payload));
-        expect(decoded?.cf?.bgc).toEqual({ sets: 2, separation: 1e9 });
+        expect(decoded?.cf?.bgc).toEqual({ ...VENN_CONFIG, hf: 500 });
+    });
+
+    it.each([
+        ['a radius that swamps its center', { leftRadius: 1e22 }],
+        ['a center far outside any image', { rightCenter: { x: 1e22, y: 200 } }],
+        ['a quoted radius', { rightRadius: '150' }],
+        ['a missing center', { leftCenter: undefined }],
+    ])('rejects a venn link with %s', (_name, override) => {
+        const payload = {
+            v: 1, i: 'blank', is: [600, 400], g: [1, 1],
+            c: 'composable', s: 1, r: 'none',
+            cf: { bg: 'venn', bgc: { ...VENN_CONFIG, ...override }, tg: 'none', tgc: {} },
+        };
+        expect(decodePayload(encodeRaw(payload))).toBeNull();
     });
 
     it('does not raise a non-finite crafted hf/ha into a huge number', () => {
         // JSON.stringify turns Infinity/NaN into null, so a crafted non-finite
-        // hf/ha decodes to null; the clamp skips it → generator default. The
+        // hf/ha decodes to null; the clamp drops it → generator default. The
         // DoS property is just that no billion-scale value survives.
         const decoded = decodePayload(encodeRaw({
             v: 1, i: 'blank', is: [600, 400], g: [4, 3],
@@ -406,8 +424,8 @@ describe('share-link codec — sine-frequency/amplitude clamp (crafted-link DoS 
                 tgc: {},
             },
         }));
-        expect(decoded?.cf?.bgc.hf).toBeNull();
-        expect(decoded?.cf?.bgc.ha).toBeNull();
+        expect(decoded?.cf?.bgc.hf).toBeUndefined();
+        expect(decoded?.cf?.bgc.ha).toBeUndefined();
         expect(decoded?.cf?.bgc.vf).toBe(6);
         expect(decoded?.cf?.bgc.va).toBe(0.2);
     });
@@ -537,7 +555,7 @@ describe('share-link: composable v2 cf shape', () => {
             cutStyle: 'composable',
             composableConfig: {
                 baseCutGenerator: 'venn',
-                baseCutConfig: { sets: 2, separation: 0.3 },
+                baseCutConfig: VENN_CONFIG,
                 tabGenerator: 'none',
                 tabConfig: {},
             },
@@ -545,7 +563,7 @@ describe('share-link: composable v2 cf shape', () => {
         const payload = gameStateToPayload(state, { includeProgress: false });
         const decoded = decodePayload(encodePayload(payload));
         expect(decoded?.cf?.bg).toBe('venn');
-        expect(decoded?.cf?.bgc).toEqual({ sets: 2, separation: 0.3 });
+        expect(decoded?.cf?.bgc).toEqual(VENN_CONFIG);
         expect(decoded?.cf?.tg).toBe('none');
     });
 
@@ -879,6 +897,8 @@ describe('parseLocationHash', () => {
 
 // Helper that mirrors encodePayload without shape-validation, so we can
 // craft malformed-but-well-encoded payloads for rejection tests.
+const VENN_CONFIG = { leftCenter: { x: 200, y: 200 }, leftRadius: 150, rightCenter: { x: 400, y: 200 }, rightRadius: 150 };
+
 function encodeRaw(obj: unknown): string {
     const json = JSON.stringify(obj);
     const bytes = new TextEncoder().encode(json);
@@ -1818,5 +1838,78 @@ describe('links from the frozen legacy build', () => {
             v: 1, i: 'https://images.unsplash.com/photo-123?w=1080', is: [1080, 720],
             g: [8, 6], c: 'classic', s: 12345, r: 'none',
         });
+    });
+});
+
+describe('share-link limits match what the app can write (#759)', () => {
+    const sine = (bgc: Record<string, unknown>): SharePayload => ({
+        v: 1, i: 'blank', is: [600, 400], g: [4, 3], c: 'composable', s: 1, r: 'none',
+        cf: { bg: 'sine', bgc, tg: 'classic', tgc: {} },
+    });
+    const gridOf = (g: [number, number]): SharePayload['g'] | undefined =>
+        decodePayload(encodePayload({ v: 1, i: 'blank', is: [600, 400], g, c: 'classic', s: 1, r: 'none' }))?.g;
+    const largestSide = Math.max(...PUZZLE_SIZE_OPTIONS.flatMap((o) => [o.cols, o.rows]));
+
+    it('caps frequency at the dialog maximum and passes 10 and fractions through', () => {
+        expect(SINE_FREQUENCY_MAX).toBe(10);
+        const decode = (hf: number, vf: number) =>
+            decodePayload(encodePayload(sine({ ha: 0.1, hf, va: 0.1, vf })))?.cf?.bgc;
+        expect(decode(10, 9.9)).toMatchObject({ hf: 10, vf: 9.9 });
+        expect(decode(10.1, 10.0001)).toMatchObject({ hf: 10, vf: 10 });
+        expect(decode(0.1, 1.55)).toMatchObject({ hf: 0.1, vf: 1.55 });
+    });
+
+    it('drops a sine value that is not a finite number, so a quoted number cannot pass the caps', () => {
+        const bgc = decodePayload(encodeRaw(sine({ ha: '5', hf: '400', va: 0.1, vf: { n: 78 } })))?.cf?.bgc;
+        expect(bgc).toEqual({ va: 0.1 });
+    });
+
+    it('keeps the amplitude cap equal to the dialog maximum', () => {
+        const bgc = decodePayload(encodePayload(sine({ ha: SINE_AMPLITUDE_MAX + 0.01, hf: 1, va: SINE_AMPLITUDE_MAX, vf: 1 })))?.cf?.bgc;
+        expect(bgc).toMatchObject({ ha: SINE_AMPLITUDE_MAX, va: SINE_AMPLITUDE_MAX });
+    });
+
+    it('caps each grid side at the largest side a dialog size offers', () => {
+        expect(largestSide).toBe(16);
+        expect(gridOf([largestSide, largestSide - 1])).toEqual([16, 15]);
+        expect(gridOf([largestSide + 1, 40])).toEqual([16, 16]);
+        expect(gridOf([3, 17])).toEqual([3, 16]);
+    });
+
+    const FREEZERS: [string, [number, number]][] = [
+        ['eyJ2IjoxLCJpIjoiYmxhbmsiLCJpcyI6WzIzMSwyMzFdLCJnIjpbNSw1XSwiYyI6ImNvbXBvc2FibGUiLCJzIjo4NDIsInIiOiJub25lIiwiY2YiOnsiYmciOiJzaW5lIiwiYmdjIjp7ImhhIjowLjAzLCJoZiI6MTAwLCJ2YSI6MC4wMywidmYiOjEwMH0sInRnIjoibm9uZSIsInRnYyI6e319fQ', [5, 5]],
+        ['eyJ2IjoxLCJpIjoiYmxhbmsiLCJpcyI6WzUwLDUwXSwiZyI6WzIsNF0sImMiOiJjb21wb3NhYmxlIiwicyI6MjM0LCJyIjoibm9uZSIsImNmIjp7ImJnIjoic2luZSIsImJnYyI6eyJoYSI6MC4xLCJoZiI6NjAsInZhIjowLjAzLCJ2ZiI6MzB9LCJ0ZyI6ImNsYXNzaWMiLCJ0Z2MiOnt9fX0', [2, 4]],
+        ['eyJ2IjoxLCJpIjoiYmxhbmsiLCJpcyI6WzIwNCw3MV0sImciOls1NSw0XSwiYyI6ImNvbXBvc2FibGUiLCJzIjo5NzEwOSwiciI6Im5vbmUiLCJjZiI6eyJiZyI6InNpbmUiLCJiZ2MiOnsiaGEiOjAuMDI5LCJoZiI6NzgsInZhIjowLjUsInZmIjoyMH0sInRnIjoibm9uZSIsInRnYyI6e319fQ', [16, 4]],
+    ];
+
+    it.each(FREEZERS)('clamps the review freezing link %#', (link, grid) => {
+        const decoded = decodePayload(link);
+        expect(decoded!.g).toEqual(grid);
+        const bgc = decoded!.cf!.bgc as { hf: number; vf: number };
+        expect([bgc.hf, bgc.vf]).toEqual([10, 10]);
+    });
+
+    describe('every link the dialog can write decodes unchanged', () => {
+        const zeroNumbers = (bgc: Record<string, unknown> | undefined): Record<string, unknown> =>
+            Object.fromEntries(Object.entries(bgc ?? {}).map(([k, v]) => [k, typeof v === 'number' ? 0 : v]));
+        const sizes = [...PUZZLE_SIZE_OPTIONS].sort((a, b) => a.pieceCount - b.pieceCount);
+        const grids = [sizes[0], sizes[sizes.length - 1]].flatMap((o) => [[o.cols, o.rows], [o.rows, o.cols]] as [number, number][]);
+
+        for (const [name, { style }] of Object.entries(CASES).flatMap(([, group]) => Object.entries(group))) {
+            it(name, () => {
+                const config = style.cutStyle === 'composable' ? style.composableConfig : undefined;
+                const variants = [style];
+                if (config) {
+                    variants.push({ ...style, composableConfig: { ...config, baseCutConfig: zeroNumbers(config.baseCutConfig) } } as typeof style);
+                }
+                for (const variant of variants) {
+                    for (const g of grids) {
+                        const payload: SharePayload = { v: 1, i: 'blank', is: [1080, 720], g, c: variant.cutStyle, s: 7, r: 'none' };
+                        applyStyleConfigs(payload, variant);
+                        expect(decodePayload(encodePayload(payload))).toEqual(payload);
+                    }
+                }
+            });
+        }
     });
 });

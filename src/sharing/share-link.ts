@@ -8,6 +8,7 @@ import {
 import { clampGridDim } from '../puzzle/topology/grid-dim.js';
 import { legacyDisableTabsToTabGenerator } from '../game/composable-config.js';
 import { CURRENT_TRACE_SET_VERSION, normalizeTraceSetVersion } from '../puzzle/composable/traces/trace-set-version.js';
+import { PUZZLE_SIZE_OPTIONS } from '../game/puzzle-sizes.js';
 import { isSafeHttpUrl, isSafeImageUrl } from './safe-url.js';
 
 export interface SharePayload {
@@ -153,13 +154,17 @@ function assertPayloadNumbersFinite(payload: SharePayload): void {
 const MAX_IMAGE_DIM = 8192;
 
 /**
- * Upper bound on a decoded sine base-cut frequency (`hf`/`vf`); an order of
- * magnitude above the new-game dialog's cap of 10, so it alters no real puzzle.
- * Bounds `generateSineCurve`'s segment allocation against a crafted `hf = 1e9`:
- * segments grow linearly with frequency and feed an O(segments²) intersection
- * path. Re-evaluate if `segmentsPerWave` (currently 4) grows.
+ * Upper bound on a decoded sine base-cut frequency (`hf`/`vf`); the new-game
+ * dialog's cap of 10 (#759: links never exceed what the dialog writes), so it
+ * alters no real puzzle. Bounds `generateSineCurve`'s segment allocation
+ * against a crafted `hf = 1e9`: segments grow linearly with frequency and feed
+ * an O(segments²) intersection path. Re-evaluate if `segmentsPerWave`
+ * (currently 4) grows.
  */
-const MAX_SINE_FREQUENCY = 100;
+const MAX_SINE_FREQUENCY = 10;
+
+// Same reason as MAX_SINE_FREQUENCY (#759).
+const MAX_LINK_GRID_DIM = Math.max(...PUZZLE_SIZE_OPTIONS.flatMap((o) => [o.cols, o.rows]));
 
 /**
  * Upper bound on a decoded sine base-cut amplitude (`ha`/`va`); the UI ceiling
@@ -180,16 +185,19 @@ function clampDim(n: number, max: number): number {
  * Cap sine base-cut `hf`/`vf` and `ha`/`va` on a decoded composable `bgc` to
  * {@link MAX_SINE_FREQUENCY}/{@link MAX_SINE_AMPLITUDE}. Gated on `bg === 'sine'`
  * (only sine reads these as segment/bbox knobs), leaving other generators'
- * opaque config untouched. Non-numeric values (a JSON-nulled non-finite) are
- * skipped → generator default. Mutates `bgc` in place.
+ * opaque config untouched. A value that is not a finite number (a JSON-nulled
+ * non-finite, or a quoted number the generator's arithmetic would coerce past
+ * the caps) is dropped → generator default. Mutates `bgc` in place.
  */
 function clampSineConfig(cf: NonNullable<SharePayload['cf']>): void {
     if (cf.bg !== 'sine') return;
     const caps = { hf: MAX_SINE_FREQUENCY, vf: MAX_SINE_FREQUENCY, ha: MAX_SINE_AMPLITUDE, va: MAX_SINE_AMPLITUDE } as const;
     for (const key of ['hf', 'vf', 'ha', 'va'] as const) {
         const v = cf.bgc[key];
-        if (typeof v === 'number') {
+        if (typeof v === 'number' && Number.isFinite(v)) {
             cf.bgc[key] = Math.min(caps[key], v);
+        } else {
+            delete cf.bgc[key];
         }
     }
 }
@@ -210,9 +218,11 @@ export function decodePayload(encoded: string): SharePayload | null {
         const parsed = JSON.parse(json) as unknown;
         const translated = translateLegacyComposable(parsed);
         if (!isValidPayload(translated)) return null;
-        // Bound the grid before it reaches the generators (O(E²) crossing
-        // check). Normal grids (<= the shared grid cap) pass through unchanged.
-        translated.g = [clampGridDim(translated.g[0]), clampGridDim(translated.g[1])];
+        // Bound the grid before it reaches the generators (O(E²) crossing check).
+        translated.g = [
+            Math.min(MAX_LINK_GRID_DIM, clampGridDim(translated.g[0])),
+            Math.min(MAX_LINK_GRID_DIM, clampGridDim(translated.g[1])),
+        ];
         // A fractional `is` is not adversarial: fractal/wavy inscribe the image
         // to the grid aspect, so 607.5 is normal and the floor only snaps sub-pixel.
         translated.is = [clampDim(translated.is[0], MAX_IMAGE_DIM), clampDim(translated.is[1], MAX_IMAGE_DIM)];
@@ -404,12 +414,24 @@ function isValidComposableCf(cf: unknown): boolean {
     if (typeof c.bg !== 'string') return false;
     if (!isKnownBaseCutId(c.bg)) return false;
     if (typeof c.bgc !== 'object' || c.bgc === null) return false;
+    if (c.bg === 'venn' && !isValidVennConfig(c.bgc as Record<string, unknown>)) return false;
     if (typeof c.tg !== 'string') return false;
     if (!isKnownTabId(c.tg)) return false;
     if (typeof c.tgc !== 'object' || c.tgc === null) return false;
     if (c.mpa !== undefined && typeof c.mpa !== 'number') return false;
     if (c.bl !== undefined && typeof c.bl !== 'boolean') return false;
     return true;
+}
+
+// Generation never returns once a circle's radius swamps its center in
+// floating point (seen from 1e18); real values are image pixels.
+const MAX_VENN_COORDINATE = 1e6;
+
+function isValidVennConfig(bgc: Record<string, unknown>): boolean {
+    const inRange = (v: unknown): boolean => typeof v === 'number' && Math.abs(v) <= MAX_VENN_COORDINATE;
+    const isCenter = (p: unknown): boolean => !!p && typeof p === 'object'
+        && inRange((p as Record<string, unknown>).x) && inRange((p as Record<string, unknown>).y);
+    return isCenter(bgc.leftCenter) && isCenter(bgc.rightCenter) && inRange(bgc.leftRadius) && inRange(bgc.rightRadius);
 }
 
 function isTuple2Number(x: unknown): x is [number, number] {
