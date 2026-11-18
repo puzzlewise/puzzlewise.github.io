@@ -1,10 +1,24 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+
+// `importOriginal` keeps the real `tracedTabGeneratorStub`, which
+// `generator-registry.ts` registers at import time.
+vi.mock('../puzzle/topology/traced-tab-loader.js', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('../puzzle/topology/traced-tab-loader.js')>();
+    return { ...actual, preloadTracedTabGenerator: vi.fn() };
+});
+
 import {
     generatePiecesOffThread,
     GenerationCanceledError,
 } from './generate-async.js';
 import { runGeneration, type GenerationRequest } from './generation-core.js';
 import { sanitizeErrorReason } from '../analytics/sanitize-error-reason.js';
+import {
+    preloadTracedTabGenerator,
+    tracedTabGeneratorStub,
+} from '../puzzle/topology/traced-tab-loader.js';
+import { registerTabGenerator } from '../puzzle/topology/generator-registry.js';
+import { classicTabGenerator } from '../puzzle/topology/classic-tab-generator.js';
 
 const REQUEST: GenerationRequest = {
     cutStyle: 'classic',
@@ -13,6 +27,8 @@ const REQUEST: GenerationRequest = {
     seed: 7,
     tabDebug: false,
 };
+
+const TRACED: GenerationRequest = { ...REQUEST, cutStyle: 'triangles' };
 
 class StubWorker {
     static instances: StubWorker[] = [];
@@ -66,9 +82,16 @@ class ThrowingConstructorWorker {
 
 const originalWorker = (globalThis as { Worker?: unknown }).Worker;
 
-beforeEach(() => { StubWorker.instances = []; });
+beforeEach(() => {
+    StubWorker.instances = [];
+    // Stands in for the chunk: loading it registers a generator under 'traced'.
+    vi.mocked(preloadTracedTabGenerator).mockReset().mockImplementation(async () => {
+        registerTabGenerator({ ...classicTabGenerator, id: 'traced' });
+    });
+});
 afterEach(() => {
     (globalThis as { Worker?: unknown }).Worker = originalWorker;
+    registerTabGenerator(tracedTabGeneratorStub);
 });
 
 describe('generatePiecesOffThread', () => {
@@ -269,6 +292,51 @@ describe('generatePiecesOffThread', () => {
         setTimeout(() => controller.abort(), 0);
         await expect(generatePiecesOffThread(REQUEST, controller.signal))
             .rejects.toBeInstanceOf(GenerationCanceledError);
+    });
+
+    it('loads the traced chunk before a traced fallback generation', async () => {
+        delete (globalThis as { Worker?: unknown }).Worker;
+        const out = await generatePiecesOffThread(TRACED);
+        expect(preloadTracedTabGenerator).toHaveBeenCalledTimes(1);
+        expect(out.mode).toBe('sync-fallback');
+        expect(out.result.pieces.length).toBeGreaterThan(0);
+    });
+
+    it('does not load the traced chunk for a request that needs no traced tabs', async () => {
+        delete (globalThis as { Worker?: unknown }).Worker;
+        await generatePiecesOffThread(REQUEST);
+        expect(preloadTracedTabGenerator).not.toHaveBeenCalled();
+    });
+
+    it('loads the chunk and generates the traced request after a worker error', async () => {
+        (globalThis as { Worker?: unknown }).Worker = StubWorker;
+        const promise = generatePiecesOffThread(TRACED);
+        StubWorker.instances[0].errorHandler!({ message: '', preventDefault: vi.fn() });
+        const out = await promise;
+        expect(preloadTracedTabGenerator).toHaveBeenCalledTimes(1);
+        expect(out).toMatchObject({ mode: 'sync-fallback', fallbackKind: 'worker-error' });
+    });
+
+    it('rejects with the chunk error when the fallback chunk load fails', async () => {
+        delete (globalThis as { Worker?: unknown }).Worker;
+        const chunkError = new Error('chunk boom');
+        vi.mocked(preloadTracedTabGenerator).mockRejectedValue(chunkError);
+        await expect(generatePiecesOffThread(TRACED)).rejects.toBe(chunkError);
+    });
+
+    it('honors a Cancel that lands during the fallback chunk download', async () => {
+        delete (globalThis as { Worker?: unknown }).Worker;
+        let finishLoad!: () => void;
+        // Resolves without registering a generator: if generation ran anyway it
+        // would throw TracedTabLibraryNotLoadedError, not the cancel sentinel.
+        vi.mocked(preloadTracedTabGenerator).mockReturnValue(
+            new Promise<void>((resolve) => { finishLoad = resolve; }),
+        );
+        const controller = new AbortController();
+        const promise = generatePiecesOffThread(TRACED, controller.signal);
+        controller.abort();
+        finishLoad();
+        await expect(promise).rejects.toBeInstanceOf(GenerationCanceledError);
     });
 
     it('an already-aborted signal throws before spawning anything', async () => {
