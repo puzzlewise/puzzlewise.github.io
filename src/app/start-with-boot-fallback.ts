@@ -11,9 +11,16 @@
  * fallback, not a retry-with-different-inputs one.
  */
 
+import type { CutStyle } from '../game/cut-styles.js';
 import { runWithErrorReport } from './run-with-error-report.js';
-import { BOOT_FALLBACK_CUT_STYLE } from './traced-tab-plan.js';
 import { showToast } from '../ui/index.js';
+
+/**
+ * The cut style the boot fallback is forced to. Exported so `startNewGame`
+ * and this module's failure attribution name the same style, without a second
+ * literal to keep in step.
+ */
+export const BOOT_FALLBACK_CUT_STYLE: CutStyle = 'classic';
 
 export const FALLBACK_STARTED_TOAST = "Couldn't start your usual puzzle — started a Classic one";
 

@@ -1,7 +1,7 @@
 /**
- * Asymmetric by style: Wavy and Triangles always get their trace-set version
- * (no fallback); Classic only when traced tabs loaded (else legacy); Composable
- * never (not a trace consumer); Fractal passes through regardless of cutStyle.
+ * Asymmetric by style: Wavy and Triangles always get their trace-set version;
+ * Classic unless the legacy cut is forced; Composable never (not a trace
+ * consumer); Fractal passes through regardless of cutStyle.
  */
 
 import type { CutStyle } from '../game/cut-styles.js';
@@ -16,16 +16,15 @@ export interface GeneratorConfigs {
 }
 
 /**
- * A Classic game without `classicConfig` falls back to the legacy
- * straight-grid generator, so `classic && !tracedTabsOk` producing `{}` is the
- * `legacy-classic` outcome, deliberately — not an omission.
+ * A Classic game without `classicConfig` runs the legacy straight-grid
+ * generator, so `classic && forceLegacyClassic` producing `{}` is deliberate —
+ * not an omission.
  */
 export function generatorConfigsForNewGame(opts: {
     cutStyle: CutStyle;
     fractalConfig?: FractalDialogConfig;
     wavyConfig?: WavyDialogConfig;
-    /** True when traced tabs are available — `TracedTabOutcome.kind === 'ok'`. */
-    tracedTabsOk: boolean;
+    forceLegacyClassic: boolean;
 }): GeneratorConfigs {
     const configs: GeneratorConfigs = {};
 
@@ -49,8 +48,8 @@ export function generatorConfigsForNewGame(opts: {
     }
 
     // Stamping activates the sine-based generator for fresh Classic puzzles;
-    // withholding it is the `legacy-classic` fallback (see the function doc).
-    if (opts.cutStyle === 'classic' && opts.tracedTabsOk) {
+    // withholding it selects the legacy cut (see the function doc).
+    if (opts.cutStyle === 'classic' && !opts.forceLegacyClassic) {
         configs.classicConfig = { traceSetVersion: CURRENT_TRACE_SET_VERSION };
     }
 

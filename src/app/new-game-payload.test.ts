@@ -19,7 +19,6 @@ function freshOpts(overrides = {}) {
         imageSource: 'random',
         imageCategory: 'any',
         vibrant: false,
-        chunkDegraded: false,
         bootFallback: false,
         generation: { mode: 'worker' as const, durationMs: 120 },
         ...overrides,
@@ -45,21 +44,12 @@ describe('buildFreshGameData', () => {
         expect(data.rows).toBe(8);
     });
 
-    it('flags a degraded traced-tab chunk', () => {
-        expect(buildFreshGameData(freshOpts({ chunkDegraded: true })).tracedChunkDegraded).toBe(true);
-    });
-
-    it('omits tracedChunkDegraded rather than setting it false', () => {
-        // Absence cannot be filtered in Umami; the query subtracts on presence.
-        expect('tracedChunkDegraded' in buildFreshGameData(freshOpts())).toBe(false);
-    });
-
     it('flags a boot-fallback game', () => {
         expect(buildFreshGameData(freshOpts({ bootFallback: true })).bootFallback).toBe(true);
     });
 
     it('omits bootFallback rather than setting it false', () => {
-        // Same reasoning as tracedChunkDegraded above.
+        // Absence cannot be filtered in Umami; the query subtracts on presence.
         expect('bootFallback' in buildFreshGameData(freshOpts())).toBe(false);
     });
 

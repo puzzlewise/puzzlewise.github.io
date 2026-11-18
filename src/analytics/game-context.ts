@@ -27,7 +27,6 @@ const FIELD_TYPES: { [K in keyof NewGameData]-?: TagOf<NewGameData[K]> } = {
     source: 'string',
     cutStyle: 'string',
     traceSetVersion: 'number',
-    tracedChunkDegraded: 'boolean',
     bootFallback: 'boolean',
     rotationMode: 'string',
     orientation: 'string',

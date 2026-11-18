@@ -205,9 +205,8 @@ export function openNewGameDialog(deps: OpenNewGameDialogDeps): void {
                 pickedImage: imageChoice.kind === 'photo' ? imageChoice.photo : undefined,
             });
             void runWithErrorReport({
-                // The traced-tab chunk load is the likeliest rejection here (a
-                // network blip or stale deploy hash). The toast keeps the click
-                // from silently doing nothing; `new-game-failed` records it.
+                // The toast keeps the click from silently doing nothing;
+                // `new-game-failed` records it.
                 run: () => newGame,
                 warnMessage: 'Failed to start new game:',
                 event: 'new-game-failed',

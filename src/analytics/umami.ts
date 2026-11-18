@@ -61,9 +61,8 @@ export interface NewGameData {
      * per-style config the puzzle was generated with. Present for traced-tab
      * Wavy games, Triangles games, and sine-based Classic games; omitted for
      * Fractal, Composable, legacy (classic-tab) Wavy links, pre-upgrade
-     * Classic links/saves, Classic games degraded to the legacy generator by
-     * a failed chunk fetch (see `tracedChunkDegraded`), boot-fallback games
-     * (see `bootFallback`), and any link whose
+     * Classic links/saves, boot-fallback games (see `bootFallback`), and any
+     * link whose
      * per-style config the decoder dropped as invalid — a `tf`-less Triangles
      * link still generates with traced tabs, but at a version substituted
      * during generation that the state never records. Lets analytics follow
@@ -76,25 +75,21 @@ export interface NewGameData {
      * queries: "has traceSetVersion" is no longer a proxy for
      * "Wavy/Triangles" — filter on `cutStyle` explicitly.
      *
-     * Three confounds sit in that bucket, all separable:
-     * - degraded new games (a failed chunk fetch) land in it — exclude
-     *   `tracedChunkDegraded`;
-     * - boot-fallback games (#488) land in it too, with no chunk failure of
-     *   their own — exclude `bootFallback`;
+     * Two confounds sit in that bucket, both separable:
+     * - boot-fallback games (#488) land in it — exclude `bootFallback`;
      * - during a rollout window, clients still on the pre-upgrade build
      *   (PWA caches especially) start Classic games without the field too.
      *   Those are `source: 'fresh'`; a genuine pre-upgrade Classic *link*
      *   arrives as `source: 'shared'`.
      *
      * So the query on `new-game-started` is: `cutStyle: 'classic'`, no
-     * `traceSetVersion`, neither `tracedChunkDegraded` nor `bootFallback` —
-     * then split on `source`. None of the three exclusions is a negated
-     * filter; all are subtractions, the same absence arithmetic
-     * {@link SharedLoadFailedData}'s `source` documents: `traceSetVersion`
-     * is omitted rather than null here and the two flags are absent rather
-     * than `false` (each flag's own doc gives the reason), so a negated
-     * property filter joins on the key and matches only the rows that carry
-     * the property, never the ones that lack it.
+     * `traceSetVersion`, no `bootFallback` — then split on `source`.
+     * Neither exclusion is a negated filter; both are subtractions, the
+     * same absence arithmetic {@link SharedLoadFailedData}'s `source`
+     * documents: `traceSetVersion` is omitted rather than null here and
+     * `bootFallback` is absent rather than `false` (its own doc gives the
+     * reason), so a negated property filter joins on the key and matches
+     * only the rows that carry the property, never the ones that lack it.
      * Both halves count the same one thing: a Classic game that rendered
      * legacy geometry. `'fresh'` is the stale-build population and falls to
      * zero as the fleet turns over. `'shared'` is the link tail, and it is
@@ -103,8 +98,8 @@ export interface NewGameData {
      * stale builds opening a *new* link: `isValidPayload` checks known fields
      * only, so an unknown `clf` passes validation and is then ignored.
      * Permanently, it includes links shared from a game that had no sine
-     * config of its own to pass on (a degraded start, a resumed pre-upgrade
-     * save, a boot-fallback game). That last one is not excludable
+     * config of its own to pass on (a resumed pre-upgrade save, a
+     * boot-fallback game). That last one is not excludable
      * recipient-side the way a boot fallback's own start is: `bootFallback`
      * rides on the originator's `new-game-started` only, and nothing about
      * it is encoded in the link. All of them genuinely ran the legacy
@@ -113,18 +108,6 @@ export interface NewGameData {
      * early.
      */
     traceSetVersion?: number;
-    /**
-     * True when a new Classic game fell back to the legacy straight-grid
-     * generator because the traced-tab chunk failed to load. Only ever set
-     * for fresh Classic games — every other style fails the start outright,
-     * and the shared-link path never degrades. Absent otherwise, so on
-     * `new-game-started` the degraded volume is a single filter and can be
-     * subtracted from the "Classic without traceSetVersion" bucket above.
-     *
-     * A boot fallback sets `bootFallback` instead — it never attempts the
-     * fetch, so there is no failure to record.
-     */
-    tracedChunkDegraded?: boolean;
     /**
      * True when the boot path's preferred start failed and the app
      * recovered by starting a last-resort puzzle instead (#488): legacy
@@ -153,16 +136,13 @@ export interface NewGameData {
      * numerator over `new-game-failed[phase='boot']`'s count for a recovery
      * rate: the skipped-recovery outcome and that tail both deflate it.
      *
-     * Like `tracedChunkDegraded`, these games ran legacy geometry with no
-     * `traceSetVersion`, so they have to come out of the pre-upgrade-tail
-     * query described above — by subtracting this flag's own count, not by
-     * negating a filter: the flag is absent rather than `false` when it
-     * doesn't apply, so `bootFallback = true` is the only filter that
-     * expresses it. The two flags never co-occur (a boot fallback never
-     * starts the chunk fetch, so it cannot also be degraded), so
-     * subtracting both double-counts nothing. Unlike `tracedChunkDegraded`,
-     * the cause need not be the chunk at all — a saved config the build
-     * cannot generate lands here too.
+     * These games ran legacy geometry with no `traceSetVersion`, so they
+     * have to come out of the pre-upgrade-tail query described above — by
+     * subtracting this flag's own count, not by negating a filter: the flag
+     * is absent rather than `false` when it doesn't apply, so
+     * `bootFallback = true` is the only filter that expresses it. The cause
+     * need not be the chunk at all — a saved config the build cannot
+     * generate lands here too.
      */
     bootFallback?: boolean;
     rotationMode: 'none' | 'quarter-turn' | 'free';
@@ -246,11 +226,10 @@ export interface NewGameData {
      * How the generate phase ran: `'worker'` = off the main thread in the
      * generation Web Worker (the normal path since #489), `'sync-fallback'`
      * = synchronously on the main thread because the worker path was
-     * unavailable or failed (see `generationFallbackReason`). A `'no-worker'`
-     * fallback froze the main thread for ~`generationMs`; a fallback that
-     * followed a worker failure froze it for less than that, since part of
-     * `generationMs` there is the failed (non-blocking) worker attempt —
-     * see `generationMs`'s own doc. Worker games did not freeze it at all.
+     * unavailable or failed (see `generationFallbackReason`). A fallback
+     * froze the main thread for less than `generationMs` — see that
+     * field's own doc for what else the span holds. Worker games did not
+     * freeze it at all.
      * Present on every `new-game-started` from the off-thread release on;
      * absent on events from older clients (PWA caches).
      *
@@ -262,17 +241,17 @@ export interface NewGameData {
     /**
      * Wall-clock milliseconds the generate phase took (rounded), measured
      * on the main thread around the whole off-thread round trip — worker
-     * spawn, generation, and result transfer — or around the synchronous
-     * call on the fallback path. This is the wait a player actually experienced under the
+     * spawn, generation, and result transfer — or around the fallback
+     * path. This is the wait a player actually experienced under the
      * loading overlay for the generation step (image fetch excluded).
      *
-     * A `sync-fallback` that followed a worker failure (`generationFallbackKind`
-     * other than `'no-worker'`) is not a sync-only measurement: the timer
-     * starts before the worker is even spawned, so it spans the failed
-     * worker round trip PLUS the traced-chunk download where needed PLUS
-     * the synchronous rerun that followed, not the rerun alone. Only that rerun actually blocks the main thread, so on
-     * this path `generationMs` overstates the freeze the player sat through
-     * (though not the player's total wait, which is the whole span).
+     * On a `sync-fallback` this is not a freeze measurement: the span also
+     * holds the traced-chunk download where the style needs one and, for a
+     * `generationFallbackKind` other than `'no-worker'`, the failed worker
+     * round trip that came first. Only the synchronous generation blocks
+     * the main thread, so `generationMs` overstates the freeze the player
+     * sat through (though not the player's total wait, which is the whole
+     * span).
      */
     generationMs: number;
     /**
@@ -475,6 +454,9 @@ export type SettingChangedData =
  * makes abandonment observable — a started event with no matching
  * settle means the user left mid-fetch. `attempt` matches the counter
  * on the settling event.
+ *
+ * Before #719 this family fired on a session's first traced start; since
+ * then only when generation fell back to the main thread.
  */
 export interface TracedChunkPreloadStartedData {
     attempt: number;
@@ -943,8 +925,8 @@ export interface OfflineImagesSavedData {
 }
 
 /**
- * Data attached to `new-game-failed` — starting a fresh puzzle rejected. The
- * most likely cause (the traced-tab lazy chunk import) ALSO emits
+ * Data attached to `new-game-failed` — starting a fresh puzzle rejected. A
+ * failed traced-chunk load on the main-thread fallback ALSO emits
  * `traced-chunk-load-failed` one layer down, so a single failure can produce
  * both events; there is no guaranteed 1-to-1 correlation (topology and other
  * errors reach this catch without a chunk event). This event captures the
@@ -1832,12 +1814,9 @@ export interface MoveResultData {
  * generator speed. It is timestamped at unwind, not at the click:
  * canceling only takes effect at the next abort checkpoint, so a click
  * during an in-flight step with none of its own — the Unsplash image
- * fetch and the traced-tab chunk fetch today — isn't observed until that
- * step settles, and `elapsedMs` runs past the actual time-to-click by
- * however long was left on it. The chunk fetch alone can precede a
- * `source: 'shared'` cancel too: a shared load has no Unsplash fetch, but
- * still awaits the chunk when the link needs one, so the missing Unsplash
- * leg does not make a shared cancel's `elapsedMs` click-accurate. A click
+ * fetch, and the traced-chunk download on the main-thread fallback —
+ * isn't observed until that step settles, and `elapsedMs` runs past the
+ * actual time-to-click by however long was left on it. A click
  * landing during a synchronous main-thread generation — which blocks the
  * thread, so the click cannot even be dispatched until it finishes — is
  * honored (`generate-async.ts` yields to the task queue before its

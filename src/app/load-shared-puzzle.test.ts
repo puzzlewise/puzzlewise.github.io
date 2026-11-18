@@ -129,16 +129,19 @@ describe('loadSharedPuzzle', () => {
         expect(persistNewPuzzle.mock.calls[0][0]).toBe(installedState);
     });
 
-    it('preloads the traced chunk only when the payload needs it', async () => {
+    it('never loads the traced chunk on the main thread', async () => {
         vi.mocked(createNewGameAsync).mockResolvedValue(makeAsyncGenerationResult());
-
-        // A plain Classic link must not pay a chunk fetch.
-        await loadSharedPuzzle(payload({ c: 'classic' }), undefined, deps);
-        expect(preloadTracedTabGenerator).not.toHaveBeenCalled();
-
-        // Triangles always needs the traced-tab chunk.
         await loadSharedPuzzle(payload({ c: 'triangles', tf: { tv: 3 } }), undefined, deps);
-        expect(preloadTracedTabGenerator).toHaveBeenCalledTimes(1);
+        expect(preloadTracedTabGenerator).not.toHaveBeenCalled();
+    });
+
+    it('installs nothing when generation of a traced link fails', async () => {
+        const failure = new Error('chunk boom');
+        vi.mocked(createNewGameAsync).mockRejectedValue(failure);
+        await expect(
+            loadSharedPuzzle(payload({ c: 'triangles', tf: { tv: 3 } }), undefined, deps),
+        ).rejects.toBe(failure);
+        expect(install).not.toHaveBeenCalled();
     });
 
     it('loads the blank sentinel as a puzzle with no image', async () => {

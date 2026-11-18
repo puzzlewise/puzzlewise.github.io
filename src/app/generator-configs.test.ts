@@ -7,14 +7,14 @@ describe('generatorConfigsForNewGame', () => {
         expect(generatorConfigsForNewGame({
             cutStyle: 'wavy',
             wavyConfig: { borderless: true },
-            tracedTabsOk: true,
+            forceLegacyClassic: false,
         })).toEqual({
             wavyConfig: { borderless: true, traceSetVersion: CURRENT_TRACE_SET_VERSION },
         });
     });
 
     it('defaults Wavy borderless to false when the dialog supplied no config', () => {
-        const configs = generatorConfigsForNewGame({ cutStyle: 'wavy', tracedTabsOk: true });
+        const configs = generatorConfigsForNewGame({ cutStyle: 'wavy', forceLegacyClassic: false });
         expect(configs.wavyConfig).toEqual({
             borderless: false,
             traceSetVersion: CURRENT_TRACE_SET_VERSION,
@@ -22,19 +22,17 @@ describe('generatorConfigsForNewGame', () => {
     });
 
     it('stamps Triangles too', () => {
-        expect(generatorConfigsForNewGame({ cutStyle: 'triangles', tracedTabsOk: true }))
+        expect(generatorConfigsForNewGame({ cutStyle: 'triangles', forceLegacyClassic: false }))
             .toEqual({ trianglesConfig: { traceSetVersion: CURRENT_TRACE_SET_VERSION } });
     });
 
-    it('stamps Classic when traced tabs loaded', () => {
-        expect(generatorConfigsForNewGame({ cutStyle: 'classic', tracedTabsOk: true }))
+    it('stamps Classic on an ordinary start', () => {
+        expect(generatorConfigsForNewGame({ cutStyle: 'classic', forceLegacyClassic: false }))
             .toEqual({ classicConfig: { traceSetVersion: CURRENT_TRACE_SET_VERSION } });
     });
 
-    it('withholds classicConfig when traced tabs failed, selecting the legacy cut', () => {
-        // `{}` IS the `legacy-classic` outcome: a Classic game without
-        // classicConfig falls back to the legacy straight-grid generator.
-        expect(generatorConfigsForNewGame({ cutStyle: 'classic', tracedTabsOk: false }))
+    it('withholds classicConfig when legacy Classic is forced', () => {
+        expect(generatorConfigsForNewGame({ cutStyle: 'classic', forceLegacyClassic: true }))
             .toEqual({});
     });
 
@@ -42,7 +40,7 @@ describe('generatorConfigsForNewGame', () => {
         expect(generatorConfigsForNewGame({
             cutStyle: 'classic',
             fractalConfig: { borderless: true },
-            tracedTabsOk: true,
+            forceLegacyClassic: false,
         })).toEqual({
             fractalConfig: { borderless: true },
             classicConfig: { traceSetVersion: CURRENT_TRACE_SET_VERSION },
@@ -50,7 +48,7 @@ describe('generatorConfigsForNewGame', () => {
     });
 
     it('stamps nothing for a Composable game', () => {
-        expect(generatorConfigsForNewGame({ cutStyle: 'composable', tracedTabsOk: true }))
+        expect(generatorConfigsForNewGame({ cutStyle: 'composable', forceLegacyClassic: false }))
             .toEqual({});
     });
 });
