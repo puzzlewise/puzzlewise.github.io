@@ -173,7 +173,7 @@ describe('showCompletionOverlay', () => {
         expect(shareSpy).toHaveBeenCalledTimes(1);
         const arg = shareSpy.mock.calls[0][0];
         expect(arg.url).toMatch(/#p=/);
-        expect(arg.title).toBe('Puzzle');
+        expect(arg.title).toBe('Puzzlewise');
         expect(arg.text).toMatch(/finished this puzzle/);
 
         // Click on the share button must not bubble up and dismiss the overlay.

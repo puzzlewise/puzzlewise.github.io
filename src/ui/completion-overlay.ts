@@ -53,7 +53,7 @@ export function showCompletionOverlay(
         const url = buildShareUrl(window.location.href, payload);
         void sharePuzzle({
             url,
-            title: 'Puzzle',
+            title: 'Puzzlewise',
             text: 'I finished this puzzle — can you?',
             onClipboardFallback: () => showToast('Link copied to clipboard'),
             onError: (err) => {

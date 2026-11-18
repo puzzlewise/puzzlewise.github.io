@@ -1,4 +1,4 @@
-# 🧩 Puzzle
+# 🧩 Puzzlewise
 
 A jigsaw puzzle web app that recreates the experience of laying a physical puzzle on a table.
 
