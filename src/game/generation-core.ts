@@ -81,8 +81,7 @@ export function runGeneration(request: GenerationRequest): GenerationResult {
 /**
  * Whether generating this request hits the traced-tab generator, so needs the
  * lazy chunk loaded first. Keep in step with which strategies pass
- * `tabGenerator: 'traced'` in `cut-style-strategies.ts`. Mirrors
- * `needsTracedTabChunk` (`app/share-payload-to-init.ts`) for share payloads.
+ * `tabGenerator: 'traced'` in `cut-style-strategies.ts`.
  */
 export function requestNeedsTracedTabs(request: GenerationRequest): boolean {
     switch (request.cutStyle) {

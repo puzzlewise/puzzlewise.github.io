@@ -74,11 +74,11 @@ describe('game context store', () => {
         expect(loadGameContext(7)).toEqual(sharedData);
     });
 
-    it('round-trips the degrade and fallback flags', () => {
-        const degraded: NewGameData = { ...freshData, tracedChunkDegraded: true, bootFallback: true };
-        saveGameContext(42, degraded, startedAt);
+    it('round-trips the boot-fallback flag', () => {
+        const fallback: NewGameData = { ...freshData, bootFallback: true };
+        saveGameContext(42, fallback, startedAt);
 
-        expect(loadGameContext(42)).toEqual(degraded);
+        expect(loadGameContext(42)).toEqual(fallback);
     });
 
     it('reads back the start time saved for the same seed', () => {

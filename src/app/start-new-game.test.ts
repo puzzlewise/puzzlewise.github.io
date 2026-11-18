@@ -42,6 +42,7 @@ vi.mock('../game/index.js', async (importOriginal) => {
 import { showLoadingOverlay, hideLoadingOverlay, yieldForPaint } from '../ui/index.js';
 import { getImageProxyBaseUrl, triggerPhotoDownload } from '../images/index.js';
 import { preloadTracedTabGenerator } from '../puzzle/topology/traced-tab-loader.js';
+import { CURRENT_TRACE_SET_VERSION } from '../puzzle/composable/traces/trace-set-version.js';
 import { resolveUnsplashImage } from './resolve-image.js';
 import { createNewGameAsync, GenerationCanceledError } from '../game/index.js';
 import { startNewGame, type StartNewGameDeps, type StartNewGameOptions } from './start-new-game.js';
@@ -227,13 +228,36 @@ describe('startNewGame', () => {
         expect(umamiTrack.mock.calls[0][1]).not.toHaveProperty('replacedProgress');
     });
 
-    // Pins ordering step 1: the boot fallback forces the plan before
-    // anything else runs, so the recovery path never touches the chunk.
-    it('never fetches the traced chunk for a boot-fallback start', async () => {
-        // The recovery path must not be able to fail the way the start it is
-        // recovering from did.
-        await startNewGame({ cols: 2, rows: 2 }, { bootFallback: true, imageSource: 'blank' }, deps);
+    it('never loads the traced chunk on the main thread', async () => {
+        vi.mocked(createNewGameAsync).mockResolvedValue(makeAsyncGenerationResult());
+        await startNewGame({ cols: 2, rows: 2 }, { cutStyle: 'classic', imageSource: 'blank' }, deps);
         expect(preloadTracedTabGenerator).not.toHaveBeenCalled();
+    });
+
+    it('asks for traced Classic on an ordinary start', async () => {
+        vi.mocked(createNewGameAsync).mockResolvedValue(makeAsyncGenerationResult());
+        await startNewGame({ cols: 2, rows: 2 }, { cutStyle: 'classic', imageSource: 'blank' }, deps);
+        expect(vi.mocked(createNewGameAsync).mock.calls[0][4]).toMatchObject({
+            cutStyle: 'classic',
+            classicConfig: { traceSetVersion: CURRENT_TRACE_SET_VERSION },
+        });
+    });
+
+    it('asks for legacy Classic on a boot-fallback start, whatever style was requested', async () => {
+        await startNewGame({ cols: 2, rows: 2 }, { cutStyle: 'wavy', bootFallback: true, imageSource: 'blank' }, deps);
+        const options = vi.mocked(createNewGameAsync).mock.calls[0][4]!;
+        expect(options.cutStyle).toBe('classic');
+        expect(options).not.toHaveProperty('classicConfig');
+    });
+
+    it('rejects a Classic start whose generation fails, installing nothing', async () => {
+        const failure = new Error('chunk boom');
+        vi.mocked(createNewGameAsync).mockRejectedValue(failure);
+        await expect(
+            startNewGame({ cols: 2, rows: 2 }, { cutStyle: 'classic', imageSource: 'blank' }, deps),
+        ).rejects.toBe(failure);
+        expect(install).not.toHaveBeenCalled();
+        expect(umamiTrack).not.toHaveBeenCalledWith('new-game-started', expect.anything());
     });
 
     it('flags a boot-fallback game in analytics', async () => {
@@ -242,96 +266,6 @@ describe('startNewGame', () => {
             'new-game-started',
             expect.objectContaining({ bootFallback: true }),
         );
-    });
-
-    // The whole degraded-Classic seam end to end. Classic declares
-    // `tracedTabs: 'always'` but survives the fetch failing (the legacy
-    // straight-grid generator needs no chunk); every other style throws on
-    // `'fail'`. This is the flag `umami.ts` leans on hardest: without it a
-    // degraded game is indistinguishable from pre-upgrade Classic traffic. Both
-    // ends are covered in isolation, but nothing else drives a degrading start
-    // through this file.
-    it('flags a Classic game degraded by a failed chunk fetch, and warns', async () => {
-        warnSpy = vi.spyOn(diagnostics, 'warn').mockImplementation(() => {});
-        const chunkError = new Error('chunk boom');
-        vi.mocked(preloadTracedTabGenerator).mockRejectedValue(chunkError);
-
-        await startNewGame(
-            { cols: 2, rows: 2 },
-            { cutStyle: 'classic', imageSource: 'blank' },
-            deps,
-        );
-
-        // The start completed on the legacy cut rather than throwing.
-        expect(install).toHaveBeenCalledTimes(1);
-        expect(umamiTrack).toHaveBeenCalledWith(
-            'new-game-started',
-            expect.objectContaining({ cutStyle: 'classic', tracedChunkDegraded: true }),
-        );
-        expect(onGameAnalytics).toHaveBeenCalledWith(
-            expect.objectContaining({ tracedChunkDegraded: true }),
-            expect.anything(),
-        );
-        // Quiet for the player, not for us — carries the reason so a dev
-        // console says why Classic changed shape.
-        expect(warnSpy).toHaveBeenCalledWith(expect.any(String), chunkError);
-    });
-
-    it('leaves a healthy Classic start unflagged', async () => {
-        // The control for the case above: same style and path, but
-        // `preloadTracedTabGenerator` resolves, so the payload must carry no
-        // `tracedChunkDegraded` key. Absence, not `false`, is what the
-        // pre-upgrade-tail query subtracts on. Generation is stubbed here and
-        // only here on the Classic path: a healthy Classic start runs the traced
-        // pipeline whose real chunk is never loaded in this file, so real
-        // generation would throw for an unrelated reason. The degraded case
-        // needs no stub — the legacy fallback is generable.
-        warnSpy = vi.spyOn(diagnostics, 'warn').mockImplementation(() => {});
-        vi.mocked(createNewGameAsync).mockResolvedValue(makeAsyncGenerationResult());
-
-        await startNewGame(
-            { cols: 2, rows: 2 },
-            { cutStyle: 'classic', imageSource: 'blank' },
-            deps,
-        );
-
-        expect(umamiTrack).toHaveBeenCalledTimes(1);
-        expect(umamiTrack.mock.calls[0][1]).not.toHaveProperty('tracedChunkDegraded');
-        expect(warnSpy).not.toHaveBeenCalled();
-    });
-
-    // Pins ordering step 3: the chunk outcome is collected before the download
-    // report, so a start about to throw doesn't credit a photo it discards. Uses
-    // a picked image so `downloadLocation` is set on success — otherwise the
-    // assertion would pass regardless of ordering.
-    it('does not report an Unsplash download when the start throws first', async () => {
-        vi.mocked(getImageProxyBaseUrl).mockReturnValue('https://proxy.example');
-        vi.mocked(preloadTracedTabGenerator).mockRejectedValue(new Error('chunk boom'));
-
-        await expect(
-            startNewGame(
-                { cols: 2, rows: 2 },
-                { cutStyle: 'wavy', pickedImage: makeCandidateImage() },
-                deps,
-            ),
-        ).rejects.toThrow('chunk boom');
-        expect(triggerPhotoDownload).not.toHaveBeenCalled();
-    });
-
-    // Falsy-rejection defaulting: `null` is the await site's success sentinel,
-    // so a chunk-fetch rejection whose reason is itself `null` must be defaulted
-    // to a real Error or it reads as success. `createNewGameAsync` is stubbed to
-    // succeed regardless of traced-tab availability, so a wrongly-read success
-    // reaches `install` rather than throwing for the unrelated missing-chunk
-    // reason — otherwise this would pass regardless.
-    it('treats a null chunk-fetch rejection as a real failure, not the success sentinel', async () => {
-        vi.mocked(preloadTracedTabGenerator).mockRejectedValue(null);
-        vi.mocked(createNewGameAsync).mockResolvedValue(makeAsyncGenerationResult());
-
-        await expect(
-            startNewGame({ cols: 2, rows: 2 }, { cutStyle: 'wavy', imageSource: 'blank' }, deps),
-        ).rejects.toThrow();
-        expect(install).not.toHaveBeenCalled();
     });
 
     it('skips the proxy-URL lookup for a blank puzzle', async () => {
@@ -406,52 +340,15 @@ describe('startNewGame', () => {
         }));
     });
 
-    // Pins ordering step 2 (first half): the chunk preload starts
-    // synchronously, before the first `await`, so it overlaps the image
-    // resolution. The style needs traced tabs so `preloadChunk` is true; the
-    // outcome is irrelevant (real chunk never loaded), so the rejection is swallowed.
-    it('starts the traced chunk fetch synchronously, before awaiting anything', async () => {
-        const promise = startNewGame({ cols: 2, rows: 2 }, { cutStyle: 'wavy', imageSource: 'blank' }, deps);
-        expect(preloadTracedTabGenerator).toHaveBeenCalledTimes(1);
-        await promise.catch(() => {});
-    });
-
-    // Pins ordering step 2 (second half): the preload is awaited *after* the
-    // image request, so the two overlap. The preload resolves only once
-    // `resolveUnsplashImage` releases it; awaiting the chunk first would
-    // deadlock — `resolveUnsplashImage` never runs, the preload never resolves,
-    // and the test hangs rather than fails.
-    it('overlaps the chunk fetch with the image request, rather than awaiting it first', async () => {
-        let release!: () => void;
-        vi.mocked(preloadTracedTabGenerator).mockReturnValue(
-            new Promise<void>((resolve) => { release = resolve; }),
-        );
-        vi.mocked(getImageProxyBaseUrl).mockReturnValue('https://proxy.example');
-        vi.mocked(resolveUnsplashImage).mockImplementation(async () => {
-            release();
-            return null;
-        });
-        vi.mocked(createNewGameAsync).mockResolvedValue(makeAsyncGenerationResult());
-
-        await startNewGame({ cols: 2, rows: 2 }, { cutStyle: 'wavy' }, deps);
-
-        expect(resolveUnsplashImage).toHaveBeenCalled();
-    });
-
-    it('prefetches the photo before awaiting the traced chunk', async () => {
-        let release!: () => void;
-        vi.mocked(preloadTracedTabGenerator).mockReturnValue(
-            new Promise<void>((resolve) => { release = resolve; }),
-        );
+    it('prefetches the photo before generation starts', async () => {
         vi.mocked(createNewGameAsync).mockResolvedValue(makeAsyncGenerationResult());
         const picked = makeCandidateImage();
 
-        const promise = startNewGame({ cols: 2, rows: 2 }, { cutStyle: 'wavy', pickedImage: picked }, deps);
-        await new Promise((resolve) => setTimeout(resolve, 0));
+        await startNewGame({ cols: 2, rows: 2 }, { cutStyle: 'wavy', pickedImage: picked }, deps);
 
         expect(prefetchPhoto).toHaveBeenCalledWith(picked.imageUrl);
-        release();
-        await promise;
+        expect(prefetchPhoto.mock.invocationCallOrder[0])
+            .toBeLessThan(vi.mocked(createNewGameAsync).mock.invocationCallOrder[0]);
     });
 
     it('prefetches the resolved Unsplash photo', async () => {
@@ -691,12 +588,44 @@ describe('startNewGame', () => {
         }));
     });
 
-    // Pins the cancel rule (like the "throws first" test, but for
-    // cancellation): the abort check sits before the download-report block, so a
-    // canceled start never credits a discarded photo. Cancels from inside the
-    // awaited image resolution — the last async step before the check — so it
-    // exercises the real ordering, not a mock.
-    it('does not report an Unsplash download when canceled before the download report', async () => {
+    it('does not report an Unsplash download when generation fails', async () => {
+        vi.mocked(getImageProxyBaseUrl).mockReturnValue('https://proxy.example');
+        vi.mocked(createNewGameAsync).mockRejectedValue(new Error('generation boom'));
+
+        await expect(
+            startNewGame(
+                { cols: 2, rows: 2 },
+                { cutStyle: 'wavy', pickedImage: makeCandidateImage() },
+                deps,
+            ),
+        ).rejects.toThrow('generation boom');
+
+        expect(triggerPhotoDownload).not.toHaveBeenCalled();
+    });
+
+    it('does not report an Unsplash download when canceled during generation', async () => {
+        vi.mocked(getImageProxyBaseUrl).mockReturnValue('https://proxy.example');
+        vi.mocked(createNewGameAsync).mockImplementation((_u, _s, _v, _g, _o, signal) =>
+            new Promise((_resolve, reject) => {
+                signal!.addEventListener('abort', () => reject(new GenerationCanceledError()));
+            }));
+
+        const promise = startNewGame(
+            { cols: 2, rows: 2 },
+            { cutStyle: 'wavy', pickedImage: makeCandidateImage() },
+            { ...deps, hasCurrentGame: () => true },
+        );
+        await vi.waitFor(() => expect(createNewGameAsync).toHaveBeenCalled());
+        vi.mocked(showLoadingOverlay).mock.calls[0][1]!.onCancel!();
+        await promise;
+
+        expect(triggerPhotoDownload).not.toHaveBeenCalled();
+        expect(umamiTrack).toHaveBeenCalledWith('generation-canceled', expect.anything());
+    });
+
+    // Cancels from inside the awaited image resolution, the last async step
+    // before generation, so it exercises the real ordering, not a mock.
+    it('does not report an Unsplash download when canceled before generation', async () => {
         vi.mocked(getImageProxyBaseUrl).mockReturnValue('https://proxy.example');
         vi.mocked(resolveUnsplashImage).mockImplementation(async () => {
             // `showLoadingOverlay` already ran synchronously in this call, so

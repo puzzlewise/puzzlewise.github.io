@@ -1,7 +1,6 @@
 /**
- * Orchestration order over extracted modules: preload the traced-tab chunk
- * only when the payload needs it, `yieldForPaint()` so the overlay paints
- * before generation, toast (not fail) on unapplicable progress, and
+ * Orchestration order over extracted modules: `yieldForPaint()` so the overlay
+ * paints before generation, toast (not fail) on unapplicable progress, and
  * `hideLoadingOverlay()` in `finally`.
  *
  * Nothing here may add, remove, or reorder a call reaching
@@ -9,22 +8,20 @@
  * reproduces a puzzle by re-running this seeded PRNG sequence from the seed
  * alone.
  *
- * Cancellation: the only pre-generation async step is the chunk preload,
- * which carries no download report to guard, so there is no separate abort
- * checkpoint. A canceled load unwinds from inside `createNewGameAsync`'s own
- * signal handling, straight to the `catch` below.
+ * Cancellation: there is no download report to guard before generation, so
+ * there is no separate abort checkpoint. A canceled load unwinds from inside
+ * `createNewGameAsync`'s own signal handling, straight to the `catch` below.
  */
 
 import type { GameState } from '../model/types.js';
 import type { SharePayload } from '../sharing/index.js';
 import { isDataUrl } from '../sharing/safe-url.js';
 import { showLoadingOverlay, hideLoadingOverlay, yieldForPaint, showToast } from '../ui/index.js';
-import { preloadTracedTabGenerator } from '../puzzle/topology/traced-tab-loader.js';
 import { createNewGameAsync, GenerationCanceledError } from '../game/index.js';
 import { applyProgress } from '../game/reconstruct-groups.js';
 import { track } from '../analytics/index.js';
 import type { NewGameData, ReplacedGameData } from '../analytics/index.js';
-import { needsTracedTabChunk, shareInitOptions } from './share-payload-to-init.js';
+import { shareInitOptions } from './share-payload-to-init.js';
 import { buildSharedGameData } from './new-game-payload.js';
 import { buildPieceCountMismatchData } from './piece-count-mismatch-payload.js';
 import type { PieceCountMismatch } from '../puzzle/topology/generator.js';
@@ -80,12 +77,6 @@ export async function loadSharedPuzzle(
         deps.hasCurrentGame() ? { onCancel: () => controller.abort() } : {},
     );
     try {
-        // A traced-tab link needs the lazy chunk before generation; the await
-        // fits inside the loading overlay already shown.
-        if (needsTracedTabChunk(payload)) {
-            await preloadTracedTabGenerator();
-        }
-
         const imageSize = { width: payload.is[0], height: payload.is[1] };
 
         // Legacy links carry the synthesized white PNG; both mean no image.

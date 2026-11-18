@@ -18,13 +18,12 @@ export function buildFreshGameData(opts: {
     pickedImage?: CandidateImage;
     pageDraw?: PageDraw;
     downloadLocation?: string;
-    chunkDegraded: boolean;
     bootFallback: boolean;
     generation: GenerationOutcome;
 }): NewGameData {
     const {
         state, cutStyle, rotationMode, orientation, oriented,
-        imageSource, imageCategory, vibrant, pickedImage, pageDraw, downloadLocation, chunkDegraded, bootFallback, generation,
+        imageSource, imageCategory, vibrant, pickedImage, pageDraw, downloadLocation, bootFallback, generation,
     } = opts;
 
     const data: NewGameData = {
@@ -48,19 +47,13 @@ export function buildFreshGameData(opts: {
         data.generationFallbackReason = generation.fallbackReason;
     }
     // Read off the generated state: createNewGame kept only the config
-    // matching cutStyle. Degraded Classic withholds classicConfig, so no version.
+    // matching cutStyle.
     const traceSetVersion = traceSetVersionOf(state);
     if (traceSetVersion !== undefined) {
         data.traceSetVersion = traceSetVersion;
     }
-    // Only degraded Classic reaches here (start-new-game.ts threw for other
-    // styles). Without the flag it's indistinguishable from pre-upgrade Classic
-    // traffic — both classic with no traceSetVersion.
-    if (chunkDegraded) {
-        data.tracedChunkDegraded = true;
-    }
-    // Boot fallback never fetched the chunk (no failure to record) but is
-    // legacy geometry too, so it must be excludable from the same query.
+    // Legacy geometry with no traceSetVersion, like pre-upgrade Classic
+    // traffic, so it must be excludable from that query.
     if (bootFallback) {
         data.bootFallback = true;
     }

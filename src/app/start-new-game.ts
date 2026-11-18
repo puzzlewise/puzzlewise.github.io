@@ -2,9 +2,8 @@
  * The orchestration order here is a contract: no call reaching
  * `createNewGameAsync` may be added, removed, or reordered — share links and
  * saves replay a puzzle by re-running this seeded PRNG sequence from the seed
- * alone. Individual ordering constraints (chunk preload overlap, chunk outcome
- * before the download report, yield before generation, overlay teardown in
- * `finally`) are noted at each site below.
+ * alone. Individual ordering constraints (yield before generation, overlay
+ * teardown in `finally`) are noted at each site below.
  */
 
 import type { GameState, GridSize } from '../model/types.js';
@@ -14,12 +13,11 @@ import type { ComposableConfig } from '../puzzle/composable-generator.js';
 import type { FractalDialogConfig, WavyDialogConfig } from '../ui/index.js';
 import { showLoadingOverlay, hideLoadingOverlay, yieldForPaint } from '../ui/index.js';
 import { getImageProxyBaseUrl, triggerPhotoDownload, type CandidateImage, type PageDraw } from '../images/index.js';
-import { preloadTracedTabGenerator } from '../puzzle/topology/traced-tab-loader.js';
 import { createNewGameAsync, GenerationCanceledError } from '../game/index.js';
 import { diagnostics } from '../diagnostics.js';
 import { track } from '../analytics/index.js';
 import type { NewGameData, ReplacedGameData } from '../analytics/index.js';
-import { planTracedTabs, resolveTracedTabOutcome } from './traced-tab-plan.js';
+import { BOOT_FALLBACK_CUT_STYLE } from './start-with-boot-fallback.js';
 import { generatorConfigsForNewGame } from './generator-configs.js';
 import { buildFreshGameData } from './new-game-payload.js';
 import { buildPieceCountMismatchData } from './piece-count-mismatch-payload.js';
@@ -47,9 +45,8 @@ export interface StartNewGameOptions {
     seed?: number;
     pickedImage?: CandidateImage;
     /**
-     * Start the last-resort boot puzzle (#488): legacy Classic cut, lazy
-     * traced-tab chunk never fetched, flagged in analytics. Overrides
-     * `cutStyle` — see `planTracedTabs`.
+     * Start the last-resort boot puzzle (#488): legacy Classic cut, flagged
+     * in analytics. Overrides `cutStyle`.
      */
     bootFallback?: boolean;
 }
@@ -127,30 +124,10 @@ export async function startNewGame(
     const oriented = orientGridSize(gridSize, orientation);
 
     try {
-        // `planTracedTabs` decides whether the lazy traced-tab chunk is needed
-        // and which cut style is generated; the boot fallback forces legacy
-        // Classic and skips the fetch, so recovery can't fail the way the start
-        // it recovers from did.
-        const tracedTabPlan = planTracedTabs({
-            cutStyle: requestedCutStyle,
-            tabGenerator: composableConfig?.tabGenerator,
-            bootFallback,
-        });
-        const { cutStyle, preloadChunk } = tracedTabPlan;
-
-        // Started here but awaited further down, so on paths that skipped the
-        // dialog the chunk fetch overlaps the image request instead of running
-        // ahead of it. The rejection is captured into a value, not left floating
-        // (an unawaited rejected promise would surface as an unhandled
-        // rejection); `null` is the success sentinel at the await site, so a
-        // falsy rejection reason must be defaulted to a real Error or it reads
-        // as success.
-        const tracedTabsPreload = preloadChunk
-            ? preloadTracedTabGenerator().then(
-                () => null,
-                (error: unknown) => error ?? new Error('Traced tab chunk failed to load'),
-            )
-            : null;
+        // The boot fallback forces legacy Classic, so recovery can't fail the
+        // way the start it recovers from did. Forced here, not trusted to the
+        // caller: a safety net that can be handed `'wavy'` is not one.
+        const cutStyle = bootFallback ? BOOT_FALLBACK_CUT_STYLE : requestedCutStyle;
 
         const bundled = pickBundledImage(orientation);
         let imageUrl: string | null = bundled.url;
@@ -194,41 +171,9 @@ export async function startNewGame(
             }
         }
 
-        // Before the chunk await, so the download overlaps the chunk, the worker
-        // and generation instead of starting at render (#689).
+        // Before generation, so the download overlaps the worker and generation
+        // instead of starting at render (#689).
         if (imageUrl !== null) deps.prefetchPhoto(imageUrl);
-
-        // Collect the chunk outcome now the image has resolved — before the
-        // download report, not after: a start about to throw must not report a
-        // "download" for a photo it discards.
-        const tracedTabs = resolveTracedTabOutcome({
-            plan: tracedTabPlan,
-            chunkError: tracedTabsPreload ? await tracedTabsPreload : null,
-        });
-        if (tracedTabs.kind === 'fail') throw tracedTabs.error;
-        // Read twice (warned here, and handed to `buildFreshGameData` for the
-        // `tracedChunkDegraded` flag), so it gets one spelling. Aliasing the
-        // discriminant keeps `tracedTabs.error` narrowed.
-        const chunkDegraded = tracedTabs.kind === 'legacy-classic' && tracedTabs.degraded;
-        if (chunkDegraded) {
-            // Degrading is quiet for the player, not for us: warn so a dev
-            // console says why Classic changed shape, and flag analytics so
-            // these stay separable from pre-upgrade Classic traffic.
-            diagnostics.warn(
-                'Traced tab chunk failed to load; Classic fell back to the legacy cut:',
-                tracedTabs.error,
-            );
-        }
-
-        // A canceled start must not report a "download" for a photo it discards
-        // — same reason as the `'fail'` throw above.
-        if (controller.signal.aborted) throw new GenerationCanceledError();
-
-        // Unsplash guidelines: report a "download" when a photo is actually
-        // used. Fire-and-forget — a failure must never block the game.
-        if (proxyBaseUrl && downloadLocation) {
-            triggerPhotoDownload(downloadLocation, proxyBaseUrl).catch(() => {});
-        }
 
         const rotationMode = rotationModeForNewGame(cutStyle, rotationEnabled);
 
@@ -236,7 +181,7 @@ export async function startNewGame(
             cutStyle,
             fractalConfig,
             wavyConfig,
-            tracedTabsOk: tracedTabs.kind === 'ok',
+            forceLegacyClassic: bootFallback,
         });
 
         // Let the overlay paint before generation starts. Off-thread when
@@ -258,6 +203,13 @@ export async function startNewGame(
             },
             controller.signal,
         );
+
+        // Unsplash guidelines: report a "download" when a photo is actually
+        // used — so only once generation succeeded, never for a failed or
+        // canceled start. Fire-and-forget: a failure must never block the game.
+        if (proxyBaseUrl && downloadLocation) {
+            triggerPhotoDownload(downloadLocation, proxyBaseUrl).catch(() => {});
+        }
 
         if (attribution) {
             state.attribution = attribution;
@@ -285,7 +237,6 @@ export async function startNewGame(
             pickedImage,
             pageDraw,
             downloadLocation,
-            chunkDegraded,
             bootFallback,
             generation,
         });
