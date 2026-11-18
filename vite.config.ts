@@ -58,7 +58,7 @@ export default defineConfig({
     // under `.worktrees/`. Without this, vitest's default discovery walks
     // into them and runs tests from *other* branches alongside this one,
     // which drifts local test counts away from CI and can mask failures.
-    exclude: ['**/node_modules/**', '**/dist/**', '**/.worktrees/**'],
+    exclude: ['**/node_modules/**', '**/dist/**', '**/.worktrees/**', '**/spike/**'],
     // Allow palette.css / style.css to be imported as ?raw in their tests.
     css: { include: [/palette\.css/, /style\.css/] },
     setupFiles: ['src/test-helpers/vitest-setup.ts'],
