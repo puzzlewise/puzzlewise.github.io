@@ -5,7 +5,7 @@
 
 import { PUZZLE_SIZE_OPTIONS } from '../game/puzzle-sizes.js';
 import { createCutStylePicker } from './cut-style-picker.js';
-import { cutStyleNeedsTracedTabs, DEFAULT_CUT_STYLE_ID, getVisibleCutStyleOptions, isDevDeploy } from '../game/cut-styles.js';
+import { DEFAULT_CUT_STYLE_ID, getVisibleCutStyleOptions, isDevDeploy } from '../game/cut-styles.js';
 import { IMAGE_CATEGORY_OPTIONS, isCustomQuery } from '../game/image-categories.js';
 import { createDismissableOverlay } from './dismissable-overlay.js';
 import {
@@ -85,11 +85,6 @@ export interface NewGameDialogOptions {
     /** Called when the dialog is dismissed without selecting. */
     onCancel?: (values: { imageCategory: string; vibrant: boolean }) => void;
     analytics?: NewGameDialogAnalytics;
-    /**
-     * Fires when the effective tab generator becomes `'traced'`, so the host can
-     * preload the traced-tab lazy chunk. Idempotent — safe to call repeatedly.
-     */
-    onPreloadTracedTabs?: () => void;
 }
 
 interface SizeSelectRow {
@@ -112,8 +107,6 @@ interface ComposableSection {
     element: HTMLElement;
     getValues(): ComposableSliderConfig;
     setVisible(visible: boolean): void;
-    /** Currently picked tab generator, regardless of section visibility. */
-    getSelectedTabGenerator(): ComposableSliderConfig['tabGenerator'];
 }
 
 export interface NewGameDialogAnalytics {
@@ -375,7 +368,6 @@ function buildImageOptionsSection(args: {
 function buildComposableSlidersSection(args: {
     saved?: ComposableSliderConfig;
     showBorderless?: boolean;
-    onTabGeneratorChange?: (value: ComposableSliderConfig['tabGenerator']) => void;
 }): ComposableSection {
     const section = document.createElement('div');
     section.className = 'composable-sliders';
@@ -501,7 +493,6 @@ function buildComposableSlidersSection(args: {
             { value: 'none',    label: 'None'    },
         ],
         args.saved?.tabGenerator ?? 'classic',
-        args.onTabGeneratorChange,
     );
 
     // Hidden for triangular cut since borderless doesn't apply there.
@@ -532,7 +523,6 @@ function buildComposableSlidersSection(args: {
         setVisible: (visible) => {
             section.style.display = visible ? 'block' : 'none';
         },
-        getSelectedTabGenerator: () => tabGeneratorRow.getValue(),
     };
 }
 
@@ -679,14 +669,7 @@ export function createNewGameDialog(options: NewGameDialogOptions): () => void {
     const composableSection = buildComposableSlidersSection({
         saved: options.savedComposableConfig,
         showBorderless: options.composableSupportsBorderless ?? false,
-        onTabGeneratorChange: (value) => {
-            if (value === 'traced') options.onPreloadTracedTabs?.();
-        },
     });
-
-    // Preloading here keeps the traced-tab fetch off startNewGame's critical path.
-    const needsTracedTabs = (id: string): boolean =>
-        cutStyleNeedsTracedTabs(id, composableSection.getSelectedTabGenerator());
 
     const sizeRow = buildSizeSelectRow({
         selectedSizeId,
@@ -743,17 +726,12 @@ export function createNewGameDialog(options: NewGameDialogOptions): () => void {
             fractalSection.setVisible(id === 'fractal');
             wavySection.setVisible(id === 'wavy');
             composableSection.setVisible(id === 'composable');
-            if (needsTracedTabs(id)) options.onPreloadTracedTabs?.();
         },
     });
 
     fractalSection.setVisible(currentCutStyleId === 'fractal');
     wavySection.setVisible(currentCutStyleId === 'wavy');
     composableSection.setVisible(currentCutStyleId === 'composable');
-
-    // Preload when opening with traced already selected (the default), so the
-    // chunk loads without needing a radio toggle.
-    if (needsTracedTabs(currentCutStyleId)) options.onPreloadTracedTabs?.();
 
     // Two groups so the short-and-wide layout can place them side by side; the
     // start group holds only the image picker (picking one launches the game).
