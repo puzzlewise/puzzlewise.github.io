@@ -262,16 +262,15 @@ export interface NewGameData {
     /**
      * Wall-clock milliseconds the generate phase took (rounded), measured
      * on the main thread around the whole off-thread round trip — worker
-     * spawn, traced-chunk load inside the worker where needed, generation,
-     * and result transfer — or around the synchronous call on the fallback
-     * path. This is the wait a player actually experienced under the
+     * spawn, generation, and result transfer — or around the synchronous
+     * call on the fallback path. This is the wait a player actually experienced under the
      * loading overlay for the generation step (image fetch excluded).
      *
      * A `sync-fallback` that followed a worker failure (`generationFallbackKind`
      * other than `'no-worker'`) is not a sync-only measurement: the timer
      * starts before the worker is even spawned, so it spans the failed
-     * worker round trip PLUS the synchronous rerun that followed it, not the
-     * rerun alone. Only that rerun actually blocks the main thread, so on
+     * worker round trip PLUS the traced-chunk download where needed PLUS
+     * the synchronous rerun that followed, not the rerun alone. Only that rerun actually blocks the main thread, so on
      * this path `generationMs` overstates the freeze the player sat through
      * (though not the player's total wait, which is the whole span).
      */

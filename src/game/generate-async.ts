@@ -146,13 +146,9 @@ async function runOnMainThread(
     fallbackKind: GenerationFallbackKind,
     fallbackReason: string,
 ): Promise<OffThreadGeneration> {
-    // This path runs against the main thread's copy of the lazy traced chunk.
-    // Reachable callers have already preloaded it (the loader memoizes, so a
-    // no-op here), but it's kept so the public `createNewGameAsync` is
-    // self-contained. A rejection is swallowed: the caller already decided this
-    // request is generatable, and a hard failure would be strictly worse.
     if (requestNeedsTracedTabs(request)) {
-        await preloadTracedTabGenerator().catch(() => {});
+        await preloadTracedTabGenerator();
+        if (signal?.aborted) throw new GenerationCanceledError();
     }
 
     const result = runGeneration(request);
