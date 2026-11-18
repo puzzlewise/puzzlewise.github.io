@@ -10,8 +10,8 @@ describe('createManifestConfig', () => {
     it('returns a valid manifest config', () => {
         const config = createManifestConfig('/puzzle/');
 
-        expect(config.name).toBe('Puzzle');
-        expect(config.short_name).toBe('Puzzle');
+        expect(config.name).toBe('Puzzlewise');
+        expect(config.short_name).toBe('Puzzlewise');
         expect(config.description).toBe('A jigsaw puzzle web app');
     });
 

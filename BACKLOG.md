@@ -1,4 +1,4 @@
-# BACKLOG — Puzzle App
+# BACKLOG — Puzzlewise
 
 Status: `todo` | `in-progress` | `done` | `blocked`
 

@@ -25,8 +25,8 @@ export const REQUIRED_ICON_SIZES = ['192x192', '512x512'];
 
 export function createManifestConfig(basePath: string): ManifestConfig {
     return {
-        name: 'Puzzle',
-        short_name: 'Puzzle',
+        name: 'Puzzlewise',
+        short_name: 'Puzzlewise',
         description: 'A jigsaw puzzle web app',
         theme_color: '#1a1a2e',
         background_color: '#1a1a2e',

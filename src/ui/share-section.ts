@@ -93,7 +93,7 @@ export function buildShareSection(state: GameState, baseUrl: string): HTMLElemen
         track('puzzle-shared', { source: 'help-modal', includesProgress });
         void sharePuzzle({
             url: currentUrl(),
-            title: 'Puzzle',
+            title: 'Puzzlewise',
             text: 'Have a go at this puzzle!',
             onClipboardFallback: () => showToast('Link copied to clipboard'),
             onError: (e) => {

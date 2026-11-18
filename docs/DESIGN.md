@@ -1,4 +1,4 @@
-# Puzzle App — Design Document
+# Puzzlewise — Design Document
 
 ## Vision
 
