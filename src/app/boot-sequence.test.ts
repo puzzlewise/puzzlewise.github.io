@@ -10,9 +10,9 @@ vi.mock('../ui/loading-overlay.js', () => ({
 }));
 
 import { hideLoadingOverlay } from '../ui/loading-overlay.js';
-import { ViewportTransform } from '../interaction/index.js';
+import { SelectionManager, ViewportTransform } from '../interaction/index.js';
 import { makeSavedGameState } from '../test-helpers/fixtures.js';
-import { saveNewPuzzle, STORAGE_KEY } from '../persistence/index.js';
+import { loadSavedGame, saveNewPuzzle, STORAGE_KEY } from '../persistence/index.js';
 import { saveCutStylePreference } from '../game/cut-styles.js';
 import { saveComposableConfigPreference } from '../game/composable-config.js';
 import { saveFractalConfigPreference } from '../game/fractal-config.js';
@@ -23,6 +23,7 @@ import { saveRotationEnabledPreference } from '../ui/index.js';
 import type { GameState, GridSize } from '../model/types.js';
 import { runBootSequence, type BootSequenceDeps } from './boot-sequence.js';
 import type { StartNewGameOptions } from './start-new-game.js';
+import { createSaveCoordinator } from './save-coordinator.js';
 
 function dismissCorruptSaveDialog(container: HTMLElement): void {
     const btn = Array.from(
@@ -272,6 +273,27 @@ describe('runBootSequence', () => {
             await runBootSequence(d);
             expect(d.viewportTransform.getState()).toEqual({ scale: 2, offset: { x: 10, y: 20 } });
             expect(d.applyTransform).toHaveBeenCalled();
+            expect(console.error).not.toHaveBeenCalled();
+        });
+
+        it('writes back the saved viewport when restoring the selection arms an autosave', async () => {
+            const viewport = { scale: 2.5, offset: { x: 10, y: 20 } };
+            saveNewPuzzle(makeSavedGameState(), [0], viewport);
+            const d = deps();
+            const selectionManager = new SelectionManager();
+            const saveCoordinator = createSaveCoordinator({
+                selectionManager,
+                viewportTransform: d.viewportTransform,
+            });
+            selectionManager.onChange(() => saveCoordinator.autoSave(install.mock.calls[0][0]));
+            restoreSelection.mockImplementation((ids) => {
+                for (const id of ids) selectionManager.select(id);
+            });
+
+            await runBootSequence(d);
+            saveCoordinator.flush();
+
+            expect(loadSavedGame()).toMatchObject({ status: 'ok', selection: [0], viewport });
             expect(console.error).not.toHaveBeenCalled();
         });
 

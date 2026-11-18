@@ -69,13 +69,13 @@ export async function runBootSequence(deps: BootSequenceDeps): Promise<void> {
         if (saved.status === 'ok') {
             deps.session.install(saved.state);
             deps.onResumed(saved.state);
-            deps.session.restoreSelection(saved.selection);
             if (saved.viewport) {
                 // Restore last zoom/pan (#420). Absent on pre-feature saves,
                 // which keep the default view.
                 deps.viewportTransform.setState(saved.viewport);
                 deps.applyTransform();
             }
+            deps.session.restoreSelection(saved.selection);
             return;
         }
         if (saved.status === 'unreadable') {
