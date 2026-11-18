@@ -37,22 +37,6 @@ export default defineConfig({
       },
     }),
   ],
-  // Vite's default worker build format is 'iife', which can't emit more
-  // than one chunk: any dynamic import() reachable from a `new
-  // Worker(new URL(...))` entry (e.g. the traced-tab generator's lazy
-  // chunk, loaded by src/game/generation-worker-core.ts) gets inlined into
-  // the worker's single output file instead of staying a separate,
-  // on-demand chunk. That means every worker spawn — including a plain
-  // classic-cut generation that never touches traced tabs — parses a
-  // baked-in copy of the traced-tab dataset. 'es' lets the worker's build
-  // code-split like the main thread's. Module workers are widely
-  // supported; on a browser without module-worker support, per the
-  // WHATWG HTML spec the script fetch/execution failure surfaces
-  // asynchronously as an `error` event on the Worker (not a synchronous
-  // throw from the constructor), which generate-async.ts's `error` listener
-  // already turns into the synchronous main-thread fallback — so
-  // there's no new failure mode to handle.
-  worker: { format: 'es' },
   test: {
     // Skip any sibling git worktrees a contributor may have checked out
     // under `.worktrees/`. Without this, vitest's default discovery walks

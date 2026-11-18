@@ -135,6 +135,15 @@ export const tracedTabGeneratorStub: TabGenerator = {
 };
 
 /**
+ * For a realm that bundles the generator instead of importing it lazily (the
+ * generation worker). Filling the stub's slot, not re-registering, keeps every
+ * realm dispatching through {@link tracedTabGeneratorStub}.
+ */
+export function installTracedTabGenerator(generator: TabGenerator): void {
+    realGenerator = generator;
+}
+
+/**
  * Idempotent — concurrent callers and retries share one in-flight promise;
  * awaiting it guarantees the next synchronous generation uses the real impl.
  * On import rejection the cached promise is cleared so the next call retries

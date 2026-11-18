@@ -297,10 +297,8 @@ export interface NewGameData {
      *  - `'message-error'` — the response could not be used: it failed to
      *    deserialize, or reading the delivered payload threw.
      *  - `'worker-infrastructure'` — the worker reported a failure of its
-     *    own plumbing: a traced-chunk fetch that failed (or a chunk never
-     *    loaded) inside the worker, or a reply that could not be posted.
-     *    The worker-side copy of the chunk emits no `traced-chunk-*`
-     *    events, so this bucket is where those failures surface.
+     *    own plumbing: the traced generator missing from the worker, or a
+     *    reply that could not be posted.
      *
      * A worker-side generation error is deliberately NOT in this list: it
      * is deterministic, so it is rethrown rather than retried, and lands
@@ -478,13 +476,6 @@ export type SettingChangedData =
  * makes abandonment observable — a started event with no matching
  * settle means the user left mid-fetch. `attempt` matches the counter
  * on the settling event.
- *
- * Counts only the main thread's chunk: the generation worker has its own
- * copy (a separate Rollup graph, `generation-worker-core.ts`) and never
- * emits this family, so a worker-side fetch/failure is invisible here. To
- * count those, filter `new-game-started` on
- * `generationFallbackKind = 'worker-infrastructure'`; the accompanying
- * `generationFallbackReason` carries the message.
  */
 export interface TracedChunkPreloadStartedData {
     attempt: number;
@@ -509,9 +500,6 @@ export interface TracedChunkPreloadStartedData {
  * `attempt` is the 1-based attempt counter for this client session, so
  * a retry after a failure is distinguishable from an unrelated cold
  * load.
- *
- * Main-thread-only, like every `traced-chunk-*` event — see
- * `TracedChunkPreloadStartedData`.
  */
 export interface TracedChunkLoadedData {
     durationMs: number;
@@ -532,12 +520,6 @@ export interface TracedChunkLoadedData {
  * high-cardinality.
  *
  * `attempt` is the 1-based attempt counter for this client session.
- *
- * Main-thread-only, like every `traced-chunk-*` event — see
- * `TracedChunkPreloadStartedData`. A worker-side chunk failure is not here:
- * it lands on `new-game-started` as
- * `generationFallbackKind = 'worker-infrastructure'`, with the message in
- * `generationFallbackReason`.
  */
 export interface TracedChunkLoadFailedData {
     reason: string;

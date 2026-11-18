@@ -4,6 +4,7 @@
  * would register a message listener on the shared window).
  */
 
+import './worker-traced-tabs.js';
 import { handleGenerationRequest, describeFailure } from './generation-worker-core.js';
 import type { GenerationRequest } from './generation-core.js';
 import type { GenerationResponse } from './generation-worker-core.js';
@@ -25,17 +26,9 @@ const workerScope = self as unknown as {
 };
 
 workerScope.addEventListener('message', (event) => {
-    void handleGenerationRequest(event.data)
-        .then((response) => {
-            workerScope.postMessage(response);
-        })
-        .catch((err: unknown) => {
-            // `handleGenerationRequest` catches everything, so the only way here
-            // is `postMessage` itself throwing — a `DataCloneError` on a result
-            // structured-clone rejects. An unhandled rejection in a worker does
-            // NOT fire `error` on the parent's `Worker`, so the client's promise
-            // would never settle and the overlay would hang until reload. Report
-            // it as an infrastructure failure, which routes to the fallback.
-            workerScope.postMessage(describeFailure('infrastructure', err));
-        });
+    try {
+        workerScope.postMessage(handleGenerationRequest(event.data));
+    } catch (err) {
+        workerScope.postMessage(describeFailure('infrastructure', err));
+    }
 });

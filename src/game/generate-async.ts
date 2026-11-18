@@ -3,9 +3,9 @@
  *
  * A fresh worker per call, terminated when done: cancellation is just
  * `terminate()`, no stale worker state, and spawn cost is negligible once per
- * new game. Any worker-PATH failure (no Worker, spawn/script-load failure,
- * worker-side traced-chunk failure) falls back to synchronous main-thread
- * generation — the pre-worker status quo.
+ * new game. Any worker-PATH failure (no Worker, spawn/script-load failure)
+ * falls back to synchronous main-thread generation — the pre-worker status
+ * quo.
  *
  * The exception: a `kind: 'generation'` response (`generation-worker-core.ts`)
  * does NOT fall back. Generation is a pure function of the request, so the
@@ -52,7 +52,7 @@ export type GenerationFallbackKind =
     | 'worker-error'
     /** Response unusable: `messageerror`, or reading the payload threw. */
     | 'message-error'
-    /** The worker reported a failure of its own plumbing (traced chunk, reply post). */
+    /** The worker reported a failure of its own plumbing. */
     | 'worker-infrastructure';
 
 /**
