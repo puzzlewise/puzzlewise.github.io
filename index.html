@@ -3,9 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <!-- Origin policy for images. A crafted `#p=` share link can put an
-         arbitrary URL in the payload's image field, which reaches the SVG
-         `<image>` href — not XSS (an `<image>` executes nothing), but enough
-         to make anyone who opens the link fetch an attacker-controlled host,
+         arbitrary URL in the payload's image field, which the renderer loads
+         through an `Image` element — not XSS (an image executes nothing), but
+         enough to make anyone who opens the link fetch an attacker-controlled host,
          leaking their IP and User-Agent. The share codec's `isSafeImageUrl`
          guards the *scheme*; it cannot guard the host, because legitimate
          links carry arbitrary Unsplash URLs and no scheme check separates
@@ -38,8 +38,8 @@
     <title>Puzzle</title>
     <link rel="icon" href="/favicon-48.png" type="image/png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <script type="module" crossorigin src="/assets/index-BCdJe3-K.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-CARfh6nl.css">
+    <script type="module" crossorigin src="/assets/index-BJlhro5D.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-B0aGhvoI.css">
   <link rel="manifest" href="/manifest.webmanifest"></head>
   <body>
     <div id="app"></div>
