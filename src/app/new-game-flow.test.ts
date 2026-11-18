@@ -13,13 +13,6 @@ vi.mock('../ui/index.js', async (importOriginal) => ({
     ...(await importOriginal<typeof import('../ui/index.js')>()),
     createNewGameDialog: vi.fn(),
 }));
-// `generator-registry.ts` registers `tracedTabGeneratorStub` from this module
-// at import time, so pass the rest through or that registration is undefined
-// and throws before any test runs.
-vi.mock('../puzzle/topology/traced-tab-loader.js', async (importOriginal) => {
-    const actual = await importOriginal<typeof import('../puzzle/topology/traced-tab-loader.js')>();
-    return { ...actual, preloadTracedTabGenerator: vi.fn() };
-});
 vi.mock('./download-offline-images.js', () => ({
     downloadOfflineImagesForCategory: vi.fn(),
 }));
@@ -33,7 +26,6 @@ import {
     loadRotationEnabledPreference,
     type NewGameSelection,
 } from '../ui/index.js';
-import { preloadTracedTabGenerator } from '../puzzle/topology/traced-tab-loader.js';
 import { loadSizePreference } from '../game/puzzle-sizes.js';
 import { loadCutStylePreference } from '../game/cut-styles.js';
 import { loadComposableConfigPreference } from '../game/composable-config.js';
@@ -66,9 +58,6 @@ describe('openNewGameDialog', () => {
     beforeEach(() => {
         localStorage.clear();
         vi.mocked(createNewGameDialog).mockClear();
-        // `mockReset` (not `vi.clearAllMocks()`, which clears only call
-        // records) so an earlier test's `mockRejectedValue` doesn't bleed in.
-        vi.mocked(preloadTracedTabGenerator).mockReset().mockResolvedValue(undefined);
         vi.mocked(showToast).mockClear();
 
         container = document.createElement('div');
@@ -269,20 +258,6 @@ describe('openNewGameDialog', () => {
         expect(start.mock.calls[0][1].composableConfig).toEqual(
             expect.objectContaining({ baseCutGenerator: 'triangular', tabGenerator: 'none' }),
         );
-    });
-
-    it('kicks off the traced-tab preload without leaking an unhandled rejection', async () => {
-        vi.mocked(preloadTracedTabGenerator).mockReset().mockRejectedValue(new Error('chunk boom'));
-        const opts = open();
-
-        // Must not throw synchronously nor become an unhandled rejection —
-        // vitest's process-level handler would fail the run, and this repo
-        // sets no `dangerouslyIgnoreUnhandledErrors`.
-        expect(() => opts.onPreloadTracedTabs?.()).not.toThrow();
-        expect(preloadTracedTabGenerator).toHaveBeenCalledTimes(1);
-        // Let the swallowed rejection's microtask settle before the test ends.
-        await Promise.resolve();
-        await Promise.resolve();
     });
 
     it('starts silently and reports nothing when the start succeeds', async () => {

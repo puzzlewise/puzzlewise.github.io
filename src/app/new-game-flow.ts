@@ -38,7 +38,6 @@ import { getImageProxyBaseUrl, type CandidateFetchResult } from '../images/index
 import { photoIdFromDownloadLocation } from '../images/photo-id.js';
 import { isOfflineStashSupported, stashCount } from '../images/offline-stash.js';
 import { getBaseCutGenerator } from '../puzzle/topology/generator-registry.js';
-import { preloadTracedTabGenerator } from '../puzzle/topology/traced-tab-loader.js';
 import {
     createNewGameDialog,
     loadRotationEnabledPreference,
@@ -153,13 +152,6 @@ export function openNewGameDialog(deps: OpenNewGameDialogDeps): void {
                     ),
             };
         })(),
-        onPreloadTracedTabs: () => {
-            // Fire-and-forget: `preloadTracedTabGenerator` is idempotent and
-            // clears its cached promise on failure, so `startNewGame`'s await
-            // retries and surfaces the real error. Swallow only to avoid an
-            // unhandled-rejection warning.
-            preloadTracedTabGenerator().catch(() => {});
-        },
         onSelect: ({ sizeId, cutStyleId, composableConfig, fractalConfig, wavyConfig, rotationEnabled, imageChoice, imageCategory, vibrant, queryOverride }) => {
             visit.closed(imageChoice.kind, imageChoice.kind === 'photo' ? imageChoice.slot : -1, { imageCategory, vibrant });
             saveSizePreference(sizeId);

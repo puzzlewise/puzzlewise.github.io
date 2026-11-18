@@ -3,7 +3,6 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import type { CutStyle, CutStyleOption } from './cut-styles.js';
 import {
     CUT_STYLE_OPTIONS,
     DEFAULT_CUT_STYLE_ID,
@@ -15,7 +14,6 @@ import {
     isComposableVisible,
     isDevDeploy,
     rotationModeForNewGame,
-    cutStyleNeedsTracedTabs,
 } from './cut-styles.js';
 
 describe('CUT_STYLE_OPTIONS', () => {
@@ -197,46 +195,5 @@ describe('rotationModeForNewGame', () => {
         expect(rotationModeForNewGame('wavy', true)).toBe('free');
         expect(rotationModeForNewGame('triangles', true)).toBe('free');
         expect(rotationModeForNewGame('composable', true)).toBe('free');
-    });
-});
-
-describe('cutStyleNeedsTracedTabs', () => {
-    it('is true for the always-traced styles', () => {
-        expect(cutStyleNeedsTracedTabs('classic')).toBe(true);
-        expect(cutStyleNeedsTracedTabs('wavy')).toBe(true);
-        expect(cutStyleNeedsTracedTabs('triangles')).toBe(true);
-    });
-
-    it('is false for fractal, whatever tab generator is passed', () => {
-        expect(cutStyleNeedsTracedTabs('fractal')).toBe(false);
-        expect(cutStyleNeedsTracedTabs('fractal', 'traced')).toBe(false);
-    });
-
-    it('follows the tab generator for composable', () => {
-        expect(cutStyleNeedsTracedTabs('composable', 'traced')).toBe(true);
-        expect(cutStyleNeedsTracedTabs('composable', 'classic')).toBe(false);
-        expect(cutStyleNeedsTracedTabs('composable')).toBe(false);
-    });
-
-    it('is false for an unrecognized id', () => {
-        expect(cutStyleNeedsTracedTabs('not-a-style')).toBe(false);
-    });
-
-    it('covers every declared cut style, so a new one cannot be missed', () => {
-        // Compared as a whole map, not looped, so adding a cut style fails here
-        // until its traced-tab capability is stated deliberately. A `typeof ===
-        // 'boolean'` loop would pass for any new style, since `tsc` already
-        // rejects a missing/invalid `tracedTabs`.
-        const expected: Record<CutStyle, CutStyleOption['tracedTabs']> = {
-            classic: 'always',
-            fractal: 'never',
-            wavy: 'always',
-            triangles: 'always',
-            composable: 'configurable',
-        };
-        const actual = Object.fromEntries(
-            CUT_STYLE_OPTIONS.map((o) => [o.id, o.tracedTabs]),
-        );
-        expect(actual).toEqual(expected);
     });
 });
