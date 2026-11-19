@@ -2,6 +2,7 @@
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 import { createManifestConfig } from './src/pwa/manifest.js';
+import { BUNDLED_IMAGE_URL, BUNDLED_PORTRAIT_IMAGE_URL } from './src/app/bundled-image.js';
 
 const BASE_PATH = process.env.VITE_BASE_PATH ?? '/';
 
@@ -19,13 +20,14 @@ export default defineConfig({
       filename: 'sw.ts',
       registerType: 'prompt',
       manifest: createManifestConfig(BASE_PATH),
+      includeManifestIcons: false,
       // The bundled images are the floor of the offline story: a start whose
       // every other source fails (offline with an empty stash) degrades to
       // them, and vite-plugin-pwa's default globs skip .jpg — so without this
       // the last-resort fallback itself 404s on an offline load. The legacy
       // puzzle-image.jpg stays uncached: only old saves reference it, and
       // they never go through the fallback path.
-      includeAssets: ['first-puzzle.jpg', 'first-puzzle-portrait.jpg'],
+      includeAssets: [BUNDLED_IMAGE_URL, BUNDLED_PORTRAIT_IMAGE_URL],
       // The backup-image-pool chunk is a rate-limit-only fallback: it loads via
       // a lazy import() only when the API is refusing (an online state), and its
       // images are CDN-hotlinked, so it has no offline value. Precaching would
