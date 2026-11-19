@@ -9,6 +9,7 @@
  */
 
 import {
+    addPlugins,
     precacheAndRoute,
     cleanupOutdatedCaches,
     createHandlerBoundToURL,
@@ -18,6 +19,7 @@ import { NavigationRoute, registerRoute } from 'workbox-routing';
 import { createSwErrorReporter } from './sw-error-reporter.js';
 import { createStashImageHandler, isStashImageRequest } from './stash-image-handler.js';
 import { appNavigationAllowlist } from './navigation-allowlist.js';
+import { createBundledPhotoRevalidation } from './bundled-photo-revalidation.js';
 
 // Workbox replaces `self.__WB_MANIFEST` at build time (its configured
 // injectionPoint), so the string must appear verbatim — don't rename `self`.
@@ -25,14 +27,16 @@ declare const self: ServiceWorkerGlobalScope & {
     __WB_MANIFEST: Array<PrecacheEntry | string>;
 };
 
+const base = import.meta.env.BASE_URL;
+
 // The generateSW build set `cleanupOutdatedCaches`; preserve that.
 cleanupOutdatedCaches();
+addPlugins([createBundledPhotoRevalidation(base)]);
 precacheAndRoute(self.__WB_MANIFEST);
 
 // The app's only URL is its base, with state in the query or hash. Every other
 // path goes to the network, since it may be a sibling deployment on the same
 // origin (e.g. /dev/ when we're /).
-const base = import.meta.env.BASE_URL;
 registerRoute(
     new NavigationRoute(createHandlerBoundToURL(`${base}index.html`), {
         allowlist: [appNavigationAllowlist(base)],
