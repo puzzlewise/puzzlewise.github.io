@@ -17,6 +17,9 @@ export function createStashImageHandler(
     return async ({ request }) => {
         try {
             const cache = await cacheStorage.open(OFFLINE_STASH_CACHE);
+            // By URL string, not `request`: negotiated-format responses carry
+            // `Vary: Accept`, and WebKit's cache then misses on an `<img>`
+            // request's own Accept header (Chromium does not).
             const cached = await cache.match(request.url);
             if (cached) return cached;
         } catch {
