@@ -2,7 +2,7 @@
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 import { createManifestConfig } from './src/pwa/manifest.js';
-import { BUNDLED_IMAGE_URL, BUNDLED_PORTRAIT_IMAGE_URL } from './src/app/bundled-image.js';
+import { BUNDLED_IMAGE_URL, BUNDLED_PORTRAIT_IMAGE_URL } from './src/images/bundled-image-urls.js';
 
 const BASE_PATH = process.env.VITE_BASE_PATH ?? '/';
 

@@ -8,9 +8,9 @@
  */
 
 import type { ImageAttribution, Size, Orientation } from '../model/types.js';
+import { BUNDLED_IMAGE_URL, BUNDLED_PORTRAIT_IMAGE_URL } from '../images/bundled-image-urls.js';
 
-/** Relative URL — resolves against the app origin, like all bundled assets. */
-export const BUNDLED_IMAGE_URL = 'first-puzzle.jpg';
+export { BUNDLED_IMAGE_URL, BUNDLED_PORTRAIT_IMAGE_URL };
 
 export const BUNDLED_IMAGE_SIZE = { width: 1080, height: 722 };
 
@@ -21,8 +21,6 @@ export const BUNDLED_IMAGE_ATTRIBUTION: ImageAttribution = {
     photoUrl:
         'https://unsplash.com/photos/BS-bOYlt_Lg?utm_source=puzzle&utm_medium=referral',
 };
-
-export const BUNDLED_PORTRAIT_IMAGE_URL = 'first-puzzle-portrait.jpg';
 
 export const BUNDLED_PORTRAIT_IMAGE_SIZE = { width: 1080, height: 1614 };
 
