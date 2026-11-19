@@ -23,6 +23,7 @@ import {
     type PhotoSource,
 } from './photo-source.js';
 import { shuffled } from './shuffled.js';
+import { withAutoFormat } from './unsplash-auto-format.js';
 import type { Orientation } from '../model/types.js';
 
 /** Proxy route that forwards a photo's `download_location`. */
@@ -84,7 +85,7 @@ export function parseUnsplashResponse(data: unknown): UnsplashImageResult {
     }
 
     // "regular" (1080px) balances quality and load time.
-    const imageUrl = data.urls.regular;
+    const imageUrl = withAutoFormat(data.urls.regular);
 
     return {
         imageUrl,
@@ -93,7 +94,7 @@ export function parseUnsplashResponse(data: unknown): UnsplashImageResult {
         photographerName: data.user.name,
         photographerUrl: `${data.user.links.html}?utm_source=puzzle&utm_medium=referral`,
         photoUrl: `${data.links.html}?utm_source=puzzle&utm_medium=referral`,
-        thumbUrl: data.urls.small,
+        thumbUrl: withAutoFormat(data.urls.small),
         downloadLocation: data.links.download_location,
         description: typeof data.alt_description === 'string' && data.alt_description.length > 0
             ? data.alt_description
