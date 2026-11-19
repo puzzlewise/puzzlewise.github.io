@@ -16,6 +16,7 @@
 import { writeFileSync, readFileSync } from 'node:fs';
 import { IMAGE_CATEGORY_OPTIONS, buildImageQuery } from '../src/game/image-categories.js';
 import { isBlockedPhotographerUrl } from '../src/images/blocked-photographers.js';
+import { withAutoFormat } from '../src/images/unsplash-auto-format.js';
 
 const PER_BUCKET = 12;
 const ORIENTATIONS = ['landscape', 'portrait'] as const;
@@ -44,13 +45,13 @@ function toRecord(item: any, category: string, vibrant: boolean, orientation: st
         category,
         vibrant,
         orientation,
-        imageUrl: String(item.urls.regular),
+        imageUrl: withAutoFormat(String(item.urls.regular)),
         width: Number(item.width),
         height: Number(item.height),
         photographerName: String(item.user.name),
         photographerUrl: `${item.user.links.html}${UTM}`,
         photoUrl: `${item.links.html}${UTM}`,
-        thumbUrl: String(item.urls.small),
+        thumbUrl: withAutoFormat(String(item.urls.small)),
         downloadLocation: String(item.links.download_location),
         ...(typeof description === 'string' && description.length > 0
             ? { description }

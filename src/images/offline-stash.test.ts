@@ -41,8 +41,8 @@ function makePhoto(n: number) {
 
 function makeStashedImage(n: number, orientation: 'landscape' | 'portrait' = 'landscape'): StashedImage {
     return {
-        imageUrl: `https://images.unsplash.com/photo-${n}?w=1080`,
-        thumbUrl: `https://images.unsplash.com/photo-${n}?w=400`,
+        imageUrl: `https://images.unsplash.com/photo-${n}?w=1080&auto=format`,
+        thumbUrl: `https://images.unsplash.com/photo-${n}?w=400&auto=format`,
         imageSize: { width: 1080, height: 810 },
         attribution: {
             photographerName: `Photographer ${n}`,
@@ -169,8 +169,8 @@ describe('downloadOfflineImages', () => {
             cacheStorage: caches,
         });
 
-        expect(entries.has(photo.urls.regular)).toBe(true);
-        expect(entries.has(photo.urls.small)).toBe(true);
+        expect(entries.has(makeStashedImage(1).imageUrl)).toBe(true);
+        expect(entries.has(makeStashedImage(1).thumbUrl)).toBe(true);
     });
 
     it('reports each stored photo as a download to Unsplash', async () => {
@@ -256,12 +256,12 @@ describe('downloadOfflineImages', () => {
             context: CTX,
             query: undefined,
             orientation: 'landscape',
-            fetchFn: makeDownloadFetch(photos, [photos[0].urls.regular]),
+            fetchFn: makeDownloadFetch(photos, [makeStashedImage(1).imageUrl]),
             cacheStorage: makeFakeCaches().caches,
         });
 
         expect(saved).toBe(1);
-        expect(loadStash().map((entry) => entry.imageUrl)).toEqual([photos[1].urls.regular]);
+        expect(loadStash().map((entry) => entry.imageUrl)).toEqual([makeStashedImage(2).imageUrl]);
     });
 
     it('keeps a photo whose thumbnail download fails', async () => {
@@ -272,7 +272,7 @@ describe('downloadOfflineImages', () => {
             context: CTX,
             query: undefined,
             orientation: 'landscape',
-            fetchFn: makeDownloadFetch([photo], [photo.urls.small]),
+            fetchFn: makeDownloadFetch([photo], [makeStashedImage(1).thumbUrl]),
             cacheStorage: makeFakeCaches().caches,
         });
 
@@ -327,7 +327,7 @@ describe('downloadOfflineImages', () => {
         const photo = makePhoto(2);
         await expect(downloadOfflineImages({
             proxyBaseUrl: PROXY, context: CTX, query: undefined, orientation: 'landscape',
-            fetchFn: makeDownloadFetch([photo], [photo.urls.regular]),
+            fetchFn: makeDownloadFetch([photo], [makeStashedImage(2).imageUrl]),
             cacheStorage: makeFakeCaches().caches,
         })).resolves.toEqual({ saved: 0, reason: 'no-photos' });
     });
@@ -364,8 +364,8 @@ describe('downloadOfflineImages', () => {
             fetchFn: makeDownloadFetch([photo]), cacheStorage: caches,
         })).resolves.toEqual({ saved: 0, reason: 'write-failed' });
 
-        expect(entries.has(photo.urls.regular)).toBe(false);
-        expect(entries.has(photo.urls.small)).toBe(false);
+        expect(entries.has(makeStashedImage(1).imageUrl)).toBe(false);
+        expect(entries.has(makeStashedImage(1).thumbUrl)).toBe(false);
         expect(entries.has(prev.imageUrl)).toBe(true);
         expect(entries.has(prev.thumbUrl)).toBe(true);
 

@@ -116,6 +116,13 @@ describe('backup-pool.json catalog', () => {
         }
     });
 
+    it('requests every photo in a negotiated format', () => {
+        const jpegOnly = catalog.filter((r) =>
+            [r.imageUrl, r.thumbUrl].some((url) => new URL(url).searchParams.get('auto') !== 'format'),
+        );
+        expect(jpegOnly.map((r) => r.id)).toEqual([]);
+    });
+
     it('contains no photos by blocked photographers', () => {
         const blocked = catalog.filter((r) =>
             isBlockedPhotographerUrl(r.photographerUrl),

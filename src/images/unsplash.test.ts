@@ -42,12 +42,12 @@ function makeUnsplashResponse() {
 }
 
 describe('parseUnsplashResponse', () => {
-    it('extracts image URL from valid response', () => {
+    it('requests the regular image in a negotiated format', () => {
         const response = makeUnsplashResponse();
         const result = parseUnsplashResponse(response);
 
         expect(result.imageUrl).toBe(
-            'https://images.unsplash.com/photo-abc?w=1080',
+            'https://images.unsplash.com/photo-abc?w=1080&auto=format',
         );
     });
 
@@ -131,7 +131,7 @@ describe('parseUnsplashResponse', () => {
     it('extracts thumb URL, download location and description', () => {
         const result = parseUnsplashResponse(makeUnsplashResponse());
 
-        expect(result.thumbUrl).toBe('https://images.unsplash.com/photo-abc?w=400');
+        expect(result.thumbUrl).toBe('https://images.unsplash.com/photo-abc?w=400&auto=format');
         expect(result.downloadLocation).toBe(
             'https://api.unsplash.com/photos/abc123/download?ixid=xyz',
         );
