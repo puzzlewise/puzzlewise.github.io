@@ -1,8 +1,22 @@
 import type { GameState } from '../model/types.js';
 import { createModalShell } from './modal-shell.js';
 import { buildShareSection } from './share-section.js';
-import { createSelectToolIcon, createMarqueeToolIcon } from './tool-icons.js';
+import {
+    createBackgroundIcon,
+    createDeselectIcon,
+    createGatherPiecesIcon,
+    createMarqueeToolIcon,
+    createNewGameIcon,
+    createRefreshIcon,
+    createRotateIcon,
+    createSelectToolIcon,
+    createSettingsIcon,
+    inlineIcon,
+} from './tool-icons.js';
 import { track } from '../analytics/index.js';
+import { DESELECT_LABEL } from './deselect-button.js';
+import { REFRESH_IMAGES_LABEL } from './image-picker.js';
+import { ROTATE_CCW_LABEL, ROTATE_CW_LABEL } from './rotate-buttons.js';
 
 export interface HelpModalOptions {
     container: HTMLElement;
@@ -12,11 +26,6 @@ export interface HelpModalOptions {
 
 /** Keeps the static help-text builders compact without resorting to innerHTML. */
 type InlineNode = string | Node | [tag: string, text: string, attrs?: Record<string, string>];
-
-function inlineToolIcon(svg: SVGSVGElement): SVGSVGElement {
-    svg.classList.add('info-inline-icon');
-    return svg;
-}
 
 function appendInlineLi(parent: HTMLElement, parts: InlineNode[]): HTMLLIElement {
     const li = document.createElement('li');
@@ -69,8 +78,12 @@ function buildHowToPlaySection(): HTMLElement {
 
     const buttons = document.createElement('ul');
     appendInlineLi(buttons, [
+        inlineIcon(createNewGameIcon()),
+        ' ',
         ['strong', 'New Game'],
-        ' — Choose puzzle size, cut style and picture type, then tap one of the suggested photos to start (↻ swaps them for a new set) — or ',
+        ' — Choose puzzle size, cut style and picture type, then tap one of the suggested photos to start (',
+        inlineIcon(createRefreshIcon(), REFRESH_IMAGES_LABEL),
+        ' swaps them for a new set) — or ',
         ['strong', 'Surprise me'],
         ' for a fresh random photo. Tick ',
         ['strong', 'Vibrant colours'],
@@ -81,19 +94,33 @@ function buildHowToPlaySection(): HTMLElement {
         ' first — new puzzles will use the downloaded photos while you have no connection.',
     ]);
     appendInlineLi(buttons, [
+        inlineIcon(createGatherPiecesIcon()),
+        ' ',
         ['strong', 'Gather Pieces'],
         ' — Organize all pieces in a compact grid. With pieces selected, the selection and the rest are gathered into two separate piles.',
     ]);
-    appendInlineLi(buttons, ['🎨 ', ['strong', 'Background'], ' — Change table colour']);
-    appendInlineLi(buttons, ['⚙️ ', ['strong', 'Settings'], ' — Snap distance, piece outlines and more']);
     appendInlineLi(buttons, [
-        inlineToolIcon(createSelectToolIcon()),
+        inlineIcon(createBackgroundIcon()),
         ' ',
-        ['strong', 'Multi-select'],
-        ' (top-left) — When active, tap pieces to add/remove them from a selection; drag any selected piece to move the whole selection together. Tap ✕ (bottom) to deselect all.',
+        ['strong', 'Background'],
+        ' — Change table colour',
     ]);
     appendInlineLi(buttons, [
-        inlineToolIcon(createMarqueeToolIcon()),
+        inlineIcon(createSettingsIcon()),
+        ' ',
+        ['strong', 'Settings'],
+        ' — Snap distance, piece outlines and more',
+    ]);
+    appendInlineLi(buttons, [
+        inlineIcon(createSelectToolIcon()),
+        ' ',
+        ['strong', 'Multi-select'],
+        ' (top-left) — When active, tap pieces to add/remove them from a selection; drag any selected piece to move the whole selection together. Tap ',
+        inlineIcon(createDeselectIcon(), DESELECT_LABEL),
+        ' (bottom) to deselect all.',
+    ]);
+    appendInlineLi(buttons, [
+        inlineIcon(createMarqueeToolIcon()),
         ' ',
         ['strong', 'Marquee'],
         ' (below Multi-select) — Turns on multi-select and lets you drag a box on empty space to select every group it covers (turn on ',
@@ -101,11 +128,18 @@ function buildHowToPlaySection(): HTMLElement {
         ' in Settings to require a group be fully inside the box). Turning the marquee off leaves your selection untouched. On a computer you can also hold Shift and drag a box without switching the button on.',
     ]);
     appendInlineLi(buttons, [
-        '↺ ↻ ',
+        inlineIcon(createRotateIcon('ccw')),
+        ' ',
+        inlineIcon(createRotateIcon('cw')),
+        ' ',
         ['strong', 'Rotate'],
         ' (when rotation is enabled) — Tap any piece to bring up rotation controls next to it. With ',
         ['strong', '90° rotation'],
-        ' (Fractal puzzles), the ↺ / ↻ buttons rotate the focused piece by a quarter-turn. With ',
+        ' (Fractal puzzles), the ',
+        inlineIcon(createRotateIcon('ccw'), ROTATE_CCW_LABEL),
+        ' / ',
+        inlineIcon(createRotateIcon('cw'), ROTATE_CW_LABEL),
+        ' buttons rotate the focused piece by a quarter-turn. With ',
         ['strong', 'Free rotation'],
         " (Classic, Wavy and Triangles puzzles), a single round handle below the focused piece lets you drag to rotate continuously — the piece follows your finger like a dial. Pieces snap together when their rotations are close to alignment; how close they need to be depends on your ",
         ['strong', 'Snap distance'],
@@ -170,6 +204,12 @@ function buildAboutSection(): HTMLElement {
         ' ',
         ['a', 'Unsplash', { href: 'https://unsplash.com', target: '_blank', rel: 'noopener' }],
         ' (photographer credited per image)',
+    ]);
+    appendInlineLi(list, [
+        ['strong', 'Icons:'],
+        ' ',
+        ['a', 'Lucide', { href: 'https://lucide.dev', target: '_blank', rel: 'noopener' }],
+        ' (ISC License)',
     ]);
     section.appendChild(list);
     return section;

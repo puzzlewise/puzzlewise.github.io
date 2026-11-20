@@ -5,6 +5,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createToolbarButton } from './toolbar-button.js';
 
+function makeIcon(): SVGElement {
+    return document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+}
+
 describe('createToolbarButton', () => {
     let container: HTMLElement;
     let onClick: ReturnType<typeof vi.fn<() => void>>;
@@ -19,6 +23,7 @@ describe('createToolbarButton', () => {
             container,
             className: 'demo-button',
             label: 'Demo',
+            icon: makeIcon(),
             onClick,
         });
 
@@ -31,6 +36,7 @@ describe('createToolbarButton', () => {
             container,
             className: 'demo-button',
             label: 'Demo',
+            icon: makeIcon(),
             onClick,
         });
 
@@ -38,16 +44,20 @@ describe('createToolbarButton', () => {
         expect(button.className).toBe('demo-button');
     });
 
-    it('should set textContent from label', () => {
+    it('shows the icon and names the button with the label', () => {
+        const icon = makeIcon();
         createToolbarButton({
             container,
             className: 'demo-button',
             label: 'Demo Label',
+            icon,
             onClick,
         });
 
         const button = container.querySelector('button')!;
-        expect(button.textContent).toBe('Demo Label');
+        expect([...button.childNodes]).toEqual([icon]);
+        expect(button.getAttribute('aria-label')).toBe('Demo Label');
+        expect(button.title).toBe('Demo Label');
     });
 
     it('should set type="button"', () => {
@@ -55,6 +65,7 @@ describe('createToolbarButton', () => {
             container,
             className: 'demo-button',
             label: 'Demo',
+            icon: makeIcon(),
             onClick,
         });
 
@@ -62,36 +73,12 @@ describe('createToolbarButton', () => {
         expect(button.type).toBe('button');
     });
 
-    it('should set the title when provided', () => {
-        createToolbarButton({
-            container,
-            className: 'demo-button',
-            label: 'Demo',
-            title: 'Demo tooltip',
-            onClick,
-        });
-
-        const button = container.querySelector('button')!;
-        expect(button.title).toBe('Demo tooltip');
-    });
-
-    it('should leave title empty when not provided', () => {
-        createToolbarButton({
-            container,
-            className: 'demo-button',
-            label: 'Demo',
-            onClick,
-        });
-
-        const button = container.querySelector('button')!;
-        expect(button.title).toBe('');
-    });
-
     it('should call onClick when clicked', () => {
         createToolbarButton({
             container,
             className: 'demo-button',
             label: 'Demo',
+            icon: makeIcon(),
             onClick,
         });
 
@@ -106,6 +93,7 @@ describe('createToolbarButton', () => {
             container,
             className: 'demo-button',
             label: 'Demo',
+            icon: makeIcon(),
             onClick,
         });
 
@@ -122,6 +110,7 @@ describe('createToolbarButton', () => {
             container,
             className: 'demo-button',
             label: 'Demo',
+            icon: makeIcon(),
             onClick,
         });
 
@@ -137,6 +126,7 @@ describe('createToolbarButton', () => {
             container,
             className: 'demo-button',
             label: 'Demo',
+            icon: makeIcon(),
             onClick,
         });
 

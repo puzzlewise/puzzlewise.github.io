@@ -39,7 +39,7 @@ export interface InstallToolbarDeps {
     save: (state: GameState) => void;
     onNewGame: () => void;
     /**
-     * Install the 🎨 background-color control into `toolbar` (bound by the
+     * Install the background-color control into `toolbar` (bound by the
      * caller — this module owns *where and when* the picker's DOM lands, not
      * the picker). Invoked between Gather and Help, its on-screen position.
      *

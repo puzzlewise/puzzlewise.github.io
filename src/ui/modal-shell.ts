@@ -1,4 +1,5 @@
 import { createDismissableOverlay, type OverlayDismissCause } from './dismissable-overlay.js';
+import { createCloseIcon } from './tool-icons.js';
 
 export type ModalDismissCause = 'button' | 'backdrop' | 'escape';
 
@@ -59,9 +60,10 @@ export function createModalShell<C extends string = never>(options: ModalShellOp
 
     const closeButton = document.createElement('button');
     closeButton.className = 'info-modal-close';
-    closeButton.textContent = '✕';
     closeButton.type = 'button';
     closeButton.title = 'Close';
+    closeButton.setAttribute('aria-label', 'Close');
+    closeButton.appendChild(createCloseIcon());
     closeButton.addEventListener('click', () => close('button'));
 
     header.appendChild(heading);

@@ -15,7 +15,7 @@ export function createPieceOutlineColorPicker(
         button: {
             // No glyph — the button's background previews the current color via
             // CSS (`.outline-color-button` = `var(--piece-outline-color)`).
-            icon: '',
+            icon: null,
             title: 'Outline colour',
             className: 'outline-color-button',
         },

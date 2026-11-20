@@ -3,7 +3,8 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { createImagePicker } from './image-picker.js';
+import { createImagePicker, REFRESH_IMAGES_LABEL } from './image-picker.js';
+import { createRefreshIcon, createSurpriseIcon } from './tool-icons.js';
 import type { CandidateFetchResult, CandidateImage } from '../images/index.js';
 
 function ok(candidates: CandidateImage[]): CandidateFetchResult {
@@ -45,7 +46,7 @@ describe('createImagePicker', () => {
         container.remove();
     });
 
-    it("passes 'open' on the first load and 'refresh' for ↻", async () => {
+    it("passes 'open' on the first load and 'refresh' for the refresh button", async () => {
         const fetchCandidates = vi.fn().mockResolvedValue(ok([makeCandidate(1)]));
         const picker = createImagePicker({ fetchCandidates, onPick: vi.fn() });
         container.appendChild(picker.element);
@@ -117,8 +118,12 @@ describe('createImagePicker', () => {
         expect(container.querySelector('.size-picker-subtitle')?.textContent)
             .toBe('Pick an image to start');
         expect(container.querySelectorAll('[data-testid="image-picker-tile"]')).toHaveLength(4);
-        expect(container.querySelector('[data-testid="image-picker-refresh"]')).not.toBeNull();
-        expect(container.querySelector('[data-testid="image-picker-surprise"]')).not.toBeNull();
+        const refresh = container.querySelector('[data-testid="image-picker-refresh"]')!;
+        expect(refresh.getAttribute('aria-label')).toBe('Show different images');
+        expect(refresh.querySelector('svg')!.outerHTML).toBe(createRefreshIcon().outerHTML);
+        const surprise = container.querySelector('[data-testid="image-picker-surprise"]')!;
+        expect(surprise.textContent).toBe('Surprise me');
+        expect(surprise.querySelector('svg')!.outerHTML).toBe(createSurpriseIcon().outerHTML);
         expect(container.querySelector('[data-testid="image-picker-blank"]')).not.toBeNull();
     });
 
@@ -207,6 +212,7 @@ describe('createImagePicker', () => {
 
         const error = container.querySelector<HTMLElement>('.image-picker-error')!;
         expect(error.hidden).toBe(false);
+        expect(error.querySelector('svg.inline-icon')?.getAttribute('aria-label')).toBe(REFRESH_IMAGES_LABEL);
 
         container.querySelector<HTMLButtonElement>('[data-testid="image-picker-refresh"]')!.click();
         await flush();
