@@ -1,8 +1,10 @@
 import type { RotationFocus } from '../interaction/rotation-focus.js';
+import { createRotateIcon } from './tool-icons.js';
 
 export type RotationDirection = 'cw' | 'ccw';
 
-const SVG_NS = 'http://www.w3.org/2000/svg';
+export const ROTATE_CCW_LABEL = 'Rotate selection 90° counter-clockwise';
+export const ROTATE_CW_LABEL = 'Rotate selection 90° clockwise';
 
 const BUTTON_SIZE_PX = 44;
 const BUTTON_GAP_PX = 8;
@@ -44,37 +46,12 @@ interface ActivePair {
     state: 'visible' | 'fade-out-quick' | 'fade-out-slow';
 }
 
-function makeRotateIcon(mirror: boolean): SVGElement {
-    const svg = document.createElementNS(SVG_NS, 'svg');
-    svg.setAttribute('width', '20');
-    svg.setAttribute('height', '20');
-    svg.setAttribute('viewBox', '0 0 24 24');
-    svg.setAttribute('fill', 'none');
-    svg.setAttribute('stroke', 'currentColor');
-    svg.setAttribute('stroke-width', '2');
-    svg.setAttribute('stroke-linecap', 'round');
-    svg.setAttribute('stroke-linejoin', 'round');
-    if (mirror) {
-        svg.setAttribute('transform', 'scale(-1,1)');
-    }
-
-    const path = document.createElementNS(SVG_NS, 'path');
-    path.setAttribute('d', 'M21 12a9 9 0 1 1-3.1-6.8');
-    svg.appendChild(path);
-
-    const arrow = document.createElementNS(SVG_NS, 'polyline');
-    arrow.setAttribute('points', '21 3 21 9 15 9');
-    svg.appendChild(arrow);
-
-    return svg;
-}
-
 function makeButton(modifier: 'ccw' | 'cw', label: string): HTMLButtonElement {
     const button = document.createElement('button');
     button.className = `rotate-button rotate-button--${modifier}`;
     button.type = 'button';
     button.setAttribute('aria-label', label);
-    button.appendChild(makeRotateIcon(modifier === 'ccw'));
+    button.appendChild(createRotateIcon(modifier));
     return button;
 }
 
@@ -114,8 +91,8 @@ export function createRotateButtons(
         if (!bounds) return;
         const viewport = getViewportSize();
 
-        const ccw = makeButton('ccw', 'Rotate selection 90° counter-clockwise');
-        const cw = makeButton('cw', 'Rotate selection 90° clockwise');
+        const ccw = makeButton('ccw', ROTATE_CCW_LABEL);
+        const cw = makeButton('cw', ROTATE_CW_LABEL);
 
         const midY = (bounds.top + bounds.bottom) / 2;
         const naturalCcwLeft = bounds.left - BUTTON_GAP_PX - BUTTON_SIZE_PX;

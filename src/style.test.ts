@@ -167,7 +167,7 @@ describe('right-hand toolbar', () => {
         expect(body).toMatch(/pointer-events:\s*none/);
     });
 
-    it('opens the 🎨 panel on its own button, wherever the column puts it', () => {
+    it('opens the background panel on its own button, wherever the column puts it', () => {
         const anchor = declarationsFor(styleCss, '.swatch-anchor');
         expect(anchor).toMatch(/position:\s*relative/);
         expect(anchor, 'no line box around the button').toMatch(/display:\s*flex/);
@@ -177,7 +177,7 @@ describe('right-hand toolbar', () => {
         expect(shortScreen).not.toContain('.bg-color-panel');
     });
 
-    it('gives the 🎨 panel the toolbar inset as its margin on both sides', () => {
+    it('gives the background panel the toolbar inset as its margin on both sides', () => {
         expect(declarationsFor(styleCss, '.right-toolbar')).toMatch(/--toolbar-inset:\s*12px/);
         expect(declarationsFor(shortScreen, '.right-toolbar')).toMatch(/--toolbar-inset:\s*8px/);
         expect(declarationsFor(styleCss, '.right-toolbar')).toMatch(/inset:\s*var\(--toolbar-inset\)/);
@@ -186,10 +186,51 @@ describe('right-hand toolbar', () => {
         );
     });
 
-    it('positions the 🎨 button so its z-index applies inside the anchor', () => {
+    it('positions the background button so its z-index applies inside the anchor', () => {
         const body = declarationsFor(styleCss, '.bg-color-button');
         expect(body).toMatch(/z-index:\s*9999/);
         expect(body).toMatch(/position:\s*relative/);
+    });
+
+    it('styles all seven toolbar squares with shared rules, at any screen height', () => {
+        const squares = [
+            '.new-game-button',
+            '.gather-pieces-button',
+            '.bg-color-button',
+            '.help-button',
+            '.settings-button',
+            '.select-tool-button',
+            '.marquee-tool-button',
+        ];
+        const sharedRule = (css: string, suffix: string): string => {
+            const selectors = squares.map((selector) => selector + suffix);
+            const rule = [...css.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+                .find(([, prelude]) => {
+                    const listed = prelude.split(',').map((part) => part.trim());
+                    return selectors.every((selector) => listed.includes(selector));
+                });
+            expect(rule, `one rule for every square${suffix}`).toBeDefined();
+            return rule![2];
+        };
+        expect(sharedRule(styleCss, '')).toMatch(/width:\s*40px/);
+        expect(sharedRule(styleCss, '')).toMatch(/background:\s*var\(--ui-control-scrim\)/);
+        expect(sharedRule(styleCss, ':hover')).toMatch(/--ui-control-scrim-hover/);
+        expect(sharedRule(styleCss, ':active')).toMatch(/--ui-control-scrim-active/);
+        expect(sharedRule(shortScreen, '')).toMatch(/width:\s*34px/);
+    });
+
+    it('spaces the left tool buttons as far apart as the right toolbar buttons, at any screen height', () => {
+        const px = (body: string, property: string): number => {
+            const matches = [...body.matchAll(new RegExp(`(?:^|[\\s;])${property}:\\s*(\\d+)px`, 'g'))];
+            expect(matches.length, property).toBeGreaterThan(0);
+            return Number(matches.at(-1)![1]);
+        };
+        for (const css of [styleCss, shortScreen]) {
+            const select = declarationsFor(css, '.select-tool-button');
+            const marquee = declarationsFor(css, '.marquee-tool-button');
+            const gap = px(declarationsFor(css, '.right-toolbar'), 'gap');
+            expect(px(marquee, 'top')).toBe(px(select, 'top') + px(select, 'height') + gap);
+        }
     });
 
     it.each([

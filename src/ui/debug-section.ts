@@ -54,7 +54,7 @@ export function buildDebugSection(args: {
     if (onSolve) {
         const solveBtn = document.createElement('button');
         solveBtn.className = 'info-modal-solve-btn';
-        solveBtn.textContent = '🧩 Solve Puzzle';
+        solveBtn.textContent = 'Solve Puzzle';
         solveBtn.type = 'button';
         solveBtn.addEventListener('click', () => onSolve());
         details.appendChild(solveBtn);

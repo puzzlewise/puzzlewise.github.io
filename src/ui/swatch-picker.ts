@@ -18,7 +18,7 @@ export interface SwatchEntry {
 export interface SwatchPickerOptions {
     container: HTMLElement;
     /** `className` positions the button. */
-    button: { icon: string; title: string; className: string };
+    button: { icon: SVGElement | null; title: string; className: string };
     ariaLabel: string;
     /**
      * Extra class on the grid panel (alongside `swatch-grid`), positioning it
@@ -108,7 +108,9 @@ export function createSwatchPicker(options: SwatchPickerOptions): SwatchPickerHa
     button.type = 'button';
     button.title = options.button.title;
     button.setAttribute('aria-label', options.button.title);
-    button.textContent = options.button.icon;
+    if (options.button.icon) {
+        button.appendChild(options.button.icon);
+    }
 
     let grid: HTMLDivElement | null = null;
     let dismissPopover: (() => void) | null = null;

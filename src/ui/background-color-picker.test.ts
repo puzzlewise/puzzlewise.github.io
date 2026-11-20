@@ -5,9 +5,10 @@
 import { describe, it, expect, vi } from 'vitest';
 import { createBackgroundColorPicker } from './background-color-picker.js';
 import { BACKGROUND_COLOR_PRESETS } from './background-color.js';
+import { createBackgroundIcon } from './tool-icons.js';
 
 describe('createBackgroundColorPicker', () => {
-    it('adds the 🎨 button to the container', () => {
+    it('adds the background button, with its icon, to the container', () => {
         const container = document.createElement('div');
         const picker = createBackgroundColorPicker({
             container,
@@ -15,7 +16,7 @@ describe('createBackgroundColorPicker', () => {
             onSelect: vi.fn(),
         });
         const button = container.querySelector('button.bg-color-button');
-        expect(button).toBeTruthy();
+        expect(button?.querySelector('svg')?.outerHTML).toBe(createBackgroundIcon().outerHTML);
         picker.dispose();
     });
 

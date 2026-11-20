@@ -90,7 +90,7 @@ describe('createSwatchPicker', () => {
         const onSelect = vi.fn();
         const picker = createSwatchPicker({
             container,
-            button: { icon: '🎨', title: 'Colour', className: 'bg-color-button' },
+            button: { icon: null, title: 'Colour', className: 'bg-color-button' },
             ariaLabel: 'Colour',
             swatches: SWATCHES,
             selectedId: 'a',
@@ -151,12 +151,30 @@ describe('createSwatchPicker', () => {
     });
 });
 
+describe('button icon', () => {
+    it('shows the given icon in the button', () => {
+        const container = document.createElement('div');
+        const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        const picker = createSwatchPicker({
+            container,
+            button: { icon, title: 'Pick', className: 'pick-btn' },
+            ariaLabel: 'Pick',
+            swatches: [{ id: 'a', label: 'A', color: '#aaa' }],
+            selectedId: 'a',
+            onSelect: () => {},
+        });
+
+        expect([...container.querySelector('.pick-btn')!.childNodes]).toEqual([icon]);
+        picker.dispose();
+    });
+});
+
 describe('setSelected', () => {
     it('marks the externally-set swatch as selected on the next open', () => {
         const onSelect = vi.fn();
         const picker = createSwatchPicker({
             container: document.body,
-            button: { icon: 'X', title: 'Pick', className: 'pick-btn' },
+            button: { icon: null, title: 'Pick', className: 'pick-btn' },
             ariaLabel: 'Pick',
             swatches: [
                 { id: 'a', label: 'A', color: '#aaa' },
@@ -178,7 +196,7 @@ describe('setSelected', () => {
     it('dismisses an open panel so a stale highlight cannot linger', () => {
         const picker = createSwatchPicker({
             container: document.body,
-            button: { icon: 'X', title: 'Pick', className: 'pick-btn' },
+            button: { icon: null, title: 'Pick', className: 'pick-btn' },
             ariaLabel: 'Pick',
             swatches: [{ id: 'a', label: 'A', color: '#aaa' }],
             selectedId: 'a',

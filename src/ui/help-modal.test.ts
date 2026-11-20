@@ -6,6 +6,14 @@ import { describe, it, expect, beforeEach, afterEach, vi, type Mock } from 'vite
 import { createHelpModal } from './help-modal.js';
 import { createSelectToolButton } from './select-tool-button.js';
 import { createMarqueeToolButton } from './marquee-tool-button.js';
+import { createDeselectButton, DESELECT_LABEL } from './deselect-button.js';
+import { REFRESH_IMAGES_LABEL } from './image-picker.js';
+import { ROTATE_CCW_LABEL, ROTATE_CW_LABEL } from './rotate-buttons.js';
+import { createNewGameButton } from './new-game-button.js';
+import { createGatherPiecesButton } from './gather-pieces-button.js';
+import { createBackgroundColorPicker } from './background-color-picker.js';
+import { BACKGROUND_COLOR_PRESETS } from './background-color.js';
+import { createSettingsButton } from './settings-button.js';
 import { SelectionManager } from '../interaction/selection-manager.js';
 import type { GameState } from '../model/types.js';
 import { makeGameState } from '../test-helpers/fixtures.js';
@@ -16,8 +24,12 @@ function toolbarButtonIcon(
         selectionManager: SelectionManager;
     }) => unknown,
 ): string {
+    return buttonIcon((host) => create({ container: host, selectionManager: new SelectionManager() }));
+}
+
+function buttonIcon(create: (host: HTMLElement) => unknown): string {
     const host = document.createElement('div');
-    create({ container: host, selectionManager: new SelectionManager() });
+    create(host);
     return host.querySelector('button')!.querySelector('svg')!.outerHTML;
 }
 
@@ -113,16 +125,51 @@ describe('createHelpModal — How to Play section', () => {
         return match!.parentElement!;
     }
 
+    function inlineIcons(): string[] {
+        return [
+            ...howToPlaySection().querySelectorAll<SVGElement>('svg.inline-icon'),
+        ].map((svg) => {
+            const clone = svg.cloneNode(true) as SVGElement;
+            for (const attribute of ['class', 'aria-hidden', 'role', 'aria-label']) {
+                clone.removeAttribute(attribute);
+            }
+            return clone.outerHTML;
+        });
+    }
+
+    it('names the icons that stand in for words and hides the rest from assistive technology', () => {
+        createHelpModal({ container });
+        const icons = [...howToPlaySection().querySelectorAll<SVGElement>('svg.inline-icon')];
+        const named = icons.filter((svg) => svg.getAttribute('role') === 'img').map((svg) => svg.getAttribute('aria-label'));
+        expect(named).toEqual([REFRESH_IMAGES_LABEL, DESELECT_LABEL, ROTATE_CCW_LABEL, ROTATE_CW_LABEL]);
+        for (const svg of icons.filter((icon) => icon.getAttribute('role') !== 'img')) {
+            expect(svg.getAttribute('aria-hidden')).toBe('true');
+        }
+    });
+
     it('describes rotation', () => {
         createHelpModal({ container });
         expect(howToPlaySection().textContent).toContain('Free rotation');
     });
 
-    it('points to the Settings button', () => {
+    it('shows the same icons as the right-hand toolbar buttons', () => {
         createHelpModal({ container });
-        const text = howToPlaySection().textContent ?? '';
-        expect(text).toContain('⚙️');
-        expect(text).toContain('Settings');
+        const rendered = inlineIcons();
+        const noop = (): void => {};
+        expect(rendered).toContain(buttonIcon((host) => createNewGameButton({
+            container: host,
+            isCompleted: () => false,
+            getGroupCount: () => 1,
+            getPieceCount: () => 1,
+            onNewGame: noop,
+        })));
+        expect(rendered).toContain(buttonIcon((host) => createGatherPiecesButton({ container: host, onGatherPieces: noop })));
+        expect(rendered).toContain(buttonIcon((host) => createBackgroundColorPicker({
+            container: host,
+            selectedId: BACKGROUND_COLOR_PRESETS[0].id,
+            onSelect: noop,
+        })));
+        expect(rendered).toContain(buttonIcon((host) => createSettingsButton({ container: host, onShowSettings: noop })));
     });
 
     it('settings button copy omits effects', () => {
@@ -151,18 +198,12 @@ describe('createHelpModal — How to Play section', () => {
         expect(text).toContain('no connection');
     });
 
-    it('shows the same multi-select and marquee icons as the toolbar buttons', () => {
+    it('shows the same multi-select, marquee and deselect icons as their buttons', () => {
         createHelpModal({ container });
-        const rendered = [
-            ...howToPlaySection().querySelectorAll<SVGElement>('svg.info-inline-icon'),
-        ].map((svg) => {
-            const clone = svg.cloneNode(true) as SVGElement;
-            clone.classList.remove('info-inline-icon');
-            clone.removeAttribute('class');
-            return clone.outerHTML;
-        });
+        const rendered = inlineIcons();
         expect(rendered).toContain(toolbarButtonIcon(createSelectToolButton));
         expect(rendered).toContain(toolbarButtonIcon(createMarqueeToolButton));
+        expect(rendered).toContain(toolbarButtonIcon(createDeselectButton));
     });
 
     it('mentions Wavy and Classic alongside Free rotation', () => {

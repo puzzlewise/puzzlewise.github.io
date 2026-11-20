@@ -5,6 +5,7 @@ import { createDismissableOverlay } from './dismissable-overlay.js';
 import { sharePuzzle } from './share.js';
 import { showToast } from './toast.js';
 import { loadColorPreference } from './background-color.js';
+import { createCelebrationIcon } from './tool-icons.js';
 
 export interface CompletionOverlayOptions {
     container: HTMLElement;
@@ -32,7 +33,7 @@ export function showCompletionOverlay(
     message.className = 'completion-message';
 
     const heading = document.createElement('h1');
-    heading.textContent = '🧩 Puzzle Complete!';
+    heading.append(createCelebrationIcon(), ' Puzzle Complete!');
     message.appendChild(heading);
 
     const wellDone = document.createElement('p');
