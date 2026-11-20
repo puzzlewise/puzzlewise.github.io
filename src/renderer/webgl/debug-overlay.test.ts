@@ -53,7 +53,7 @@ describe('createDebugOverlay', () => {
         overlay.update(scene, { scale: 2, offsetX: 10, offsetY: 20 });
 
         const root = container.firstElementChild as HTMLElement;
-        expect(root.style.transformOrigin).toBe('0 0');
+        expect(root.style.transformOrigin).toBe('0px 0px');
         expect(matrixOf(root)).toEqual([2, 0, 0, 2, 10, 20]);
         const piece = container.querySelector('[data-debug-label]')!.parentElement!;
         expect(piece.parentElement).toBe(root);
