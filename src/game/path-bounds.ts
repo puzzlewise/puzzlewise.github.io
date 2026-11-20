@@ -1,8 +1,5 @@
 import type { Point } from '../model/types.js';
 
-const COMMAND_REGEX = /([MLCSQTZHVAmlcsqtzhva])\s*([-\d.,eE\s]*)/g;
-const NUMBER_REGEX = /[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?/g;
-
 /**
  * Conservative bounding box: bezier control points are included, so it may be
  * larger than the curve but always contains the full path geometry.
@@ -26,14 +23,22 @@ export function getPathBounds(
         if (y > maxY) maxY = y;
     }
 
-    for (const match of path.matchAll(COMMAND_REGEX)) {
-        const cmd = match[1];
-        const argsStr = match[2].trim();
-        const nums: number[] = [];
+    const nums: number[] = [];
+    let pos = 0;
+    while (pos < path.length) {
+        const cmd = path[pos++];
+        if (!COMMANDS.includes(cmd)) continue;
 
-        if (argsStr.length > 0) {
-            for (const numMatch of argsStr.matchAll(NUMBER_REGEX)) {
-                nums.push(parseFloat(numMatch[0]));
+        nums.length = 0;
+        let argsEnd = pos;
+        while (argsEnd < path.length && isArgumentChar(path.charCodeAt(argsEnd))) argsEnd++;
+        while (pos < argsEnd) {
+            const numberEnd = scanNumber(path, pos, argsEnd);
+            if (numberEnd === pos) {
+                pos++;
+            } else {
+                nums.push(parseFloat(path.slice(pos, numberEnd)));
+                pos = numberEnd;
             }
         }
 
@@ -178,4 +183,52 @@ export function getPathBounds(
     }
 
     return { minX, minY, maxX, maxY };
+}
+
+const COMMANDS = 'MLCSQTZHVAmlcsqtzhva';
+
+const MINUS = 45;
+const DOT = 46;
+const COMMA = 44;
+const SPACE = 32;
+const TAB = 9;
+const CARRIAGE_RETURN = 13;
+const UPPER_E = 69;
+const LOWER_E = 101;
+
+function isDigit(code: number): boolean {
+    return code >= 48 && code <= 57;
+}
+
+function isArgumentChar(code: number): boolean {
+    return isDigit(code) || code === MINUS || code === DOT || code === COMMA
+        || code === SPACE || (code >= TAB && code <= CARRIAGE_RETURN)
+        || code === LOWER_E || code === UPPER_E;
+}
+
+/** Returns the end of the number starting at `from`, or `from` when none starts there. */
+function scanNumber(path: string, from: number, limit: number): number {
+    let i = from;
+    if (path.charCodeAt(i) === MINUS) i++;
+
+    const integerStart = i;
+    while (i < limit && isDigit(path.charCodeAt(i))) i++;
+    if (i > integerStart) {
+        if (i < limit && path.charCodeAt(i) === DOT) i++;
+    } else if (i + 1 < limit && path.charCodeAt(i) === DOT && isDigit(path.charCodeAt(i + 1))) {
+        i++;
+    } else {
+        return from;
+    }
+    while (i < limit && isDigit(path.charCodeAt(i))) i++;
+
+    if (i < limit && (path.charCodeAt(i) === LOWER_E || path.charCodeAt(i) === UPPER_E)) {
+        let exponent = i + 1;
+        if (exponent < limit && path.charCodeAt(exponent) === MINUS) exponent++;
+        if (exponent < limit && isDigit(path.charCodeAt(exponent))) {
+            i = exponent;
+            while (i < limit && isDigit(path.charCodeAt(i))) i++;
+        }
+    }
+    return i;
 }

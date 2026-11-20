@@ -67,4 +67,17 @@ describe('getPathBounds', () => {
         expect(bounds.maxX).toBe(100);
         expect(bounds.minX).toBe(0);
     });
+
+    it.each([
+        ['numbers separated only by a sign', 'L10-20L-30-40', { minX: -30, minY: -40, maxX: 10, maxY: 0 }],
+        ['a second decimal point starting a new number', 'L1.5.5 2.25.75', { minX: 0, minY: 0, maxX: 2.25, maxY: 0.75 }],
+        ['a leading or trailing decimal point', 'L.5 2. L-.25 -3.', { minX: -0.25, minY: -3, maxX: 0.5, maxY: 2 }],
+        ['exponents', 'L1e2 -2.5E1 L5e-1 1e0', { minX: 0, minY: -25, maxX: 100, maxY: 1 }],
+        ['an exponent marker without digits', 'L1e 2', { minX: 0, minY: 0, maxX: 1, maxY: 2 }],
+        ['commands and commas without whitespace', 'M5,5L10,20C1,2,3,4,50,60Z', { minX: 0, minY: 0, maxX: 50, maxY: 60 }],
+        ['an incomplete trailing coordinate pair', 'L 10 20 30', { minX: 0, minY: 0, maxX: 10, maxY: 20 }],
+        ['text that is not a command', 'L 10 20 x 99 99 L 30 5', { minX: 0, minY: 0, maxX: 30, maxY: 20 }],
+    ])('should parse %s', (_name, path, expected) => {
+        expect(getPathBounds(path, { x: 0, y: 0 })).toEqual(expected);
+    });
 });
