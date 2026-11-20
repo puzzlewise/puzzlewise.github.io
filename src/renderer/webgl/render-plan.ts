@@ -85,6 +85,8 @@ export function haloState(flags: { selected: boolean; dragging: boolean }): Halo
 type GroupFlags = { selected: boolean; dragging: boolean };
 
 export function groupStateDirt(prev: GroupFlags, next: GroupFlags, appearance: RendererAppearance): Dirt {
+    // The app re-applies every selected group's flag on each drag frame.
+    if (prev.selected === next.selected && prev.dragging === next.dragging) return { ...NO_DIRT };
     const steps = (flags: GroupFlags) =>
         JSON.stringify(haloSteps(haloState(flags), appearance.outline, appearance.selectionGlowColor));
     return { ...NO_DIRT, halos: steps(prev) !== steps(next) };
