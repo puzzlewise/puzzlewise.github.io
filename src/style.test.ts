@@ -167,7 +167,7 @@ describe('right-hand toolbar', () => {
         expect(body).toMatch(/pointer-events:\s*none/);
     });
 
-    it('opens the 🎨 panel on its own button, wherever the column puts it', () => {
+    it('opens the background panel on its own button, wherever the column puts it', () => {
         const anchor = declarationsFor(styleCss, '.swatch-anchor');
         expect(anchor).toMatch(/position:\s*relative/);
         expect(anchor, 'no line box around the button').toMatch(/display:\s*flex/);
@@ -177,7 +177,7 @@ describe('right-hand toolbar', () => {
         expect(shortScreen).not.toContain('.bg-color-panel');
     });
 
-    it('gives the 🎨 panel the toolbar inset as its margin on both sides', () => {
+    it('gives the background panel the toolbar inset as its margin on both sides', () => {
         expect(declarationsFor(styleCss, '.right-toolbar')).toMatch(/--toolbar-inset:\s*12px/);
         expect(declarationsFor(shortScreen, '.right-toolbar')).toMatch(/--toolbar-inset:\s*8px/);
         expect(declarationsFor(styleCss, '.right-toolbar')).toMatch(/inset:\s*var\(--toolbar-inset\)/);
@@ -186,10 +186,27 @@ describe('right-hand toolbar', () => {
         );
     });
 
-    it('positions the 🎨 button so its z-index applies inside the anchor', () => {
+    it('positions the background button so its z-index applies inside the anchor', () => {
         const body = declarationsFor(styleCss, '.bg-color-button');
         expect(body).toMatch(/z-index:\s*9999/);
         expect(body).toMatch(/position:\s*relative/);
+    });
+
+    it.each([
+        '.new-game-button',
+        '.gather-pieces-button',
+        '.bg-color-button',
+        '.help-button',
+        '.settings-button',
+    ])('sizes %s like the tool buttons, at any screen height', (selector) => {
+        for (const [css, size] of [[styleCss, '40px'], [shortScreen, '34px']] as const) {
+            const tool = declarationsFor(css, '.select-tool-button');
+            const body = declarationsFor(css, selector);
+            for (const declarations of [tool, body]) {
+                expect(declarations).toContain(`width: ${size}`);
+                expect(declarations).toContain(`height: ${size}`);
+            }
+        }
     });
 
     it.each([

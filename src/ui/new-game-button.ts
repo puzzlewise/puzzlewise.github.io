@@ -1,3 +1,5 @@
+import { createNewGameIcon } from './tool-icons.js';
+
 export function shouldConfirmNewGame(
     completed: boolean,
     groupCount: number,
@@ -32,8 +34,10 @@ export function createNewGameButton(options: NewGameButtonOptions): () => void {
 
     const button = document.createElement('button');
     button.className = 'new-game-button';
-    button.textContent = 'New Game';
     button.type = 'button';
+    button.title = 'New Game';
+    button.setAttribute('aria-label', 'New Game');
+    button.appendChild(createNewGameIcon());
 
     function handleClick(): void {
         const needsConfirm = shouldConfirmNewGame(

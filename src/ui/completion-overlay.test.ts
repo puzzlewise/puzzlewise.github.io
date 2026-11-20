@@ -54,6 +54,7 @@ describe('showCompletionOverlay', () => {
         showCompletionOverlay({ container, state: makeState() });
         const overlay = container.querySelector('.completion-overlay')!;
         expect(overlay.querySelector('h1')?.textContent).toMatch(/Puzzle Complete/);
+        expect(overlay.querySelector('h1 svg')).not.toBeNull();
         expect(overlay.querySelector('.completion-share-btn')?.textContent)
             .toMatch(/Challenge a friend/);
         expect(overlay.querySelector('.completion-dismiss-hint')?.textContent)

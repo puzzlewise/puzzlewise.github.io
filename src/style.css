@@ -92,7 +92,7 @@ html, body {
 }
 
 /* The bottom inset keeps clear of `.app-version`. No z-index, so the
-   buttons and the 🎨 panel keep their places in the root stacking order. */
+   buttons and the background panel keep their places in the root stacking order. */
 .right-toolbar {
   --toolbar-inset: 12px;
   position: absolute;
@@ -110,16 +110,22 @@ html, body {
   pointer-events: auto;
 }
 
-.new-game-button {
+.new-game-button,
+.gather-pieces-button,
+.bg-color-button,
+.help-button,
+.settings-button {
   z-index: 9999;
-  padding: 8px 16px;
-  font-size: 0.875rem;
-  font-family: inherit;
-  font-weight: 500;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   color: var(--ui-fg);
   background: var(--ui-control-scrim);
   border: 1px solid var(--ui-border);
-  border-radius: 8px;
+  border-radius: 10px;
   cursor: pointer;
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
@@ -129,41 +135,25 @@ html, body {
   -webkit-user-select: none;
 }
 
-.new-game-button:hover {
+.new-game-button:hover,
+.gather-pieces-button:hover,
+.bg-color-button:hover,
+.help-button:hover,
+.settings-button:hover {
   background: var(--ui-control-scrim-hover);
   border-color: var(--ui-border-hover);
 }
 
-.new-game-button:active {
+.new-game-button:active,
+.gather-pieces-button:active,
+.bg-color-button:active,
+.help-button:active,
+.settings-button:active {
   background: var(--ui-control-scrim-active);
 }
 
-.gather-pieces-button {
-  z-index: 9999;
-  padding: 8px 16px;
-  font-size: 0.875rem;
-  font-family: inherit;
-  font-weight: 500;
-  color: var(--ui-fg);
-  background: var(--ui-control-scrim);
-  border: 1px solid var(--ui-border);
-  border-radius: 8px;
-  cursor: pointer;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  transition: background 0.15s ease, border-color 0.15s ease;
-  touch-action: manipulation;
-  user-select: none;
-  -webkit-user-select: none;
-}
-
-.gather-pieces-button:hover {
-  background: var(--ui-control-scrim-hover);
-  border-color: var(--ui-border-hover);
-}
-
-.gather-pieces-button:active {
-  background: var(--ui-control-scrim-active);
+.bg-color-button {
+  position: relative;
 }
 
 .select-tool-button,
@@ -400,6 +390,13 @@ html, body {
   text-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
 }
 
+.completion-message h1 svg {
+  width: 1em;
+  height: 1em;
+  vertical-align: -0.12em;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.5));
+}
+
 .completion-message p {
   margin-top: 0.5rem;
   font-size: 1.1rem;
@@ -551,14 +548,19 @@ html, body {
   width: 28px;
   height: 28px;
   padding: 0;
-  font-size: 1rem;
-  line-height: 1;
   color: var(--ui-fg);
   background: var(--ui-overlay-subtle);
   border: 1px solid var(--ui-border-subtle);
   border-radius: 8px;
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.image-picker-refresh svg {
+  display: block;
+  width: 16px;
+  height: 16px;
+  margin: 0 auto;
 }
 
 .image-picker-refresh:hover {
@@ -636,6 +638,10 @@ html, body {
 
 .image-picker-action {
   flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   padding: 10px 8px;
   border: 1px solid var(--ui-border-subtle);
   border-radius: 10px;
@@ -648,6 +654,11 @@ html, body {
   touch-action: manipulation;
   user-select: none;
   -webkit-user-select: none;
+}
+
+.image-picker-action svg {
+  width: 18px;
+  height: 18px;
 }
 
 .image-picker-action:hover {
@@ -925,37 +936,6 @@ html, body {
   background: var(--ui-overlay-hover);
 }
 
-.bg-color-button {
-  position: relative;
-  z-index: 9999;
-  width: 36px;
-  height: 36px;
-  padding: 0;
-  font-size: 1.1rem;
-  line-height: 36px;
-  text-align: center;
-  color: var(--ui-fg);
-  background: var(--ui-control-scrim);
-  border: 1px solid var(--ui-border);
-  border-radius: 8px;
-  cursor: pointer;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  transition: background 0.15s ease, border-color 0.15s ease;
-  touch-action: manipulation;
-  user-select: none;
-  -webkit-user-select: none;
-}
-
-.bg-color-button:hover {
-  background: var(--ui-control-scrim-hover);
-  border-color: var(--ui-border-hover);
-}
-
-.bg-color-button:active {
-  background: var(--ui-control-scrim-active);
-}
-
 /* Reusable swatch-grid popover (background picker, outline picker …).
    Generic appearance only — each instance supplies its own positioning
    via an extra class (see `.bg-color-panel`), so multiple pickers can
@@ -1062,39 +1042,6 @@ html, body {
   z-index: 10000;
 }
 
-.help-button,
-.settings-button {
-  z-index: 9999;
-  width: 36px;
-  height: 36px;
-  padding: 0;
-  font-size: 1.1rem;
-  line-height: 36px;
-  text-align: center;
-  color: var(--ui-fg);
-  background: var(--ui-control-scrim);
-  border: 1px solid var(--ui-border);
-  border-radius: 8px;
-  cursor: pointer;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  transition: background 0.15s ease, border-color 0.15s ease;
-  touch-action: manipulation;
-  user-select: none;
-  -webkit-user-select: none;
-}
-
-.help-button:hover,
-.settings-button:hover {
-  background: var(--ui-control-scrim-hover);
-  border-color: var(--ui-border-hover);
-}
-
-.help-button:active,
-.settings-button:active {
-  background: var(--ui-control-scrim-active);
-}
-
 .info-modal-overlay {
   position: absolute;
   inset: 0;
@@ -1135,12 +1082,12 @@ html, body {
 }
 
 .info-modal-close {
+  display: flex;
   background: transparent;
   border: none;
   color: var(--ui-muted);
-  font-size: 1.2rem;
   cursor: pointer;
-  padding: 4px 8px;
+  padding: 4px;
   border-radius: 4px;
   transition: color 0.15s ease, background 0.15s ease;
   touch-action: manipulation;
@@ -1403,24 +1350,18 @@ details.info-section[open] > .info-section-summary {
 
 /* Responsive: ensure buttons don't overlap on small screens */
 @media (max-height: 400px) {
-  .new-game-button,
-  .gather-pieces-button {
-    padding: 6px 10px;
-    font-size: 0.75rem;
-  }
-
   .right-toolbar {
     --toolbar-inset: 8px;
     gap: 4px;
   }
 
+  .new-game-button,
+  .gather-pieces-button,
   .bg-color-button,
   .help-button,
   .settings-button {
-    width: 32px;
-    height: 32px;
-    font-size: 0.9rem;
-    line-height: 32px;
+    width: 34px;
+    height: 34px;
   }
 
   .select-tool-button {
