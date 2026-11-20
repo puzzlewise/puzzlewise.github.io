@@ -277,3 +277,39 @@ describe('rotate-handle gesture', () => {
         handle.destroy();
     });
 });
+
+describe('rotate-handle icon', () => {
+    afterEach(() => {
+        vi.restoreAllMocks();
+        document.body.replaceChildren();
+    });
+
+    it('builds the icon for a later handle without parsing its source again', () => {
+        const container = document.createElement('div');
+        document.body.appendChild(container);
+        const rotationFocus = new RotationFocus();
+        const handle = createRotateHandle({
+            container,
+            rotationFocus,
+            onRotate: () => {},
+            onCommit: () => {},
+            onRotateStart: () => null,
+            onRotateEnd: () => {},
+            getFocusedGroupScreenBounds: () => ({ left: 100, right: 200, top: 100, bottom: 200 }),
+            getViewportSize: () => ({ width: 800, height: 600 }),
+            getGroupRotation: () => 0,
+            screenToWorld: (x, y) => ({ x, y }),
+        });
+        handle.show();
+        rotationFocus.setFocus(0);
+        const parse = vi.spyOn(DOMParser.prototype, 'parseFromString');
+
+        rotationFocus.setFocus(1);
+
+        const buttons = container.querySelectorAll('.rotate-handle');
+        expect(buttons.length).toBeGreaterThan(0);
+        for (const button of buttons) expect(button.querySelector('svg')).not.toBeNull();
+        expect(parse).not.toHaveBeenCalled();
+        handle.destroy();
+    });
+});

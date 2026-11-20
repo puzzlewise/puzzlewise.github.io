@@ -49,10 +49,14 @@ interface ActiveHandle {
     isDragging: () => boolean;
 }
 
+let iconTemplate: SVGElement | null = null;
+
 function makeBidirectionalRotateIcon(): SVGElement {
-    const doc = new DOMParser().parseFromString(iconSvgSource, 'image/svg+xml');
-    const root = doc.documentElement;
-    return document.importNode(root, /* deep */ true) as unknown as SVGElement;
+    if (!iconTemplate) {
+        const doc = new DOMParser().parseFromString(iconSvgSource, 'image/svg+xml');
+        iconTemplate = document.importNode(doc.documentElement, /* deep */ true) as unknown as SVGElement;
+    }
+    return iconTemplate.cloneNode(true) as SVGElement;
 }
 
 function makeButton(): HTMLButtonElement {
