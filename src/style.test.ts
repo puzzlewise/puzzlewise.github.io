@@ -209,6 +209,20 @@ describe('right-hand toolbar', () => {
         }
     });
 
+    it('spaces the left tool buttons as far apart as the right toolbar buttons, at any screen height', () => {
+        const px = (body: string, property: string): number => {
+            const matches = [...body.matchAll(new RegExp(`(?:^|[\\s;])${property}:\\s*(\\d+)px`, 'g'))];
+            expect(matches.length, property).toBeGreaterThan(0);
+            return Number(matches.at(-1)![1]);
+        };
+        for (const css of [styleCss, shortScreen]) {
+            const select = declarationsFor(css, '.select-tool-button');
+            const marquee = declarationsFor(css, '.marquee-tool-button');
+            const gap = px(declarationsFor(css, '.right-toolbar'), 'gap');
+            expect(px(marquee, 'top')).toBe(px(select, 'top') + px(select, 'height') + gap);
+        }
+    });
+
     it.each([
         '.new-game-button',
         '.gather-pieces-button',

@@ -206,7 +206,7 @@ html, body {
 
 /* The marquee button sits directly below the multi-select button. */
 .marquee-tool-button {
-  top: 64px;
+  top: 58px;
 }
 
 /*
@@ -1372,7 +1372,7 @@ details.info-section[open] > .info-section-summary {
   }
 
   .marquee-tool-button {
-    top: 50px;
+    top: 46px;
     left: 8px;
     width: 34px;
     height: 34px;
