@@ -203,6 +203,12 @@ export function createRotateHandle(
             finalizeDrag(/* commit */ false);
         });
 
+        // Stops the iOS tap-then-hold loupe (#751). A cancelled `touchstart`
+        // also suppresses `click`, so this button must stay pointer-driven.
+        button.addEventListener('touchstart', (event) => {
+            event.preventDefault();
+        }, { passive: false });
+
         // Force a reflow so the browser registers the base-rule opacity:0
         // before the fade-in class lands (mirrors rotate-buttons.ts).
         void button.offsetHeight;

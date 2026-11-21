@@ -82,6 +82,19 @@ describe('rotate-handle gesture', () => {
         handle.destroy();
     });
 
+    it('cancels touchstart on the handle', () => {
+        const handle = makeHandle();
+        handle.show();
+        rotationFocus.setFocus(0);
+
+        const button = container.querySelector('.rotate-handle')! as HTMLButtonElement;
+        const event = new Event('touchstart', { bubbles: true, cancelable: true });
+        button.dispatchEvent(event);
+        expect(event.defaultPrevented).toBe(true);
+
+        handle.destroy();
+    });
+
     it('calls onCommit on pointerup', () => {
         const handle = makeHandle();
         handle.show();
