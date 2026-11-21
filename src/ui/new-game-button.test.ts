@@ -7,6 +7,7 @@ import {
     shouldConfirmNewGame,
     createNewGameButton,
 } from './new-game-button.js';
+import { createNewGameIcon } from './tool-icons.js';
 
 describe('shouldConfirmNewGame', () => {
     it('should not confirm when game is completed', () => {
@@ -71,7 +72,9 @@ describe('createNewGameButton', () => {
 
         const button = container.querySelector('button');
         expect(button).not.toBeNull();
-        expect(button!.textContent).toBe('New Game');
+        expect(button!.querySelector('svg')!.outerHTML).toBe(createNewGameIcon().outerHTML);
+        expect(button!.getAttribute('aria-label')).toBe('New Game');
+        expect(button!.title).toBe('New Game');
     });
 
     it('should have the correct class name', () => {

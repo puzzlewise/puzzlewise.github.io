@@ -5,6 +5,7 @@
 
 import { isSafeHttpUrl } from '../sharing/safe-url.js';
 import { CANDIDATE_COUNT, type CandidateFetchResult, type CandidateImage } from '../images/index.js';
+import { createRefreshIcon, createSurpriseIcon, inlineIcon } from './tool-icons.js';
 
 export type NewGameImageChoice =
     | { kind: 'photo'; photo: CandidateImage; slot: number }
@@ -48,7 +49,7 @@ export function createImagePicker(options: ImagePickerOptions): ImagePicker {
     refreshButton.dataset.testid = 'image-picker-refresh';
     refreshButton.title = 'Show different images';
     refreshButton.setAttribute('aria-label', 'Show different images');
-    refreshButton.textContent = '↻';
+    refreshButton.appendChild(createRefreshIcon());
     refreshButton.addEventListener('click', () => refresh('refresh'));
     header.appendChild(refreshButton);
 
@@ -90,7 +91,7 @@ export function createImagePicker(options: ImagePickerOptions): ImagePicker {
 
     const error = document.createElement('p');
     error.className = 'image-picker-error';
-    error.textContent = "Couldn't load images — tap ↻ to try again.";
+    error.append("Couldn't load images — tap ", inlineIcon(createRefreshIcon(), 'Show different images'), ' to try again.');
     error.hidden = true;
     error.setAttribute('aria-live', 'polite');
     section.appendChild(error);
@@ -102,7 +103,7 @@ export function createImagePicker(options: ImagePickerOptions): ImagePicker {
     surpriseButton.type = 'button';
     surpriseButton.className = 'image-picker-action';
     surpriseButton.dataset.testid = 'image-picker-surprise';
-    surpriseButton.textContent = '🎲 Surprise me';
+    surpriseButton.append(createSurpriseIcon(), 'Surprise me');
     surpriseButton.addEventListener('click', () => options.onPick({ kind: 'surprise' }));
     actions.appendChild(surpriseButton);
 

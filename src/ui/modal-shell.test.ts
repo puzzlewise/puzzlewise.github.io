@@ -4,6 +4,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi, type Mock } from 'vitest';
 import { createModalShell, type ModalDismissCause, type ModalViewStats } from './modal-shell.js';
+import { createCloseIcon } from './tool-icons.js';
 
 describe('createModalShell', () => {
     let container: HTMLElement;
@@ -52,6 +53,14 @@ describe('createModalShell', () => {
         const dialog = container.querySelector('[role="dialog"]')!;
         expect(dialog.getAttribute('aria-label')).toBe('Help');
         expect(dialog.querySelector('.info-modal-title')!.textContent).toBe('Help');
+    });
+
+    it('gives the close button the close icon and an accessible name', () => {
+        open();
+
+        const close = container.querySelector('.info-modal-close')!;
+        expect(close.getAttribute('aria-label')).toBe('Close');
+        expect(close.querySelector('svg')!.outerHTML).toBe(createCloseIcon().outerHTML);
     });
 
     it('appends the built content and focuses it', () => {

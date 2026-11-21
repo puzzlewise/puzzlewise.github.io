@@ -4,6 +4,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createSettingsButton } from './settings-button.js';
+import { createSettingsIcon } from './tool-icons.js';
 
 describe('createSettingsButton', () => {
     let container: HTMLElement;
@@ -28,11 +29,12 @@ describe('createSettingsButton', () => {
         expect(button!.className).toBe('settings-button');
     });
 
-    it('shows ⚙️ with the title Settings', () => {
+    it('shows its icon and is named Settings', () => {
         createSettingsButton({ container, onShowSettings });
 
         const button = container.querySelector('button')!;
-        expect(button.textContent).toBe('⚙️');
+        expect(button.querySelector('svg')!.outerHTML).toBe(createSettingsIcon().outerHTML);
+        expect(button.getAttribute('aria-label')).toBe('Settings');
         expect(button.title).toBe('Settings');
     });
 

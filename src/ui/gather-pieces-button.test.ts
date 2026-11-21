@@ -4,6 +4,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createGatherPiecesButton } from './gather-pieces-button.js';
+import { createGatherPiecesIcon } from './tool-icons.js';
 
 describe('createGatherPiecesButton', () => {
     let container: HTMLElement;
@@ -19,7 +20,9 @@ describe('createGatherPiecesButton', () => {
 
         const button = container.querySelector('button');
         expect(button).not.toBeNull();
-        expect(button!.textContent).toBe('Gather Pieces');
+        expect(button!.querySelector('svg')!.outerHTML).toBe(createGatherPiecesIcon().outerHTML);
+        expect(button!.getAttribute('aria-label')).toBe('Gather Pieces');
+        expect(button!.title).toBe('Gather Pieces');
     });
 
     it('should have the correct class name', () => {
