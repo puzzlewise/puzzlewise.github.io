@@ -20,6 +20,17 @@ export function installGlobalHandlers(container: HTMLElement): void {
         }
     });
 
+    // iOS shows its text-selection loupe on tap-then-hold despite
+    // `user-select: none`, and only a cancelled `touchstart` stops it
+    // (cancelling `pointerdown` doesn't) (#751). Cancelling `touchstart` also
+    // suppresses `click`, so this is limited to the pointer-driven table.
+    container.addEventListener('touchstart', (e) => {
+        const target = e.target as Element | null;
+        if (target?.closest('[data-puzzle-table]')) {
+            e.preventDefault();
+        }
+    }, { passive: false });
+
     initAnalytics();
 
     // Global backstop for unhandled rejections / uncaught errors. Observe-only;

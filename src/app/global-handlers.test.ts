@@ -96,6 +96,29 @@ describe('installGlobalHandlers', () => {
         expect(event.defaultPrevented).toBe(false);
     });
 
+    it('cancels touchstart inside the puzzle table', () => {
+        installGlobalHandlers(container);
+        const table = document.createElement('div');
+        table.dataset.puzzleTable = 'true';
+        const inner = document.createElement('span');
+        table.appendChild(inner);
+        container.appendChild(table);
+
+        const event = new Event('touchstart', { bubbles: true, cancelable: true });
+        inner.dispatchEvent(event);
+        expect(event.defaultPrevented).toBe(true);
+    });
+
+    it('leaves touchstart alone outside the puzzle table', () => {
+        installGlobalHandlers(container);
+        const button = document.createElement('button');
+        container.appendChild(button);
+
+        const event = new Event('touchstart', { bubbles: true, cancelable: true });
+        button.dispatchEvent(event);
+        expect(event.defaultPrevented).toBe(false);
+    });
+
     it('shows the version badge when VITE_APP_VERSION is set', () => {
         vi.stubEnv('VITE_APP_VERSION', '1.2.3');
         installGlobalHandlers(container);
