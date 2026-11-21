@@ -44,6 +44,11 @@ export function createMarqueeToolIcon(): SVGSVGElement {
     return svg;
 }
 
+export function inlineIcon(svg: SVGSVGElement): SVGSVGElement {
+    svg.classList.add('inline-icon');
+    return svg;
+}
+
 export function createDeselectIcon(): SVGSVGElement {
     const svg = makeSvg({ width: '22', height: '22', 'stroke-width': '2.5' });
     appendChild(svg, 'line', { x1: '18', y1: '6', x2: '6', y2: '18' });

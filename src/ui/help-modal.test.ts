@@ -125,10 +125,10 @@ describe('createHelpModal — How to Play section', () => {
 
     function inlineIcons(): string[] {
         return [
-            ...howToPlaySection().querySelectorAll<SVGElement>('svg.info-inline-icon'),
+            ...howToPlaySection().querySelectorAll<SVGElement>('svg.inline-icon'),
         ].map((svg) => {
             const clone = svg.cloneNode(true) as SVGElement;
-            clone.classList.remove('info-inline-icon');
+            clone.classList.remove('inline-icon');
             clone.removeAttribute('class');
             return clone.outerHTML;
         });

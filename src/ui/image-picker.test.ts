@@ -212,6 +212,7 @@ describe('createImagePicker', () => {
 
         const error = container.querySelector<HTMLElement>('.image-picker-error')!;
         expect(error.hidden).toBe(false);
+        expect(error.querySelector('svg.inline-icon')).not.toBeNull();
 
         container.querySelector<HTMLButtonElement>('[data-testid="image-picker-refresh"]')!.click();
         await flush();

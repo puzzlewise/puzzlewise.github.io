@@ -5,7 +5,7 @@
 
 import { isSafeHttpUrl } from '../sharing/safe-url.js';
 import { CANDIDATE_COUNT, type CandidateFetchResult, type CandidateImage } from '../images/index.js';
-import { createRefreshIcon, createSurpriseIcon } from './tool-icons.js';
+import { createRefreshIcon, createSurpriseIcon, inlineIcon } from './tool-icons.js';
 
 export type NewGameImageChoice =
     | { kind: 'photo'; photo: CandidateImage; slot: number }
@@ -91,9 +91,7 @@ export function createImagePicker(options: ImagePickerOptions): ImagePicker {
 
     const error = document.createElement('p');
     error.className = 'image-picker-error';
-    const errorIcon = createRefreshIcon();
-    errorIcon.classList.add('info-inline-icon');
-    error.append("Couldn't load images — tap ", errorIcon, ' to try again.');
+    error.append("Couldn't load images — tap ", inlineIcon(createRefreshIcon()), ' to try again.');
     error.hidden = true;
     error.setAttribute('aria-live', 'polite');
     section.appendChild(error);

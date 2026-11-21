@@ -156,6 +156,12 @@ html, body {
   position: relative;
 }
 
+.inline-icon {
+  width: 1.15em;
+  height: 1.15em;
+  vertical-align: -0.2em;
+}
+
 .select-tool-button,
 .marquee-tool-button {
   position: absolute;
@@ -1175,12 +1181,6 @@ details.info-section[open] > .info-section-summary {
 
 .info-section li {
   margin-bottom: 4px;
-}
-
-.info-inline-icon {
-  width: 1.15em;
-  height: 1.15em;
-  vertical-align: -0.2em;
 }
 
 .info-section li:last-child {
