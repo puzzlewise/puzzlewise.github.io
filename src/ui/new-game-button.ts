@@ -1,4 +1,5 @@
 import { createNewGameIcon } from './tool-icons.js';
+import { createToolbarButton } from './toolbar-button.js';
 
 export function shouldConfirmNewGame(
     completed: boolean,
@@ -32,13 +33,6 @@ export function createNewGameButton(options: NewGameButtonOptions): () => void {
         confirm: confirmFn = (msg: string) => window.confirm(msg),
     } = options;
 
-    const button = document.createElement('button');
-    button.className = 'new-game-button';
-    button.type = 'button';
-    button.title = 'New Game';
-    button.setAttribute('aria-label', 'New Game');
-    button.appendChild(createNewGameIcon());
-
     function handleClick(): void {
         const needsConfirm = shouldConfirmNewGame(
             isCompleted(),
@@ -59,11 +53,11 @@ export function createNewGameButton(options: NewGameButtonOptions): () => void {
         onNewGame();
     }
 
-    button.addEventListener('click', handleClick);
-    container.appendChild(button);
-
-    return () => {
-        button.removeEventListener('click', handleClick);
-        button.remove();
-    };
+    return createToolbarButton({
+        container,
+        className: 'new-game-button',
+        label: 'New Game',
+        icon: createNewGameIcon(),
+        onClick: handleClick,
+    });
 }

@@ -1,8 +1,3 @@
-/**
- * For simple stateless buttons only — buttons owning their own state (visibility,
- * paired controls, confirm dialogs) need more than this helper covers.
- */
-
 export interface ToolbarButtonOptions {
     container: HTMLElement;
     className: string;
