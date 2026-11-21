@@ -44,8 +44,14 @@ export function createMarqueeToolIcon(): SVGSVGElement {
     return svg;
 }
 
-export function inlineIcon(svg: SVGSVGElement): SVGSVGElement {
+export function inlineIcon(svg: SVGSVGElement, name?: string): SVGSVGElement {
     svg.classList.add('inline-icon');
+    if (name === undefined) {
+        svg.setAttribute('aria-hidden', 'true');
+    } else {
+        svg.setAttribute('role', 'img');
+        svg.setAttribute('aria-label', name);
+    }
     return svg;
 }
 

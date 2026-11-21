@@ -91,7 +91,7 @@ export function createImagePicker(options: ImagePickerOptions): ImagePicker {
 
     const error = document.createElement('p');
     error.className = 'image-picker-error';
-    error.append("Couldn't load images — tap ", inlineIcon(createRefreshIcon()), ' to try again.');
+    error.append("Couldn't load images — tap ", inlineIcon(createRefreshIcon(), 'Show different images'), ' to try again.');
     error.hidden = true;
     error.setAttribute('aria-live', 'polite');
     section.appendChild(error);

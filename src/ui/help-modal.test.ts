@@ -128,11 +128,27 @@ describe('createHelpModal — How to Play section', () => {
             ...howToPlaySection().querySelectorAll<SVGElement>('svg.inline-icon'),
         ].map((svg) => {
             const clone = svg.cloneNode(true) as SVGElement;
-            clone.classList.remove('inline-icon');
-            clone.removeAttribute('class');
+            for (const attribute of ['class', 'aria-hidden', 'role', 'aria-label']) {
+                clone.removeAttribute(attribute);
+            }
             return clone.outerHTML;
         });
     }
+
+    it('names the icons that stand in for words and hides the rest from assistive technology', () => {
+        createHelpModal({ container });
+        const icons = [...howToPlaySection().querySelectorAll<SVGElement>('svg.inline-icon')];
+        const named = icons.filter((svg) => svg.getAttribute('role') === 'img').map((svg) => svg.getAttribute('aria-label'));
+        expect(named).toEqual([
+            'Show different images',
+            'Deselect all pieces',
+            'Rotate selection 90° counter-clockwise',
+            'Rotate selection 90° clockwise',
+        ]);
+        for (const svg of icons.filter((icon) => icon.getAttribute('role') !== 'img')) {
+            expect(svg.getAttribute('aria-hidden')).toBe('true');
+        }
+    });
 
     it('describes rotation', () => {
         createHelpModal({ container });
