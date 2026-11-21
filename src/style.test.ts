@@ -192,21 +192,31 @@ describe('right-hand toolbar', () => {
         expect(body).toMatch(/position:\s*relative/);
     });
 
-    it.each([
-        '.new-game-button',
-        '.gather-pieces-button',
-        '.bg-color-button',
-        '.help-button',
-        '.settings-button',
-    ])('sizes %s like the tool buttons, at any screen height', (selector) => {
-        for (const [css, size] of [[styleCss, '40px'], [shortScreen, '34px']] as const) {
-            const tool = declarationsFor(css, '.select-tool-button');
-            const body = declarationsFor(css, selector);
-            for (const declarations of [tool, body]) {
-                expect(declarations).toContain(`width: ${size}`);
-                expect(declarations).toContain(`height: ${size}`);
-            }
-        }
+    it('styles all seven toolbar squares with shared rules, at any screen height', () => {
+        const squares = [
+            '.new-game-button',
+            '.gather-pieces-button',
+            '.bg-color-button',
+            '.help-button',
+            '.settings-button',
+            '.select-tool-button',
+            '.marquee-tool-button',
+        ];
+        const sharedRule = (css: string, suffix: string): string => {
+            const selectors = squares.map((selector) => selector + suffix);
+            const rule = [...css.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+                .find(([, prelude]) => {
+                    const listed = prelude.split(',').map((part) => part.trim());
+                    return selectors.every((selector) => listed.includes(selector));
+                });
+            expect(rule, `one rule for every square${suffix}`).toBeDefined();
+            return rule![2];
+        };
+        expect(sharedRule(styleCss, '')).toMatch(/width:\s*40px/);
+        expect(sharedRule(styleCss, '')).toMatch(/background:\s*var\(--ui-control-scrim\)/);
+        expect(sharedRule(styleCss, ':hover')).toMatch(/--ui-control-scrim-hover/);
+        expect(sharedRule(styleCss, ':active')).toMatch(/--ui-control-scrim-active/);
+        expect(sharedRule(shortScreen, '')).toMatch(/width:\s*34px/);
     });
 
     it('spaces the left tool buttons as far apart as the right toolbar buttons, at any screen height', () => {

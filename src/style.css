@@ -114,7 +114,9 @@ html, body {
 .gather-pieces-button,
 .bg-color-button,
 .help-button,
-.settings-button {
+.settings-button,
+.select-tool-button,
+.marquee-tool-button {
   z-index: 9999;
   width: 40px;
   height: 40px;
@@ -139,7 +141,9 @@ html, body {
 .gather-pieces-button:hover,
 .bg-color-button:hover,
 .help-button:hover,
-.settings-button:hover {
+.settings-button:hover,
+.select-tool-button:hover,
+.marquee-tool-button:hover {
   background: var(--ui-control-scrim-hover);
   border-color: var(--ui-border-hover);
 }
@@ -148,7 +152,9 @@ html, body {
 .gather-pieces-button:active,
 .bg-color-button:active,
 .help-button:active,
-.settings-button:active {
+.settings-button:active,
+.select-tool-button:active,
+.marquee-tool-button:active {
   background: var(--ui-control-scrim-active);
 }
 
@@ -167,35 +173,6 @@ html, body {
   position: absolute;
   top: 12px;
   left: 12px;
-  z-index: 9999;
-  width: 40px;
-  height: 40px;
-  padding: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--ui-fg);
-  background: var(--ui-control-scrim);
-  border: 1px solid var(--ui-border);
-  border-radius: 10px;
-  cursor: pointer;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  transition: background 0.15s ease, border-color 0.15s ease;
-  touch-action: manipulation;
-  user-select: none;
-  -webkit-user-select: none;
-}
-
-.select-tool-button:hover,
-.marquee-tool-button:hover {
-  background: var(--ui-control-scrim-hover);
-  border-color: var(--ui-border-hover);
-}
-
-.select-tool-button:active,
-.marquee-tool-button:active {
-  background: var(--ui-control-scrim-active);
 }
 
 .select-tool-button--active,
@@ -1359,7 +1336,9 @@ details.info-section[open] > .info-section-summary {
   .gather-pieces-button,
   .bg-color-button,
   .help-button,
-  .settings-button {
+  .settings-button,
+  .select-tool-button,
+  .marquee-tool-button {
     width: 34px;
     height: 34px;
   }
@@ -1367,15 +1346,11 @@ details.info-section[open] > .info-section-summary {
   .select-tool-button {
     top: 8px;
     left: 8px;
-    width: 34px;
-    height: 34px;
   }
 
   .marquee-tool-button {
     top: 46px;
     left: 8px;
-    width: 34px;
-    height: 34px;
   }
 
   .deselect-button {
