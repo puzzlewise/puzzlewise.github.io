@@ -6,6 +6,7 @@ import { describe, it, expect, beforeEach, afterEach, vi, type Mock } from 'vite
 import { createHelpModal } from './help-modal.js';
 import { createSelectToolButton } from './select-tool-button.js';
 import { createMarqueeToolButton } from './marquee-tool-button.js';
+import { createDeselectButton } from './deselect-button.js';
 import { createNewGameButton } from './new-game-button.js';
 import { createGatherPiecesButton } from './gather-pieces-button.js';
 import { createBackgroundColorPicker } from './background-color-picker.js';
@@ -184,11 +185,12 @@ describe('createHelpModal — How to Play section', () => {
         expect(text).toContain('no connection');
     });
 
-    it('shows the same multi-select and marquee icons as the toolbar buttons', () => {
+    it('shows the same multi-select, marquee and deselect icons as their buttons', () => {
         createHelpModal({ container });
         const rendered = inlineIcons();
         expect(rendered).toContain(toolbarButtonIcon(createSelectToolButton));
         expect(rendered).toContain(toolbarButtonIcon(createMarqueeToolButton));
+        expect(rendered).toContain(toolbarButtonIcon(createDeselectButton));
     });
 
     it('mentions Wavy and Classic alongside Free rotation', () => {

@@ -44,6 +44,13 @@ export function createMarqueeToolIcon(): SVGSVGElement {
     return svg;
 }
 
+export function createDeselectIcon(): SVGSVGElement {
+    const svg = makeSvg({ width: '22', height: '22', 'stroke-width': '2.5' });
+    appendChild(svg, 'line', { x1: '18', y1: '6', x2: '6', y2: '18' });
+    appendChild(svg, 'line', { x1: '6', y1: '6', x2: '18', y2: '18' });
+    return svg;
+}
+
 export function createRotateIcon(direction: 'cw' | 'ccw'): SVGSVGElement {
     const svg = makeSvg(direction === 'ccw' ? { transform: 'scale(-1,1)' } : undefined);
     appendChild(svg, 'path', { d: 'M21 12a9 9 0 1 1-3.1-6.8' });

@@ -3,7 +3,7 @@ import { createModalShell } from './modal-shell.js';
 import { buildShareSection } from './share-section.js';
 import {
     createBackgroundIcon,
-    createCloseIcon,
+    createDeselectIcon,
     createGatherPiecesIcon,
     createMarqueeToolIcon,
     createNewGameIcon,
@@ -117,7 +117,7 @@ function buildHowToPlaySection(): HTMLElement {
         ' ',
         ['strong', 'Multi-select'],
         ' (top-left) — When active, tap pieces to add/remove them from a selection; drag any selected piece to move the whole selection together. Tap ',
-        inlineToolIcon(createCloseIcon()),
+        inlineToolIcon(createDeselectIcon()),
         ' (bottom) to deselect all.',
     ]);
     appendInlineLi(buttons, [
