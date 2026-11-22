@@ -1,6 +1,7 @@
 import type { GameState, Piece, Point, Size } from '../../model/types.js';
 import type { RendererAppearance } from '../appearance.js';
 import type { Renderer } from '../types.js';
+import { markPuzzleTable } from '../puzzle-table.js';
 import { TransitionController, type ViewportValue } from './animation.js';
 import { createDebugOverlay, type DebugOverlay } from './debug-overlay.js';
 import { addDebugStrokes, assembleIndices, drawPasses, silhouetteIndices } from './draw-list.js';
@@ -184,7 +185,7 @@ export class WebGlRenderer implements Renderer {
 
     init(container: HTMLElement): void {
         const table = document.createElement('div');
-        table.dataset.puzzleTable = 'true';
+        markPuzzleTable(table);
         table.style.position = 'relative';
         table.style.width = '100%';
         table.style.height = '100%';

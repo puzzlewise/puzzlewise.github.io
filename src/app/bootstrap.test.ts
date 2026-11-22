@@ -177,6 +177,7 @@ vi.mock('../move/move-receiver.js', async (importOriginal) => {
 });
 
 import { installGlobalHandlers } from './global-handlers.js';
+import { PUZZLE_TABLE_SELECTOR } from '../renderer/puzzle-table.js';
 import { runBootSequence } from './boot-sequence.js';
 import { startNewGame, type StartNewGameDeps } from './start-new-game.js';
 import { loadSharedPuzzle } from './load-shared-puzzle.js';
@@ -222,7 +223,7 @@ const HOOK_NAMES = [
  */
 const atImportTime = {
     globalHandlerCalls: vi.mocked(installGlobalHandlers).mock.calls.length,
-    puzzleTables: document.querySelectorAll('[data-puzzle-table]').length,
+    puzzleTables: document.querySelectorAll(PUZZLE_TABLE_SELECTOR).length,
 };
 
 function createdRotationUi(): { syncVisibility: Mock<(state: GameState | undefined) => void> } {

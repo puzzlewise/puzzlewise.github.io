@@ -4,8 +4,9 @@
  * error bridge — puts every reporting channel up before anything that can throw.
  */
 
-import { initAnalytics, initErrorTracking } from '../analytics/index.js';
+import { initAnalytics, initErrorTracking, installFirstInteractionTracking } from '../analytics/index.js';
 import { initSwErrorReporting } from '../pwa/sw-error-bridge.js';
+import { isOnPuzzleTable } from '../renderer/puzzle-table.js';
 
 export function installGlobalHandlers(container: HTMLElement): void {
     // Suppress the context menu on the puzzle table only: on touch (esp. iPad)
@@ -14,8 +15,7 @@ export function installGlobalHandlers(container: HTMLElement): void {
     // menus in the help and settings modals must still reach the browser for
     // long-press copy of share links and repro params.
     container.addEventListener('contextmenu', (e) => {
-        const target = e.target as Element | null;
-        if (target?.closest('[data-puzzle-table]')) {
+        if (isOnPuzzleTable(e.target)) {
             e.preventDefault();
         }
     });
@@ -25,13 +25,13 @@ export function installGlobalHandlers(container: HTMLElement): void {
     // (cancelling `pointerdown` doesn't) (#751). Cancelling `touchstart` also
     // suppresses `click`, so this is limited to the pointer-driven table.
     container.addEventListener('touchstart', (e) => {
-        const target = e.target as Element | null;
-        if (target?.closest('[data-puzzle-table]')) {
+        if (isOnPuzzleTable(e.target)) {
             e.preventDefault();
         }
     }, { passive: false });
 
     initAnalytics();
+    installFirstInteractionTracking();
 
     // Global backstop for unhandled rejections / uncaught errors. Observe-only;
     // never swallows them.

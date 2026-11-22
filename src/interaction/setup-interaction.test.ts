@@ -17,6 +17,7 @@ import type { GameState, PieceGroup } from '../model/types.js';
 import { makeCenteredGroup, makeGameState, makeMatedPiecePair } from '../test-helpers/fixtures.js';
 import { ROTATION_COMPLETE_AT_FRACTION as F } from '../game/snap-proximity-rotation.js';
 import { loadOffsetDragPreference } from '../ui/offset-drag.js';
+import { markPuzzleTable } from '../renderer/puzzle-table.js';
 
 vi.mock('../ui/offset-drag.js', () => ({
     loadOffsetDragPreference: vi.fn(() => false),
@@ -284,10 +285,10 @@ describe('setupInteraction', () => {
             expect(onDrop).toHaveBeenCalledWith(7);
         });
 
-        it('a press whose target is an element inside [data-puzzle-table] classifies by point', () => {
+        it('a press whose target is an element inside the puzzle table classifies by point', () => {
             const { container, renderer, onDrop } = setupPress((p) => (p.x === 100 && p.y === 100 ? 3 : null));
             const table = document.createElement('div');
-            table.dataset.puzzleTable = 'true';
+            markPuzzleTable(table);
             const child = document.createElementNS('http://www.w3.org/2000/svg', 'path');
             table.appendChild(child);
 
