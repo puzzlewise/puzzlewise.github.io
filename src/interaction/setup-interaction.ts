@@ -6,6 +6,7 @@
 import type { GameState, Point } from '../model/types.js';
 import { getGroupForPiece, moveGroup, tryGetGroup } from '../model/helpers.js';
 import type { Renderer } from '../renderer/types.js';
+import { isOnPuzzleTable } from '../renderer/puzzle-table.js';
 import { DragController } from './drag-controller.js';
 import type { ScreenDeltaToWorld } from './drag-controller.js';
 import { ViewportController } from './viewport-controller.js';
@@ -150,8 +151,7 @@ export function setupInteraction(options: InteractionSetupOptions): () => void {
     const probeHitTest = (p: Point): number | null => renderer.pieceIdAtPoint(p);
 
     const classifyTarget: ClassifyTarget = (target, point) => {
-        const isTable = target === container ||
-            (target instanceof Element && target.closest('[data-puzzle-table]') !== null);
+        const isTable = target === container || isOnPuzzleTable(target);
         if (!isTable) return { kind: 'ignore' };
         if (!point) return { kind: 'background' };
 

@@ -1,5 +1,6 @@
 export { initAnalytics, track, whenAnalyticsReady } from './umami.js';
 export { initErrorTracking } from './error-tracking.js';
+export { installFirstInteractionTracking } from './first-interaction.js';
 export { sanitizeErrorReason } from './sanitize-error-reason.js';
 export type {
     NewGameData,

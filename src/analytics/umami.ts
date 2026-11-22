@@ -1836,6 +1836,22 @@ export interface GenerationCanceledData {
 }
 
 /**
+ * Data attached to `first-interaction`, the first real pointer or key press of
+ * a page load (#600). Link-preview renderers (Meta's, after every Facebook
+ * post) run the app and auto-start a game without any input, so sessions with
+ * this event are the human denominator for visitor funnels. Absent on events
+ * from older clients (PWA caches).
+ *
+ * `target: 'table'` is the puzzle table, `'ui'` anything else.
+ * `msSinceLoad` counts from navigation start.
+ */
+export interface FirstInteractionData {
+    input: 'mouse' | 'touch' | 'pen' | 'key' | 'unknown';
+    target: 'table' | 'ui';
+    msSinceLoad: number;
+}
+
+/**
  * Inject the Umami tracking script if a website ID is configured.
  *
  * Call exactly once, early in app startup, before any rendering.
@@ -1953,6 +1969,7 @@ export function track(name: 'offline-images-saved', data: OfflineImagesSavedData
 export function track(name: 'move-dialog-shown', data: MoveDialogShownData): void;
 export function track(name: 'move-started', data: MoveStartedData): void;
 export function track(name: 'move-result', data: MoveResultData): void;
+export function track(name: 'first-interaction', data: FirstInteractionData): void;
 export function track(name: string, data: object): void {
     if (typeof window === 'undefined') return;
     window.umami?.track(name, data as Record<string, unknown>);

@@ -15,6 +15,7 @@ import { KIND_DEBUG_STROKE, KIND_HALO, KIND_MATELESS, MAIN_ATTRIBUTES, MAIN_VERT
 import { WebGlRenderer, type WebGlRendererOptions } from './webgl-renderer.js';
 import { insideEvenOdd, outlineGroups, type PieceMesh } from './piece-mesh.js';
 import { runGeneration } from '../../game/generation-core.js';
+import { isOnPuzzleTable } from '../puzzle-table.js';
 
 vi.mock('earcut', async (importOriginal) => {
     const actual = await importOriginal<typeof import('earcut')>();
@@ -112,7 +113,7 @@ describe('WebGlRenderer', () => {
 
     test('init appends the puzzle table element that input and context-menu handling key on', () => {
         const { canvas } = setup();
-        expect(canvas.parentElement!.matches('[data-puzzle-table]')).toBe(true);
+        expect(isOnPuzzleTable(canvas.parentElement)).toBe(true);
     });
 
     test('a state rendered inside a frame is drawn in that frame', () => {

@@ -7,13 +7,15 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 vi.mock('../analytics/index.js', () => ({
     initAnalytics: vi.fn(),
     initErrorTracking: vi.fn(),
+    installFirstInteractionTracking: vi.fn(),
     track: vi.fn(),
 }));
 vi.mock('../pwa/sw-error-bridge.js', () => ({ initSwErrorReporting: vi.fn() }));
 
-import { initAnalytics, initErrorTracking } from '../analytics/index.js';
+import { initAnalytics, initErrorTracking, installFirstInteractionTracking } from '../analytics/index.js';
 import { initSwErrorReporting } from '../pwa/sw-error-bridge.js';
 import { installGlobalHandlers } from './global-handlers.js';
+import { markPuzzleTable } from '../renderer/puzzle-table.js';
 
 describe('installGlobalHandlers', () => {
     let container: HTMLElement;
@@ -56,6 +58,11 @@ describe('installGlobalHandlers', () => {
         expect(initSwErrorReporting).toHaveBeenCalledTimes(1);
     });
 
+    it('installs first-interaction tracking', () => {
+        installGlobalHandlers(container);
+        expect(installFirstInteractionTracking).toHaveBeenCalledTimes(1);
+    });
+
     it('enlarges the resource-timing buffer', () => {
         // Backs the traced-chunk cacheState dimension on long PWA sessions.
         const spy = vi.fn();
@@ -76,7 +83,7 @@ describe('installGlobalHandlers', () => {
     it('suppresses the context menu on the puzzle table', () => {
         installGlobalHandlers(container);
         const table = document.createElement('div');
-        table.dataset.puzzleTable = 'true';
+        markPuzzleTable(table);
         container.appendChild(table);
 
         const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true });
@@ -99,7 +106,7 @@ describe('installGlobalHandlers', () => {
     it('cancels touchstart inside the puzzle table', () => {
         installGlobalHandlers(container);
         const table = document.createElement('div');
-        table.dataset.puzzleTable = 'true';
+        markPuzzleTable(table);
         const inner = document.createElement('span');
         table.appendChild(inner);
         container.appendChild(table);
